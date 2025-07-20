@@ -20,9 +20,9 @@ class NodeExecutionRequest(BaseModel):
 class NodeExecutionResponse(BaseModel):
     status: str
     outputs: Dict[str, Any]
-    error: str = None
-    startedAt: str = None
-    completedAt: str = None
+    error: str | None = None
+    startedAt: str | None = None
+    completedAt: str | None = None
 
 
 @router.get("/", response_model=List[FlowSchema])

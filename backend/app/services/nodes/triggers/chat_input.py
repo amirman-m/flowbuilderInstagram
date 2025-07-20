@@ -58,7 +58,7 @@ async def execute_chat_input_trigger(context: Dict[str, Any]) -> NodeExecutionRe
     message_data = {
         "session_id": session_id,
         "input_text": user_input,
-        "input_type": "input_type",
+        "input_type": input_type,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "metadata": {
             "character_count": len(user_input),
