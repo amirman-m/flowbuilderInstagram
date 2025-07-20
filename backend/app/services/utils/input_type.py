@@ -6,10 +6,10 @@ def determine_input_type(input_data) -> NodeDataType:
     
     if isinstance(input_data, str):
         return NodeDataType.STRING
-    elif isinstance(input_data, (int, float)):
-        return NodeDataType.NUMBER
     elif isinstance(input_data, bool):
         return NodeDataType.BOOLEAN
+    elif isinstance(input_data, (int, float)):
+        return NodeDataType.NUMBER
     elif isinstance(input_data, dict):
         return NodeDataType.OBJECT
     elif isinstance(input_data, (list, tuple, set)):
