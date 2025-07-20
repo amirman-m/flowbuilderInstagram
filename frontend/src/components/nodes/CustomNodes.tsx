@@ -18,8 +18,7 @@ import {
   Schedule as PendingIcon,
   Refresh as RunningIcon,
   Delete as DeleteIcon,
-  Message as MessageIcon,
-  Send as SendIcon
+  Message as MessageIcon
 } from '@mui/icons-material';
 import { NodeCategory, NodeExecutionStatus, NodeInstance } from '../../types/nodes';
 import { FlowNode } from '../../types/nodes';
@@ -150,24 +149,7 @@ const BaseCustomNode: React.FC<NodeProps> = ({ data, selected, id }) => {
             <MoreIcon fontSize="small" />
           </IconButton>
         </Tooltip>
-        {/* Chat Input Execution Button */}
-        {nodeType.id === 'chat-input' && (
-          <Tooltip title="Execute Chat Input">
-            <IconButton 
-              size="small" 
-              sx={{ ml: 0.5 }}
-              onClick={(event) => {
-                event.stopPropagation();
-                const onChatInputExecution = (data as any)?.onChatInputExecution;
-                if (onChatInputExecution && id) {
-                  onChatInputExecution(id);
-                }
-              }}
-            >
-              <SendIcon fontSize="small" color="primary" />
-            </IconButton>
-          </Tooltip>
-        )}
+        {/* Chat Input Execution Button removed to prevent duplicate dialogs */}
         <Tooltip title="Delete Node">
           <IconButton 
             size="small" 

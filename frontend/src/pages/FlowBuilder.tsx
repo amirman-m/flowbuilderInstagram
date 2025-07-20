@@ -40,9 +40,14 @@ import { Flow } from '../types';
 import { NodeType, NodeCategory, NodeInstance, NodeDataType } from '../types/nodes';
 import { flowsAPI } from '../services/api';
 import { nodeService } from '../services/nodeService';
-import { nodeTypes } from '../components/nodes/CustomNodes';
+import { NodeComponentFactory } from '../components/nodes/NodeComponentFactory';
 import { edgeTypes } from '../components/edges/CustomEdge';
 import { NodeInspector } from '../components/inspector';
+
+// Define nodeTypes using our NodeComponentFactory for all node types
+const nodeTypes = {
+  customNode: NodeComponentFactory
+};
 
 // Inner FlowBuilder component that uses React Flow hooks
 const FlowBuilderInner: React.FC = () => {
@@ -501,7 +506,7 @@ const FlowBuilderInner: React.FC = () => {
   }, [onKeyDown]);
 
   // Handle node selection
-  const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     const nodeData = node.data as any;
     if (nodeData?.nodeType && nodeData?.instance) {
       setSelectedNode(nodeData.instance);
@@ -510,11 +515,57 @@ const FlowBuilderInner: React.FC = () => {
     }
   }, []);
 
-  // Handle node updates from inspector
-  const handleNodeUpdate = useCallback((nodeId: string, updates: Partial<NodeInstance>) => {
-    setNodes((nds) => 
-      nds.map((node) => {
+  // Handle node updates from inspector and node execution results
+  const handleNodeUpdate = useCallback((nodeId: string, updates: any) => {
+    console.log('🔄 Updating node:', nodeId, updates);
+    
+    setNodes((nds) => {
+      const updatedNodes = nds.map((node) => {
         if (node.id === nodeId) {
+          // Check if this is a lastExecution update from a node component
+          if (updates.data?.lastExecution) {
+            console.log('📊 Updating node execution results:', updates.data.lastExecution);
+            
+            // Create a new node with updated execution results
+            const updatedNode = {
+              ...node,
+              data: {
+                ...node.data,
+                instance: {
+                  ...(node.data.instance || {}),
+                  data: {
+                    ...(node.data.instance?.data || {}),
+                    lastExecution: updates.data.lastExecution
+                  }
+                }
+              }
+            };
+            
+            // Always update selectedNode and open inspector when we have execution results
+            console.log('🔍 Updating selectedNode and opening inspector for execution results');
+            
+            // Find the updated node from the nodes array
+            const nodeInstance = updatedNode.data.instance as NodeInstance;
+            
+            const updatedSelectedNode: NodeInstance = {
+              ...nodeInstance,
+              data: {
+                ...nodeInstance.data,
+                lastExecution: updates.data.lastExecution
+              }
+            };
+            
+            // Update selectedNode and open inspector to show results
+            setSelectedNode(updatedSelectedNode);
+            setSelectedNodeType(updatedNode.data.nodeType);
+            setInspectorOpen(true);
+            
+            console.log('🔄 Updated selectedNode and opened inspector with execution results:', updatedSelectedNode);
+            
+            return updatedNode;
+          }
+          
+          // Regular update from inspector
           return {
             ...node,
             data: {
@@ -527,100 +578,13 @@ const FlowBuilderInner: React.FC = () => {
           };
         }
         return node;
-      })
-    );
-  }, [setNodes]);
+      });
+      
+      return updatedNodes;
+    });
+  }, [setNodes, selectedNode]);
 
-  // Handle Chat Input node execution
-  const handleChatInputExecution = useCallback(async (nodeId: string) => {
-    const inputText = prompt('Enter your message:');
-    
-    if (inputText !== null && inputText.trim() !== '') {
-      try {
-        console.log('🚀 Executing Chat Input node via backend API...');
-        
-        // Call backend API to execute the Chat Input node
-        const executionContext = {
-          user_input: inputText.trim()
-        };
-        
-        // Execute the node through the backend
-        const result = await nodeService.execution.executeNode(
-          parseInt(flowId || '1'), // Use current flow ID or default to 1
-          nodeId,
-          executionContext
-        );
-        
-        console.log('✅ Backend execution result:', result);
-        
-        // Update the node with real execution results from backend
-        setNodes((nds) => 
-          nds.map((node) => {
-            if (node.id === nodeId) {
-              const nodeData = node.data as any;
-              const instance = nodeData.instance as NodeInstance;
-              return {
-                ...node,
-                data: {
-                  ...nodeData,
-                  instance: {
-                    ...instance,
-                    data: {
-                      ...instance.data,
-                      lastExecution: {
-                        status: result.status,
-                        startedAt: result.startedAt || new Date(),
-                        completedAt: result.completedAt || new Date(),
-                        outputs: result.outputs,
-                        duration: 0, // Duration not available in NodeExecutionResult
-                        logs: [`Chat input executed: "${inputText.trim()}"`], // Logs not available in NodeExecutionResult
-                        error: result.error
-                      }
-                    }
-                  } as NodeInstance
-                }
-              };
-            }
-            return node;
-          })
-        );
-      } catch (error: any) {
-        console.error(' Failed to execute Chat Input node:', error);
-        
-        // Update node with error status
-        setNodes((nds) => 
-          nds.map((node) => {
-            if (node.id === nodeId) {
-              const nodeData = node.data as any;
-              const instance = nodeData.instance as NodeInstance;
-              return {
-                ...node,
-                data: {
-                  ...nodeData,
-                  instance: {
-                    ...instance,
-                    data: {
-                      ...instance.data,
-                      lastExecution: {
-                        status: 'error' as any,
-                        startedAt: new Date(),
-                        completedAt: new Date(),
-                        outputs: {},
-                        duration: 0,
-                        logs: [`Failed to execute: ${error.message}`],
-                        error: error.message
-                      }
-                    }
-                  } as NodeInstance
-                }
-              };
-            }
-            return node;
-          })
-        );
-      }
-    }
-  }, [setNodes, flowId]);
+  // Legacy handleChatInputExecution removed - now handled by individual node components
 
   // Handle drag over for drop zone
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -671,7 +635,7 @@ const FlowBuilderInner: React.FC = () => {
             executing: false,
             errors: [],
             onNodeDelete: onNodeDelete, // Pass the deletion handler
-            onChatInputExecution: handleChatInputExecution // Pass the chat input execution handler
+            onNodeUpdate: handleNodeUpdate // Pass the update handler for execution results
           }
         };
 
