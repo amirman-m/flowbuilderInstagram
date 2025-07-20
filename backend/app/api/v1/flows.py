@@ -1,13 +1,28 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Dict, Any
 from ...core.database import get_db
 from ...models.flow import Flow
 from ...models.user import User
 from ...schemas.flow import FlowCreate, FlowUpdate, Flow as FlowSchema
 from ..deps import get_current_active_user
+from ...core.node_registry import node_registry
+from pydantic import BaseModel
 
 router = APIRouter()
+
+
+# Request/Response models for node execution
+class NodeExecutionRequest(BaseModel):
+    inputs: Dict[str, Any] = {}
+
+
+class NodeExecutionResponse(BaseModel):
+    status: str
+    outputs: Dict[str, Any]
+    error: str = None
+    startedAt: str = None
+    completedAt: str = None
 
 
 @router.get("/", response_model=List[FlowSchema])
@@ -115,3 +130,52 @@ def delete_flow(
     db.delete(flow)
     db.commit()
     return {"message": "Flow deleted successfully"}
+
+
+@router.post("/{flow_id}/nodes/{node_id}/execute", response_model=NodeExecutionResponse)
+async def execute_node(
+    flow_id: int,
+    node_id: str,
+    request: NodeExecutionRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Execute a specific node within a flow."""
+    # Verify the flow exists and belongs to the user
+    flow = db.query(Flow).filter(
+        Flow.id == flow_id,
+        Flow.user_id == current_user.id
+    ).first()
+    
+    if not flow:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Flow not found"
+        )
+    
+    try:
+        # For now, we'll determine the node type from the node_id
+        # In a full implementation, you'd store node instances in the database
+        # and look up the actual node type from there
+        
+        # For the Chat Input node, we'll assume it's a chat-input type
+        # This is a simplified implementation - in production you'd have
+        # a proper node instance management system
+        node_type_id = "chat-input"  # This should come from the database
+        
+        # Execute the node using the node registry
+        result = await node_registry.execute_node(node_type_id, request.inputs)
+        
+        return NodeExecutionResponse(
+            status=result.status,
+            outputs=result.outputs,
+            error=result.error,
+            startedAt=result.started_at.isoformat() if result.started_at else None,
+            completedAt=result.completed_at.isoformat() if result.completed_at else None
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to execute node: {str(e)}"
+        )

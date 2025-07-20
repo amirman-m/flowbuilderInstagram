@@ -93,35 +93,18 @@ const FlowBuilderInner: React.FC = () => {
       const flowData = await flowsAPI.getFlow(parseInt(flowId));
       setFlow(flowData);
       
-      // Load flow nodes and connections
-      const flowNodes = await flowsAPI.getFlowNodes(parseInt(flowId));
-      const flowConnections = await flowsAPI.getFlowConnections(parseInt(flowId));
+      // TODO: Uncomment these when the backend endpoints are implemented
+      // const flowNodes = await flowsAPI.getFlowNodes(parseInt(flowId));
+      // const flowConnections = await flowsAPI.getFlowConnections(parseInt(flowId));
       
-      // Convert to React Flow nodes and edges
-      const reactFlowNodes = flowNodes.map(node => ({
-        id: node.id,
-        type: 'customNode',
-        position: node.position,
-        data: {
-          nodeType: availableNodeTypes.find(nt => nt.id === node.typeId) || null,
-          instance: node,
-        }
-      }));
+      // For now, start with empty nodes and edges
+      setNodes([]);
+      setEdges([]);
       
-      const reactFlowEdges = flowConnections.map(conn => ({
-        id: conn.id,
-        source: conn.sourceNodeId,
-        target: conn.targetNodeId,
-        sourceHandle: conn.sourcePortId,
-        targetHandle: conn.targetPortId,
-        type: 'custom'
-      }));
-      
-      setNodes(reactFlowNodes);
-      setEdges(reactFlowEdges);
+      console.log('Flow loaded successfully from backend:', flowData);
     } catch (err: any) {
       // Don't set error state for flow loading failures - just log and continue
-      // This allows the UI to render with empty flow and mock nodes
+      // This allows the UI to render with empty flow and node types from backend
       console.warn('Failed to load flow from backend, starting with empty flow:', err);
       setFlow({
         id: flowId,
@@ -141,13 +124,18 @@ const FlowBuilderInner: React.FC = () => {
   const loadNodeTypes = async () => {
     try {
       // Load node types from the backend
+      console.log('🔍 Loading node types from backend...');
       const types = await nodeService.types.getNodeTypes();
+      console.log('✅ Backend response:', types);
+      console.log('✅ Response type:', typeof types, 'Length:', types?.length);
       
       if (types && types.length > 0) {
+        console.log('✅ Using backend node types:', types.map(t => t.name));
         setAvailableNodeTypes(types);
+        return; // Exit early - backend data loaded successfully
       } else {
         // If no node types are returned from the backend, use default mock types for testing
-        console.warn('No node types returned from backend, using mock types for testing');
+        console.warn('⚠️ No node types returned from backend, using mock types for testing');
         
         // Create properly typed mock nodes
         const mockTriggerNode: NodeType = {
@@ -548,57 +536,91 @@ const FlowBuilderInner: React.FC = () => {
     const inputText = prompt('Enter your message:');
     
     if (inputText !== null && inputText.trim() !== '') {
-      // Generate session ID
-      const sessionId = crypto.randomUUID();
-      
-      // Create structured message data
-      const messageData = {
-        session_id: sessionId,
-        input_text: inputText.trim(),
-        input_type: 'text',
-        timestamp: new Date().toISOString(),
-        metadata: {
-          character_count: inputText.trim().length,
-          word_count: inputText.trim().split(/\s+/).length
-        }
-      };
-
-      // Update the node with execution results
-      setNodes((nds) => 
-        nds.map((node) => {
-          if (node.id === nodeId) {
-            const nodeData = node.data as any;
-            const instance = nodeData.instance as NodeInstance;
-            return {
-              ...node,
-              data: {
-                ...nodeData,
-                instance: {
-                  ...instance,
-                  data: {
-                    ...instance.data,
-                    lastExecution: {
-                      status: 'success' as any,
-                      startedAt: new Date(),
-                      completedAt: new Date(),
-                      outputs: {
-                        message_data: messageData
-                      },
-                      duration: 100, // Mock duration
-                      logs: [`Chat input executed: "${inputText.trim()}"`]
+      try {
+        console.log('🚀 Executing Chat Input node via backend API...');
+        
+        // Call backend API to execute the Chat Input node
+        const executionContext = {
+          user_input: inputText.trim()
+        };
+        
+        // Execute the node through the backend
+        const result = await nodeService.execution.executeNode(
+          parseInt(flowId || '1'), // Use current flow ID or default to 1
+          nodeId,
+          executionContext
+        );
+        
+        console.log('✅ Backend execution result:', result);
+        
+        // Update the node with real execution results from backend
+        setNodes((nds) => 
+          nds.map((node) => {
+            if (node.id === nodeId) {
+              const nodeData = node.data as any;
+              const instance = nodeData.instance as NodeInstance;
+              return {
+                ...node,
+                data: {
+                  ...nodeData,
+                  instance: {
+                    ...instance,
+                    data: {
+                      ...instance.data,
+                      lastExecution: {
+                        status: result.status,
+                        startedAt: result.startedAt || new Date(),
+                        completedAt: result.completedAt || new Date(),
+                        outputs: result.outputs,
+                        duration: 0, // Duration not available in NodeExecutionResult
+                        logs: [`Chat input executed: "${inputText.trim()}"`], // Logs not available in NodeExecutionResult
+                        error: result.error
+                      }
                     }
-                  }
-                } as NodeInstance
-              }
-            };
-          }
-          return node;
-        })
-      );
-
-      console.log('Chat Input executed:', messageData);
+                  } as NodeInstance
+                }
+              };
+            }
+            return node;
+          })
+        );
+      } catch (error: any) {
+        console.error(' Failed to execute Chat Input node:', error);
+        
+        // Update node with error status
+        setNodes((nds) => 
+          nds.map((node) => {
+            if (node.id === nodeId) {
+              const nodeData = node.data as any;
+              const instance = nodeData.instance as NodeInstance;
+              return {
+                ...node,
+                data: {
+                  ...nodeData,
+                  instance: {
+                    ...instance,
+                    data: {
+                      ...instance.data,
+                      lastExecution: {
+                        status: 'error' as any,
+                        startedAt: new Date(),
+                        completedAt: new Date(),
+                        outputs: {},
+                        duration: 0,
+                        logs: [`Failed to execute: ${error.message}`],
+                        error: error.message
+                      }
+                    }
+                  } as NodeInstance
+                }
+              };
+            }
+            return node;
+          })
+        );
+      }
     }
-  }, [setNodes]);
+  }, [setNodes, flowId]);
 
   // Handle drag over for drop zone
   const onDragOver = useCallback((event: React.DragEvent) => {

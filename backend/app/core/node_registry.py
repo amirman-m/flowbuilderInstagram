@@ -1,86 +1,9 @@
 from typing import Dict, List, Callable, Any
 from app.models.nodes import NodeType, NodeCategory, NodeDataType, NodePort, NodePorts, NodeExecutionResult
 from datetime import datetime, timezone
-import uuid
 import logging
 
 logger = logging.getLogger(__name__)
-
-# Execution handlers (defined before NodeRegistry class)
-async def execute_chat_input_trigger(context: Dict[str, Any]) -> NodeExecutionResult:
-    """
-    Execute chat input trigger node
-    This node waits for user input and creates a session for the conversation
-    """
-    
-    # Get the input text from the execution context
-    user_input = context.get("user_input", "")
-    
-    if not user_input:
-        return NodeExecutionResult(
-            outputs={},
-            status="error",
-            error="No user input provided for chat input trigger"
-        )
-    
-    # Generate unique session ID
-    session_id = str(uuid.uuid4())
-    
-    # Determine input type based on content analysis
-    input_type = determine_input_type(user_input)
-    
-    # Create the output data structure
-    message_data = {
-        "session_id": session_id,
-        "input_text": user_input,
-        "input_type": input_type,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "metadata": {
-            "character_count": len(user_input),
-            "word_count": len(user_input.split()),
-            "language": detect_language(user_input)
-        }
-    }
-    
-    return NodeExecutionResult(
-        outputs={"message_data": message_data},
-        status="success",
-        execution_time_ms=10,  # Very fast execution
-        logs=[f"Chat input processed: \"{user_input[:50]}{'...' if len(user_input) > 50 else ''}\""]
-    )
-
-def determine_input_type(text: str) -> str:
-    """
-    Determine the type of input based on content analysis
-    """
-    text_lower = text.lower().strip()
-    
-    # Check for question indicators
-    if text.endswith('?') or any(word in text_lower for word in ['what', 'how', 'why', 'when', 'where', 'who']):
-        return "question"
-    
-    # Check for greeting
-    if any(word in text_lower for word in ['hello', 'hi', 'hey', 'good morning', 'good afternoon']):
-        return "greeting"
-    
-    # Check for request/command
-    if any(word in text_lower for word in ['please', 'can you', 'could you', 'help me']):
-        return "request"
-    
-    # Check for complaint/issue
-    if any(word in text_lower for word in ['problem', 'issue', 'error', 'not working', 'broken']):
-        return "complaint"
-    
-    # Default to statement
-    return "statement"
-
-def detect_language(text: str) -> str:
-    """
-    Simple language detection (you can integrate a proper language detection library)
-    """
-    # This is a simplified version - you might want to use langdetect library
-    return "en"  # Default to English for now
-
 class NodeRegistry:
     """Registry for managing node types and their execution handlers"""
     
@@ -88,6 +11,10 @@ class NodeRegistry:
         self._node_types: Dict[str, NodeType] = {}
         self._execution_handlers: Dict[str, Callable] = {}
         self._initialize_builtin_nodes()
+        
+    def register_node(self, node_type: NodeType, execution_handler: Callable):
+        self._node_types[node_type.id] = node_type
+        self._execution_handlers[node_type.id] = execution_handler
     
     def register_node_type(self, node_type: NodeType):
         """Register a new node type"""
@@ -145,38 +72,10 @@ class NodeRegistry:
             )
     
     def _initialize_builtin_nodes(self):
-        """Initialize built-in node types"""
-        # Chat Input Trigger Node
-        chat_input_node = NodeType(
-            id="chat-input",
-            name="Chat Input",
-            description="Manual text input trigger for testing and user interaction",
-            category=NodeCategory.TRIGGER,
-            version="1.0.0",
-            icon="message",
-            color="#4CAF50",
-            ports=NodePorts(
-                inputs=[],  # Trigger nodes have no inputs
-                outputs=[
-                    NodePort(
-                        id="message_data",
-                        name="message_data",
-                        label="Message Data",
-                        description="Contains session ID, input text, and input type",
-                        data_type=NodeDataType.OBJECT,
-                        required=True
-                    )
-                ]
-            ),
-            settings_schema={
-                "type": "object",
-                "properties": {},  # No settings
-                "required": []
-            }
-        )
-        
-        self.register_node_type(chat_input_node)
-        self.register_execution_handler("chat-input", execute_chat_input_trigger)
+        """Initialize built-in node types using the modular structure"""
+        # Import and register trigger nodes
+        from app.services.nodes.triggers import register_trigger_nodes
+        register_trigger_nodes(self)
 
 # Global node registry instance
 node_registry = NodeRegistry()
