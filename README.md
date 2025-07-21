@@ -207,87 +207,43 @@ const myCustomNode: NodeType = {
 };
 ```
 
-### 2. Register Node Type in Backend
+### 2. Register Node Type 
 
 Implement the node type in the backend API:
 
-```python
-# Example backend node type registration
-from app.models.nodes import NodeType, NodeCategory, NodePort, NodeDataType
+@startuml
+title ChatInput Node Implementation Sequence
 
-my_custom_node = NodeType(
-    id="my-custom-node",
-    name="My Custom Node",
-    description="Description of what this node does",
-    category=NodeCategory.PROCESSOR,
-    version="1.0.0",
-    icon="code",
-    color="#3F51B5",
-    ports={
-        "inputs": [
-            NodePort(
-                id="input1",
-                name="input1",
-                label="Input 1",
-                description="First input description",
-                data_type=NodeDataType.STRING,
-                required=True
-            )
-        ],
-        "outputs": [
-            NodePort(
-                id="output1",
-                name="output1",
-                label="Output 1",
-                description="First output description",
-                data_type=NodeDataType.STRING,
-                required=True
-            )
-        ]
-    },
-    settings_schema={
-        "type": "object",
-        "properties": {
-            "mySetting": {
-                "type": "string",
-                "title": "My Setting",
-                "description": "Description of this setting"
-            }
-        },
-        "required": ["mySetting"]
-    }
-)
+actor User as "User"
+participant FlowBuilder as "FlowBuilder.tsx"
+participant NodeComponentFactory as "NodeComponentFactory.tsx"
+participant ChatInputNode as "ChatInputNode.tsx"
+participant NodeService as "nodeService.ts"
+participant NodeAPI as "nodes.py (API)"
+participant NodeRegistry as "node_registry.py"
+participant ChatInputTrigger as "chat_input.py"
 
-# Register in node registry
-node_registry.register(my_custom_node)
-```
+User -> FlowBuilder: Adds ChatInput node
+FlowBuilder -> NodeComponentFactory: getComponentForNodeType("chat_input")
+NodeComponentFactory -> registry: getNodeComponent("chat_input")
+registry --> NodeComponentFactory: returns ChatInputNode
+NodeComponentFactory --> FlowBuilder: ChatInputNode component
+FlowBuilder -> ChatInputNode: Renders node
 
-### 3. Implement Node Execution Logic
-
-Create the execution handler in the backend:
-
-```python
-# Example node execution handler
-from app.core.node_execution import NodeExecutionContext, NodeExecutionResult
-
-@node_execution_handler("my-custom-node")
-async def execute_my_custom_node(context: NodeExecutionContext) -> NodeExecutionResult:
-    # Get input data
-    input_data = context.get_input("input1")
-    
-    # Get node settings
-    settings = context.node_instance.settings
-    my_setting = settings.get("mySetting")
-    
-    # Process data
-    result = f"{input_data} processed with {my_setting}"
-    
-    # Return execution result
-    return NodeExecutionResult(
-        outputs={"output1": result},
-        status="success"
-    )
-```
+User -> ChatInputNode: Configures node\n(sets prompt, variables)
+User -> FlowBuilder: Executes flow
+FlowBuilder -> ChatInputNode: handleExecute()
+ChatInputNode -> NodeService: executeNode(nodeConfig, inputs)
+NodeService -> NodeAPI: POST /api/v1/nodes/execute
+NodeAPI -> NodeRegistry: get_node_handler("chat_input")
+NodeRegistry --> NodeAPI: returns ChatInputTrigger
+NodeAPI -> ChatInputTrigger: execute(**inputs)
+ChatInputTrigger --> NodeAPI: returns output
+NodeAPI --> NodeService: API response
+NodeService --> ChatInputNode: execution result
+ChatInputNode --> FlowBuilder: execution complete
+FlowBuilder --> User: Shows result
+@enduml
 
 ### 4. Test Your Node
 
