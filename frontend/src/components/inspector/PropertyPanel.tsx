@@ -104,19 +104,29 @@ const Field: React.FC<FieldProps> = ({
             </FormControl>
           );
         } else {
-          // Text input
+          // Text input - special handling for system_prompt
+          const isSystemPrompt = name === 'system_prompt';
+          const isMultiline = schema.format === 'textarea' || isSystemPrompt;
+          
           return (
             <TextField
               fullWidth
-              size="small"
+              size={isSystemPrompt ? "medium" : "small"}
               label={`${schema.title || name}${required ? ' *' : ''}`}
               value={value || ''}
               onChange={(e) => onChange(e.target.value)}
               error={hasError}
               helperText={error || schema.description}
-              multiline={schema.format === 'textarea'}
-              rows={schema.format === 'textarea' ? 3 : 1}
+              multiline={isMultiline}
+              minRows={isSystemPrompt ? 6 : (schema.format === 'textarea' ? 3 : 1)}
+              maxRows={isSystemPrompt ? 10 : (schema.format === 'textarea' ? 6 : undefined)}
               type={schema.format === 'password' ? 'password' : 'text'}
+              sx={isSystemPrompt ? {
+                '& .MuiInputBase-root': {
+                  fontFamily: 'monospace',
+                  fontSize: '0.9rem'
+                }
+              } : undefined}
             />
           );
         }

@@ -599,8 +599,8 @@ const FlowBuilderInner: React.FC = () => {
               }
             };
             
-            // Always update selectedNode and open inspector when we have execution results
-            console.log('🔍 Updating selectedNode and opening inspector for execution results');
+            // Only update selectedNode and open inspector if not already editing this node
+            const isCurrentlyEditingThisNode = selectedNode?.id === nodeId && inspectorOpen;
             
             // Find the updated node from the nodes array
             const nodeInstance = updatedNode.data.instance as NodeInstance;
@@ -614,12 +614,22 @@ const FlowBuilderInner: React.FC = () => {
               }
             };
             
-            // Update selectedNode and open inspector to show results
-            setSelectedNode(updatedSelectedNode);
-            setSelectedNodeType(updatedNode.data.instance.nodeType);
-            setInspectorOpen(true);
-            
-            console.log('🔄 Updated selectedNode and opened inspector with execution results:', updatedSelectedNode);
+            if (!isCurrentlyEditingThisNode) {
+              console.log('🔍 Updating selectedNode and opening inspector for execution results');
+              
+              // Update selectedNode and open inspector to show results
+              setSelectedNode(updatedSelectedNode);
+              setSelectedNodeType(updatedNode.data.instance.nodeType);
+              setInspectorOpen(true);
+              
+              console.log('🔄 Updated selectedNode and opened inspector with execution results:', updatedSelectedNode);
+            } else {
+              console.log('🔒 Node is currently being edited, not overriding inspector state');
+              // Still update the selectedNode data to reflect execution results, but don't change inspector state
+              if (selectedNode?.id === nodeId) {
+                setSelectedNode(updatedSelectedNode);
+              }
+            }
             
             return updatedNode;
           }
@@ -645,7 +655,11 @@ const FlowBuilderInner: React.FC = () => {
               }
             };
             
-            console.log('✅ Node updated with settings:', updatedNode.data.instance?.data?.settings);
+            // Update selectedNode to maintain inspector state
+            const updatedInstance = updatedNode.data.instance as NodeInstance;
+            setSelectedNode(updatedInstance);
+            
+            console.log('✅ Node updated with settings:', updatedInstance.data?.settings);
             return updatedNode;
           }
           

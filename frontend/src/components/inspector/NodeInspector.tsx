@@ -222,7 +222,7 @@ export const NodeInspector: React.FC<NodeInspectorProps> = ({
         <TabPanel value={activeTab} index={0}>
           <PropertyPanel
             nodeType={nodeType}
-            settings={selectedNode.data.settings}
+            settings={selectedNode?.data?.settings || {}}
             onSettingsChange={handleSettingsUpdate}
             validationErrors={nodeErrors.filter(error => error.type === 'settings')}
           />
