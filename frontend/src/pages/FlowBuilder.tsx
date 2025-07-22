@@ -535,7 +535,8 @@ const FlowBuilderInner: React.FC = () => {
                   ...(node.data.instance || {}),
                   data: {
                     ...(node.data.instance?.data || {}),
-                    lastExecution: updates.data.lastExecution
+                    lastExecution: updates.data.lastExecution,
+                    ...(updates.data.inputs ? { inputs: updates.data.inputs } : {})
                   }
                 }
               }
@@ -551,13 +552,14 @@ const FlowBuilderInner: React.FC = () => {
               ...nodeInstance,
               data: {
                 ...nodeInstance.data,
-                lastExecution: updates.data.lastExecution
+                lastExecution: updates.data.lastExecution,
+                ...(updates.data.inputs ? { inputs: updates.data.inputs } : {})
               }
             };
             
             // Update selectedNode and open inspector to show results
             setSelectedNode(updatedSelectedNode);
-            setSelectedNodeType(updatedNode.data.nodeType);
+            setSelectedNodeType(updatedNode.data.instance.nodeType);
             setInspectorOpen(true);
             
             console.log('🔄 Updated selectedNode and opened inspector with execution results:', updatedSelectedNode);
@@ -566,6 +568,31 @@ const FlowBuilderInner: React.FC = () => {
           }
           
           // Regular update from inspector
+          console.log('🔧 Processing regular update from inspector:', updates);
+          
+          // Handle settings updates properly
+          if (updates.data?.settings) {
+            console.log('⚙️ Updating node settings:', updates.data.settings);
+            
+            const updatedNode = {
+              ...node,
+              data: {
+                ...node.data,
+                instance: {
+                  ...(node.data.instance || {}),
+                  data: {
+                    ...(node.data.instance?.data || {}),
+                    settings: updates.data.settings
+                  }
+                }
+              }
+            };
+            
+            console.log('✅ Node updated with settings:', updatedNode.data.instance?.data?.settings);
+            return updatedNode;
+          }
+          
+          // Handle other updates
           return {
             ...node,
             data: {

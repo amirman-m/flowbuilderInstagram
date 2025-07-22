@@ -130,6 +130,10 @@ const NodeConfigForm: React.FC<NodeConfigFormProps> = ({
   const [isValidating, setIsValidating] = useState(false);
   const [showJsonView, setShowJsonView] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['main']));
+  
+  // Check if this is an OpenAI chat node (should be read-only)
+  const isOpenAIChatNode = nodeType.id === 'simple-openai-chat';
+  const isReadOnly = isOpenAIChatNode;
 
   // ============================================================================
   // EFFECTS
@@ -143,7 +147,7 @@ const NodeConfigForm: React.FC<NodeConfigFormProps> = ({
     const initialSettings: Record<string, any> = {};
     
     // Initialize from existing node instance or schema defaults
-    const existingSettings = nodeInstance?.data.settings || {};
+    const existingSettings = nodeInstance?.data?.settings || {};
     
     if (nodeType.settingsSchema.properties) {
       Object.entries(nodeType.settingsSchema.properties).forEach(([key, propSchema]) => {
@@ -156,6 +160,11 @@ const NodeConfigForm: React.FC<NodeConfigFormProps> = ({
     }
     
     setSettings(initialSettings);
+    
+    // For read-only nodes, clear validation errors
+    if (isReadOnly) {
+      setValidationErrors([]);
+    }
   };
 
   // ============================================================================
@@ -210,6 +219,13 @@ const NodeConfigForm: React.FC<NodeConfigFormProps> = ({
   };
 
   const validateSettings = async (): Promise<boolean> => {
+    // Skip validation for read-only nodes
+    if (isReadOnly) {
+      setValidationErrors([]);
+      setIsValidating(false);
+      return true;
+    }
+    
     setIsValidating(true);
     const errors: ValidationError[] = [];
 
@@ -275,9 +291,10 @@ const NodeConfigForm: React.FC<NodeConfigFormProps> = ({
     const commonProps = {
       fullWidth: true,
       margin: 'normal' as const,
-      error: !!error,
+      error: !!error && !isReadOnly,
       helperText: error?.message || schema.description,
-      required: isRequired
+      required: isRequired,
+      disabled: isReadOnly
     };
 
     switch (schema.type) {
@@ -465,6 +482,16 @@ const NodeConfigForm: React.FC<NodeConfigFormProps> = ({
         <Typography variant="body2" color="text.secondary">
           {nodeType.description}
         </Typography>
+        {isReadOnly && (
+          <Box sx={{ mt: 1 }}>
+            <Chip 
+              label="Read-Only Mode" 
+              color="info" 
+              size="small" 
+              icon={<PreviewIcon />}
+            />
+          </Box>
+        )}
       </Box>
 
       {/* Content */}
@@ -518,6 +545,7 @@ const NodeConfigForm: React.FC<NodeConfigFormProps> = ({
             variant="outlined"
             startIcon={<ResetIcon />}
             onClick={handleReset}
+            disabled={isReadOnly}
           >
             Reset
           </Button>
@@ -528,14 +556,22 @@ const NodeConfigForm: React.FC<NodeConfigFormProps> = ({
           )}
         </Box>
         
-        <Button
-          variant="contained"
-          startIcon={<SaveIcon />}
-          onClick={handleSave}
-          disabled={isValidating}
-        >
-          {isValidating ? 'Validating...' : 'Save Configuration'}
-        </Button>
+        {!isReadOnly ? (
+          <Button
+            variant="contained"
+            startIcon={<SaveIcon />}
+            onClick={handleSave}
+            disabled={isValidating}
+          >
+            {isValidating ? 'Validating...' : 'Save Configuration'}
+          </Button>
+        ) : (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Read-only mode - Use settings button to edit
+            </Typography>
+          </Box>
+        )}
       </Box>
     </Paper>
   );

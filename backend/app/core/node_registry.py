@@ -77,5 +77,8 @@ class NodeRegistry:
         from app.services.nodes.triggers import register_trigger_nodes
         register_trigger_nodes(self)
 
+        from app.services.nodes.processors import register_processor_nodes
+        register_processor_nodes(self)      
+
 # Global node registry instance
 node_registry = NodeRegistry()

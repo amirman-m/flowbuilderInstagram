@@ -1,2 +1,3 @@
 // Export all node types from this directory
-export * from './ChatInputNode';
+export { ChatInputNode } from './ChatInputNode';
+export { OpenAIChatNode } from './OpenAIChatNode';
