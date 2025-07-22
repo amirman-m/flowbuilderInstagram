@@ -92,20 +92,29 @@ async def execute_simple_openai_chat(context: Dict[str, Any]) -> NodeExecutionRe
             input_source = port_id
             break
         elif isinstance(port_data, dict):
-            # Check if it's a message_data structure (backward compatibility)
-            if "input_text" in port_data and isinstance(port_data["input_text"], str):
-                input_text = port_data["input_text"].strip()
-                input_source = port_id
+            # PRIORITY 1: Check for ai_response first (from upstream OpenAI nodes)
+            if "ai_response" in port_data and isinstance(port_data["ai_response"], str):
+                input_text = port_data["ai_response"].strip()
+                input_source = f"{port_id}.ai_response"
                 # Extract additional metadata if available
                 session_id = port_data.get("session_id")
                 input_type = port_data.get("input_type", "text")
                 break
-            # Check for any string value in the dict
-            for key, value in port_data.items():
-                if isinstance(value, str) and value.strip():
-                    input_text = value.strip()
-                    input_source = f"{port_id}.{key}"
-                    break
+            # PRIORITY 2: Check for input_text (backward compatibility and direct input)
+            elif "input_text" in port_data and isinstance(port_data["input_text"], str):
+                input_text = port_data["input_text"].strip()
+                input_source = f"{port_id}.input_text"
+                # Extract additional metadata if available
+                session_id = port_data.get("session_id")
+                input_type = port_data.get("input_type", "text")
+                break
+            # PRIORITY 3: Check for any other string value in the dict
+            else:
+                for key, value in port_data.items():
+                    if isinstance(value, str) and value.strip():
+                        input_text = value.strip()
+                        input_source = f"{port_id}.{key}"
+                        break
             if input_text:
                 break
     
