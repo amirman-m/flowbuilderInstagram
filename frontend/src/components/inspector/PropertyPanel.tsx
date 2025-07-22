@@ -133,6 +133,10 @@ const Field: React.FC<FieldProps> = ({
 
       case 'number':
       case 'integer':
+        // Special handling for temperature fields
+        const isTemperatureField = name === 'temperature';
+        const stepValue = isTemperatureField ? 0.1 : (schema.type === 'integer' ? 1 : 'any');
+        
         return (
           <TextField
             fullWidth
@@ -149,7 +153,7 @@ const Field: React.FC<FieldProps> = ({
             inputProps={{
               min: schema.minimum,
               max: schema.maximum,
-              step: schema.type === 'integer' ? 1 : 'any'
+              step: stepValue
             }}
           />
         );
