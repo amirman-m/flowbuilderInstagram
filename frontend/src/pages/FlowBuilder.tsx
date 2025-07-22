@@ -542,25 +542,25 @@ const FlowBuilderInner: React.FC = () => {
     [setEdges, onEdgeDelete]
   );
 
-  // Handle keyboard shortcuts for deletion
-  const onKeyDown = useCallback((event: KeyboardEvent) => {
-    if (event.key === 'Delete' || event.key === 'Backspace') {
-      // Delete selected nodes and edges
-      const selectedNodes = nodes.filter(node => node.selected);
-      const selectedEdges = edges.filter(edge => edge.selected);
-      
-      selectedNodes.forEach(node => onNodeDelete(node.id));
-      selectedEdges.forEach(edge => onEdgeDelete(edge.id));
-    }
-  }, [nodes, edges, onNodeDelete, onEdgeDelete]);
+  // Keyboard deletion disabled - nodes/edges can only be deleted via delete icons
+  // const onKeyDown = useCallback((event: KeyboardEvent) => {
+  //   if (event.key === 'Delete' || event.key === 'Backspace') {
+  //     // Delete selected nodes and edges
+  //     const selectedNodes = nodes.filter(node => node.selected);
+  //     const selectedEdges = edges.filter(edge => edge.selected);
+  //     
+  //     selectedNodes.forEach(node => onNodeDelete(node.id));
+  //     selectedEdges.forEach(edge => onEdgeDelete(edge.id));
+  //   }
+  // }, [nodes, edges, onNodeDelete, onEdgeDelete]);
 
-  // Add keyboard event listener
-  useEffect(() => {
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [onKeyDown]);
+  // Keyboard event listener disabled - deletion only via icons
+  // useEffect(() => {
+  //   document.addEventListener('keydown', onKeyDown);
+  //   return () => {
+  //     document.removeEventListener('keydown', onKeyDown);
+  //   };
+  // }, [onKeyDown]);
 
   // Handle node selection
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
@@ -945,6 +945,7 @@ const FlowBuilderInner: React.FC = () => {
             onNodeClick={onNodeClick}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
+            deleteKeyCode={null}
             fitView
             attributionPosition="bottom-left"
           >
