@@ -37,7 +37,7 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import { Flow } from '../types';
-import { NodeType, NodeCategory, NodeInstance, NodeDataType } from '../types/nodes';
+import { NodeType, NodeCategory, NodeInstance, NodeConnection, NodeDataType } from '../types/nodes';
 import { flowsAPI } from '../services/api';
 import { nodeService } from '../services/nodeService';
 import { NodeComponentFactory } from '../components/nodes/NodeComponentFactory';
@@ -62,6 +62,54 @@ const FlowBuilderInner: React.FC = () => {
   
   // React Flow state
   const [nodes, setNodes, onNodesChange] = useNodesState([] as Node[]);
+
+  // When node types are loaded, ensure all existing nodes have their nodeType attached
+  // AND retry loading flow if it was waiting for node types
+  useEffect(() => {
+    if (availableNodeTypes.length === 0) return;
+
+    // If we have a flowId but no nodes yet, try loading the flow again
+    // This handles the case where loadFlow() returned early waiting for node types
+    if (flowId && nodes.length === 0 && !loading) {
+      console.log('🔄 Node types now available, retrying flow load...');
+      loadFlow();
+      return;
+    }
+
+    let updated = false;
+    setNodes((nds) =>
+      nds.map((n) => {
+        const nData: any = n.data ?? {};
+        if (!nData.nodeType) {
+          const nt = availableNodeTypes.find((t) => t.id === nData.instance?.typeId);
+          if (nt) {
+            updated = true;
+            return {
+              ...n,
+              data: { ...nData, nodeType: nt },
+            };
+          }
+        }
+        return n;
+      }),
+    );
+
+    // If we enriched any nodes, reapply edges so React Flow revalidates them
+    if (updated) {
+      setEdges((es) => es.map((e) => ({ ...e })));
+    }
+  }, [availableNodeTypes, flowId, nodes.length, loading]);
+  
+  // Utility mappers between backend models and React Flow types
+  const mapConnection = useCallback((c: NodeConnection): Edge => ({
+    id: c.id,
+    source: c.sourceNodeId,
+    target: c.targetNodeId,
+    sourceHandle: c.sourcePortId,
+    targetHandle: c.targetPortId,
+    type: 'custom',
+  }), []);
+
   const [edges, setEdges, onEdgesChange] = useEdgesState([] as Edge[]);
   
   // Node Inspector state
@@ -98,13 +146,19 @@ const FlowBuilderInner: React.FC = () => {
       const flowData = await flowsAPI.getFlow(parseInt(flowId));
       setFlow(flowData);
       
-      // TODO: Uncomment these when the backend endpoints are implemented
-      // const flowNodes = await flowsAPI.getFlowNodes(parseInt(flowId));
-      // const flowConnections = await flowsAPI.getFlowConnections(parseInt(flowId));
+      // IMPORTANT: Wait for node types to be loaded before loading nodes
+      // This prevents the nodeType undefined issue
+      if (availableNodeTypes.length === 0) {
+        console.log('⏳ Waiting for node types to load before loading flow nodes...');
+        return; // Exit early, useEffect will retry when types are available
+      }
       
-      // For now, start with empty nodes and edges
-      setNodes([]);
-      setEdges([]);
+      // Fetch graph from backend
+      const flowNodes = await flowsAPI.getFlowNodes(parseInt(flowId));
+      const flowConnections = await flowsAPI.getFlowConnections(parseInt(flowId));
+
+      setNodes(flowNodes.map(mapNodeInstance));
+      setEdges(flowConnections.map(mapConnection));
       
       console.log('Flow loaded successfully from backend:', flowData);
     } catch (err: any) {
@@ -413,42 +467,45 @@ const FlowBuilderInner: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!flow || !flowId) return;
-    
+    if (!flowId) return;
+
     try {
       setSaving(true);
-      // Update flow metadata
-      await flowsAPI.updateFlow(parseInt(flowId), {
-        name: flow.name,
-        description: flow.description,
-      });
-      
-      // Convert React Flow nodes to backend NodeInstance format
-      const nodeInstances = nodes.map(node => {
+
+      // Prepare node instances with current position & settings
+      const nodeInstances = nodes.map((node) => {
         const nodeData = node.data as any;
         return {
           ...nodeData.instance,
           position: node.position,
         };
       });
-      
-      // Convert React Flow edges to backend NodeConnection format
-      const connections = edges.map(edge => ({
+
+      // Prepare connections derived from React Flow edges
+      const connections = edges.map((edge) => ({
         id: edge.id,
         sourceNodeId: edge.source,
         targetNodeId: edge.target,
         sourcePortId: edge.sourceHandle as string,
         targetPortId: edge.targetHandle as string,
       }));
-      
-      // Save nodes and connections
-      await flowsAPI.updateFlowNodes(parseInt(flowId), nodeInstances);
-      await flowsAPI.updateFlowConnections(parseInt(flowId), connections);
-      
-      // Success - no error handling needed
+
+      // Persist full flow definition in one request
+      await flowsAPI.saveFlowDefinition(parseInt(flowId), {
+        nodes: nodeInstances,
+        connections,
+      });
+
+      // Re-fetch graph so canvas reflects latest saved state
+    const refreshedNodes = await flowsAPI.getFlowNodes(parseInt(flowId));
+    const refreshedConns = await flowsAPI.getFlowConnections(parseInt(flowId));
+    setNodes(refreshedNodes.map(mapNodeInstance));
+    setEdges(refreshedConns.map(mapConnection));
+
+    // TODO: toast/snackbar for success
     } catch (err: any) {
       console.error('Error saving flow:', err);
-      // Could show a toast notification here instead of error state
+      // TODO: toast/snackbar for error
     } finally {
       setSaving(false);
     }
@@ -671,6 +728,22 @@ const FlowBuilderInner: React.FC = () => {
     },
     [reactFlowInstance, setNodes]
   );
+
+  // Utility mapper for node instances - defined after all handlers
+  const mapNodeInstance = useCallback((ni: NodeInstance): Node => {
+    const nodeType = availableNodeTypes.find((t) => t.id === ni.typeId);
+    return {
+      id: ni.id,
+      type: 'customNode',
+      position: ni.position,
+      data: { 
+        instance: ni, 
+        nodeType,
+        onNodeDelete: onNodeDelete,
+        onNodeUpdate: handleNodeUpdate
+      },
+    } as Node;
+  }, [availableNodeTypes, onNodeDelete, handleNodeUpdate]);
 
   // Category colors for node types
   const getCategoryColor = (category: NodeCategory) => {

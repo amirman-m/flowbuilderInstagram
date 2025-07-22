@@ -76,6 +76,18 @@ export const flowsAPI = {
     return response.data;
   },
 
+  // Save entire flow definition (nodes, ports, edges, settings) in one call
+  saveFlowDefinition: async (
+    flowId: number,
+    payload: {
+      nodes: NodeInstance[];
+      connections: NodeConnection[];
+    }
+  ): Promise<Flow> => {
+    const response = await api.post(`/flows/${flowId}/save`, payload);
+    return response.data;
+  },
+
   executeFlow: async (flowId: number, inputs?: Record<string, any>): Promise<{ executionId: string }> => {
     const response = await api.post(`/flows/${flowId}/execute`, { inputs });
     return response.data;

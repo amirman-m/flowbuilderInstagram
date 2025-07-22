@@ -9,7 +9,7 @@ import {
   Refresh,
   Schedule
 } from '@mui/icons-material';
-import { NodeInstance, FlowNode, NodeExecutionStatus } from '../../types/nodes';
+import { NodeInstance, FlowNode, NodeExecutionStatus, NodeType, NodeCategory } from '../../types/nodes';
 import { ChatInputNode, OpenAIChatNode } from './node-types';
 import { baseNodeStyles, getCategoryColor } from './styles';
 
@@ -64,12 +64,24 @@ export const nodeComponentRegistry: Record<string, React.FC<NodeComponentProps>>
 
 // Default/fallback node component
 export const DefaultNode: React.FC<NodeComponentProps> = ({ data, selected, id }) => {
-  const nodeData = data as FlowNode['data'];
-  const { nodeType, instance } = nodeData;
-  const categoryColor = getCategoryColor(nodeType.category);
-  // Ensure instance is properly typed as NodeInstance
-  const typedInstance = instance as NodeInstance;
-  const statusIcon = getStatusIcon(typedInstance.data.lastExecution?.status);
+  const nodeData = data as any;
+  const nodeType = nodeData?.nodeType as NodeType | undefined;
+  const instance = nodeData?.instance as NodeInstance | undefined;
+
+  // Fallback values when nodeType is unavailable (e.g., node types not loaded yet)
+  const safeNodeType: NodeType = nodeType ?? {
+    id: 'unknown',
+    name: 'Unknown',
+    description: 'Unknown node type',
+    category: NodeCategory.PROCESSOR,
+    version: '0.0.0',
+    ports: { inputs: [], outputs: [] } as any,
+    settingsSchema: { type: 'object', properties: {} },
+  } as NodeType;
+
+  const categoryColor = getCategoryColor(safeNodeType.category);
+  const typedInstance = instance as NodeInstance | undefined;
+  const statusIcon = typedInstance?.data?.lastExecution ? getStatusIcon(typedInstance.data.lastExecution?.status) : null;
 
   return (
     <Paper
@@ -81,7 +93,7 @@ export const DefaultNode: React.FC<NodeComponentProps> = ({ data, selected, id }
       }}
     >
       {/* Input Handles */}
-      {nodeType.ports.inputs.map((port: any, index: number) => (
+      {safeNodeType.ports.inputs.map((port: any, index: number) => (
         <Handle
           key={port.id}
           type="target"
@@ -97,7 +109,7 @@ export const DefaultNode: React.FC<NodeComponentProps> = ({ data, selected, id }
       {/* Node Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
         <Typography variant="subtitle2" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
-          {instance.label || nodeType.name}
+          {instance?.label || safeNodeType.name}
         </Typography>
         {statusIcon && (
           <Box sx={{ ml: 1 }}>
@@ -121,7 +133,7 @@ export const DefaultNode: React.FC<NodeComponentProps> = ({ data, selected, id }
 
       {/* Node Category */}
       <Chip
-        label={nodeType.category}
+        label={safeNodeType.category}
         size="small"
         sx={{
           backgroundColor: `${categoryColor}20`,
@@ -132,7 +144,7 @@ export const DefaultNode: React.FC<NodeComponentProps> = ({ data, selected, id }
       />
 
       {/* Output Handles */}
-      {nodeType.ports.outputs.map((port: any, index: number) => (
+      {safeNodeType.ports.outputs.map((port: any, index: number) => (
         <Handle
           key={port.id}
           type="source"

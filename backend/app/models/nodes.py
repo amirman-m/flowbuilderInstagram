@@ -1,12 +1,13 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, JSON, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
+# Use shared Base from core.database to ensure tables are created once
+from ..core.database import Base
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, Field
 
-Base = declarative_base()
+
 
 class NodeCategory(str, Enum):
     TRIGGER = "trigger"
@@ -69,20 +70,6 @@ class NodeExecutionResult(BaseModel):
     logs: List[str] = []
 
 # SQLAlchemy models for database storage
-class Flow(Base):
-    __tablename__ = "flows"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    description = Column(Text)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    status = Column(String, default="draft")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
-    nodes = relationship("NodeInstance", back_populates="flow")
-    connections = relationship("NodeConnection", back_populates="flow")
 
 class NodeInstance(Base):
     __tablename__ = "node_instances"

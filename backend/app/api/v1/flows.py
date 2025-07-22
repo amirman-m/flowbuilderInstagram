@@ -8,6 +8,9 @@ from ...schemas.flow import FlowCreate, FlowUpdate, Flow as FlowSchema
 from ..deps import get_current_active_user
 from ...core.node_registry import node_registry
 from pydantic import BaseModel
+import logging
+from ...schemas.flow_save import FlowSaveRequest, NodeSchema, EdgeSchema
+from ...models.nodes import NodeInstance, NodeConnection
 
 router = APIRouter()
 
@@ -130,6 +133,103 @@ def delete_flow(
     db.delete(flow)
     db.commit()
     return {"message": "Flow deleted successfully"}
+
+
+@router.post("/{flow_id}/save", status_code=status.HTTP_201_CREATED)
+def save_flow(
+    flow_id: int,
+    payload: FlowSaveRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Persist complete flow graph (nodes + edges) for the given user."""
+    flow = db.query(Flow).filter(Flow.id == flow_id, Flow.user_id == current_user.id).first()
+    if not flow:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Flow not found")
+
+    # Optional name update
+    if payload.flow_name:
+        flow.name = payload.flow_name
+
+    # Determine new version
+    current_version = (flow.flow_data or {}).get("version", 0)
+    new_version = current_version + 1
+
+    try:
+        # Start transaction
+        # Delete existing graph
+        db.query(NodeConnection).filter(NodeConnection.flow_id == flow_id).delete()
+        db.query(NodeInstance).filter(NodeInstance.flow_id == flow_id).delete()
+        db.flush()
+
+        # Bulk insert nodes
+        node_objs = []
+        for n in payload.nodes:
+            node_objs.append(NodeInstance(
+                id=n.id,
+                flow_id=flow_id,
+                type_id=n.type_id,
+                label=n.label,
+                position=n.position,
+                settings=n.settings,
+                data=n.data or {},
+                disabled=n.disabled or False,
+            ))
+        db.bulk_save_objects(node_objs)
+
+        # Bulk insert connections
+        edge_objs = []
+        for e in payload.edges:
+            edge_objs.append(NodeConnection(
+                id=e.id,
+                flow_id=flow_id,
+                source_node_id=e.source_node_id,
+                target_node_id=e.target_node_id,
+                source_port_id=e.source_port_id,
+                target_port_id=e.target_port_id,
+            ))
+        db.bulk_save_objects(edge_objs)
+
+        # Update flow_data with version
+        flow.flow_data = {**(flow.flow_data or {}), "version": new_version}
+        db.commit()
+    except Exception as exc:
+        logging.exception("Failed to save flow")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to save flow: {exc}")
+
+    return {"version": new_version, "saved_at": flow.updated_at.isoformat() if flow.updated_at else None}
+
+
+@router.get("/{flow_id}/nodes", response_model=List[NodeSchema])
+def get_flow_nodes(
+    flow_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Return all node instances for the specified flow."""
+    flow = db.query(Flow).filter(Flow.id == flow_id, Flow.user_id == current_user.id).first()
+    if not flow:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Flow not found")
+
+    nodes = db.query(NodeInstance).filter(NodeInstance.flow_id == flow_id).all()
+    return [NodeSchema.model_validate(n, from_attributes=True) for n in nodes]
+
+
+@router.get("/{flow_id}/connections", response_model=List[EdgeSchema])
+def get_flow_connections(
+    flow_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Return all node connections (edges) for the specified flow."""
+    flow = db.query(Flow).filter(Flow.id == flow_id, Flow.user_id == current_user.id).first()
+    if not flow:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Flow not found")
+
+    edges = db.query(NodeConnection).filter(NodeConnection.flow_id == flow_id).all()
+    return [EdgeSchema.model_validate(e, from_attributes=True) for e in edges]
+
 
 
 @router.post("/{flow_id}/nodes/{node_id}/execute", response_model=NodeExecutionResponse)

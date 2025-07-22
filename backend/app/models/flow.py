@@ -18,3 +18,7 @@ class Flow(Base):
 
     # Relationship
     user = relationship("User", back_populates="flows")
+
+    # Graph relationships
+    nodes = relationship("NodeInstance", back_populates="flow", cascade="all, delete-orphan")
+    connections = relationship("NodeConnection", back_populates="flow", cascade="all, delete-orphan")
