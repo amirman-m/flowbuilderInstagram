@@ -62,13 +62,6 @@ def get_simple_deepseek_chat_node_type() -> NodeType:
                     "minimum": 0,
                     "maximum": 2,
                     "default": 0.7
-                },
-                "max_tokens": {
-                    "type": "integer",
-                    "description": "Maximum number of tokens to generate (1-4096)",
-                    "minimum": 1,
-                    "maximum": 4096,
-                    "default": 1024
                 }
             },
             "required": ["model", "system_prompt"]
@@ -137,7 +130,7 @@ async def execute_simple_deepseek_chat(context: Dict[str, Any]) -> NodeExecution
     model = settings.get("model", "deepseek-chat")
     system_prompt = settings.get("system_prompt", "You are a helpful assistant.")
     temperature = settings.get("temperature", 0.7)
-    max_tokens = settings.get("max_tokens", 1024)
+    max_tokens = 1024  # default value
     
     # Check if API key is set in environment
     if not os.environ.get("DEEPSEEK_API_KEY"):
