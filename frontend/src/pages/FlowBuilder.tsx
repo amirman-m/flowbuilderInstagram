@@ -11,7 +11,8 @@ import {
   IconButton,
   Tooltip,
   Divider,
-  Chip
+  Chip,
+  TextField
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -52,12 +53,18 @@ const nodeTypes = {
 
 // Inner FlowBuilder component that uses React Flow hooks
 const FlowBuilderInner: React.FC = () => {
+  // Local editable name state
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [flowName, setFlowName] = useState('');
+  const [nameSaving, setNameSaving] = useState(false);
+
   const { flowId } = useParams<{ flowId: string }>();
   const navigate = useNavigate();
   const reactFlowInstance = useReactFlow();
   
   const [flow, setFlow] = useState<Flow | null>(null);
   const [loading, setLoading] = useState(true);
+
   const [saving, setSaving] = useState(false);
   const [availableNodeTypes, setAvailableNodeTypes] = useState<NodeType[]>([]);
   
@@ -133,9 +140,10 @@ const FlowBuilderInner: React.FC = () => {
   const loadFlow = async () => {
     if (!flowId) {
       // If no flowId, create a new empty flow for editing
+      const newFlowName = 'New Flow';
       setFlow({
         id: 'new',
-        name: 'New Flow',
+        name: newFlowName,
         description: 'A new flow for social media automation',
         status: 'draft' as any,
         createdAt: new Date(),
@@ -150,6 +158,8 @@ const FlowBuilderInner: React.FC = () => {
       setLoading(true);
       const flowData = await flowsAPI.getFlow(parseInt(flowId));
       setFlow(flowData);
+      setFlowName(flowData.name);
+
       
       // IMPORTANT: Wait for node types to be loaded before loading nodes
       // This prevents the nodeType undefined issue
@@ -170,9 +180,10 @@ const FlowBuilderInner: React.FC = () => {
       // Don't set error state for flow loading failures - just log and continue
       // This allows the UI to render with empty flow and node types from backend
       console.warn('Failed to load flow from backend, starting with empty flow:', err);
+      const fallbackName = `Flow ${flowId}`;
       setFlow({
         id: flowId,
-        name: `Flow ${flowId}`,
+        name: fallbackName,
         description: 'Flow loaded with mock data due to backend unavailability',
         status: 'draft' as any,
         createdAt: new Date(),
@@ -506,7 +517,7 @@ const FlowBuilderInner: React.FC = () => {
     const refreshedConns = await flowsAPI.getFlowConnections(parseInt(flowId));
     setNodes(refreshedNodes.map(mapNodeInstance));
     setEdges(refreshedConns.map(mapConnection));
-
+    
     // TODO: toast/snackbar for success
     } catch (err: any) {
       console.error('Error saving flow:', err);
@@ -943,6 +954,21 @@ const FlowBuilderInner: React.FC = () => {
     );
   };
 
+  const handleNameSave = async () => {
+    if (!flowId) return;
+
+    try {
+      setNameSaving(true);
+      await flowsAPI.updateFlow(parseInt(flowId), { name: flowName });
+      console.log('✅ Flow name updated:', flowName);
+    } catch (err: any) {
+      console.error('Error updating flow name:', err);
+    } finally {
+      setNameSaving(false);
+      setIsEditingName(false);
+    }
+  };
+
   if (loading) {
     return (
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -976,10 +1002,33 @@ const FlowBuilderInner: React.FC = () => {
               <ArrowBackIcon />
             </IconButton>
           </Tooltip>
-          
-          <Typography variant="h6" sx={{ flexGrow: 1, ml: 2 }}>
-            {flow?.name || 'Flow Builder'}
-          </Typography>
+          {isEditingName ? (
+            <TextField
+              size="small"
+              value={flowName}
+              autoFocus
+              onChange={(e) => setFlowName(e.target.value)}
+              onBlur={handleNameSave}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleNameSave();
+                } else if (e.key === 'Escape') {
+                  setIsEditingName(false);
+                  setFlowName(flow?.name || '');
+                }
+              }}
+              sx={{ flexGrow: 1, ml: 2, maxWidth: 300 }}
+              disabled={nameSaving}
+            />
+          ) : (
+            <Typography
+              variant="h6"
+              sx={{ flexGrow: 1, ml: 2, cursor: 'pointer' }}
+              onClick={() => setIsEditingName(true)}
+            >
+              {flowName || 'Flow Builder'}
+            </Typography>
+          )}
 
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Tooltip title="Flow Settings">
