@@ -108,7 +108,7 @@ const FlowBuilderInner: React.FC = () => {
     }
   }, [availableNodeTypes, flowId, nodes.length, loading]);
   
-  // Utility mappers between backend models and React Flow types
+  // First declare the mapConnection without the onEdgeDelete handler
   const mapConnection = useCallback((c: NodeConnection): Edge => ({
     id: c.id,
     source: c.sourceNodeId,
@@ -119,6 +119,19 @@ const FlowBuilderInner: React.FC = () => {
   }), []);
 
   const [edges, setEdges, onEdgesChange] = useEdgesState([] as Edge[]);
+  
+  // Now define onEdgeDelete after setEdges is available
+  const onEdgeDelete = useCallback((edgeId: string) => {
+    setEdges((eds) => eds.filter((edge) => edge.id !== edgeId));
+  }, [setEdges]);
+  
+  // Helper to attach onEdgeDelete to edges
+  const attachEdgeHandlers = useCallback((edge: Edge): Edge => {
+    return {
+      ...edge,
+      data: { ...edge.data, onEdgeDelete }
+    };
+  }, [onEdgeDelete]);
   
   // Node Inspector state
   const [selectedNode, setSelectedNode] = useState<NodeInstance | null>(null);
@@ -173,7 +186,7 @@ const FlowBuilderInner: React.FC = () => {
       const flowConnections = await flowsAPI.getFlowConnections(parseInt(flowId));
 
       setNodes(flowNodes.map(mapNodeInstance));
-      setEdges(flowConnections.map(mapConnection));
+      setEdges(flowConnections.map(mapConnection).map(attachEdgeHandlers));
       
       console.log('Flow loaded successfully from backend:', flowData);
     } catch (err: any) {
@@ -516,7 +529,7 @@ const FlowBuilderInner: React.FC = () => {
     const refreshedNodes = await flowsAPI.getFlowNodes(parseInt(flowId));
     const refreshedConns = await flowsAPI.getFlowConnections(parseInt(flowId));
     setNodes(refreshedNodes.map(mapNodeInstance));
-    setEdges(refreshedConns.map(mapConnection));
+    setEdges(refreshedConns.map(mapConnection).map(attachEdgeHandlers));
     
     // TODO: toast/snackbar for success
     } catch (err: any) {
@@ -647,9 +660,7 @@ const FlowBuilderInner: React.FC = () => {
   };
 
   // Handle edge deletion
-  const onEdgeDelete = useCallback((edgeId: string) => {
-    setEdges((eds) => eds.filter((edge) => edge.id !== edgeId));
-  }, [setEdges]);
+
 
   // Handle node deletion
   const onNodeDelete = useCallback((nodeId: string) => {
@@ -665,12 +676,15 @@ const FlowBuilderInner: React.FC = () => {
 
   // Handle connections between nodes
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge({ 
-      ...params, 
-      type: 'custom',
-      data: { onEdgeDelete } // Pass the deletion handler to edges
-    }, eds)),
-    [setEdges, onEdgeDelete]
+    (params: Connection) => setEdges((eds) => {
+      const newEdge = addEdge({ 
+        ...params, 
+        type: 'custom'
+      }, eds);
+      // Apply the edge deletion handler to the newly created edge
+      return newEdge.map(attachEdgeHandlers);
+    }),
+    [setEdges, attachEdgeHandlers]
   );
 
   // Keyboard deletion disabled - nodes/edges can only be deleted via delete icons
