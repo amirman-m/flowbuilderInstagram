@@ -73,12 +73,37 @@ class NodeRegistry:
     
     def _initialize_builtin_nodes(self):
         """Initialize built-in node types using the modular structure"""
-        # Import and register trigger nodes
-        from app.services.nodes.triggers import register_trigger_nodes
-        register_trigger_nodes(self)
+        try:
+            # Import and register trigger nodes
+            from app.services.nodes.triggers import register_trigger_nodes
+            register_trigger_nodes(self)
+        except ImportError as e:
+            print(f"Warning: Could not load trigger nodes: {e}")
 
-        from app.services.nodes.processors import register_processor_nodes
-        register_processor_nodes(self)      
+        try:
+            # Use lazy import to avoid circular dependency
+            from app.services.nodes.processors import register_processor_nodes
+            register_processor_nodes(self)
+        except ImportError as e:
+            print(f"Warning: Could not load processor nodes: {e}")
+            # Fallback: register nodes individually to avoid circular import
+            try:
+                from app.services.nodes.processors.simple_openAI_chat import get_simple_openai_chat_node_type, execute_simple_openai_chat
+                from app.services.nodes.processors.simple_deepseek_chat import get_simple_deepseek_chat_node_type, execute_simple_deepseek_chat
+                
+                # Register OpenAI Chat node
+                openai_node_type = get_simple_openai_chat_node_type()
+                self.register_node(openai_node_type, execute_simple_openai_chat)
+                
+                # Register DeepSeek Chat node
+                deepseek_node_type = get_simple_deepseek_chat_node_type()
+                self.register_node(deepseek_node_type, execute_simple_deepseek_chat)
+                
+                print("Processor nodes registered individually to avoid circular import")
+            except Exception as fallback_error:
+                print(f"Error: Could not register processor nodes individually: {fallback_error}")
+                import traceback
+                traceback.print_exc()      
 
 # Global node registry instance
 node_registry = NodeRegistry()

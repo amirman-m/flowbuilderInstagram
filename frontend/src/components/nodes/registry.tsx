@@ -9,8 +9,8 @@ import {
   Refresh,
   Schedule
 } from '@mui/icons-material';
-import { NodeInstance, FlowNode, NodeExecutionStatus, NodeType, NodeCategory } from '../../types/nodes';
-import { ChatInputNode, OpenAIChatNode } from './node-types';
+import { NodeInstance, NodeExecutionStatus, NodeType, NodeCategory } from '../../types/nodes';
+import { ChatInputNode, OpenAIChatNode, DeepSeekChatNode } from './node-types';
 import { baseNodeStyles, getCategoryColor } from './styles';
 
 // Import other node components
@@ -57,6 +57,7 @@ const getStatusIcon = (status: NodeExecutionStatus | undefined) => {
 export const nodeComponentRegistry: Record<string, React.FC<NodeComponentProps>> = {
   'chat-input': ChatInputNode,
   'simple-openai-chat': OpenAIChatNode,
+  'simple-deepseek-chat': DeepSeekChatNode,
   // Add more node types here - Example:
   // 'instagram-trigger': InstagramTriggerNode,
   // 'auto-reply': AutoReplyNode,

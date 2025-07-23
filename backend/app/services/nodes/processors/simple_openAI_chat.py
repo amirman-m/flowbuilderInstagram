@@ -2,7 +2,8 @@ from typing import Dict, Any
 from app.models.nodes import NodeType, NodeCategory, NodeDataType, NodePort, NodePorts, NodeExecutionResult
 from datetime import datetime, timezone
 from app.services.utils.input_type import determine_input_type
-import openai
+from langchain_openai import ChatOpenAI
+from langchain.schema import HumanMessage, SystemMessage
 import os
 import uuid
 
@@ -136,36 +137,47 @@ async def execute_simple_openai_chat(context: Dict[str, Any]) -> NodeExecutionRe
     temperature = settings.get("temperature", 0.7)
     max_tokens = settings.get("max_tokens", 1024)
     
-    # Check if API key is set in environment
-    if not os.environ.get("OPENAI_API_KEY"):
-        return NodeExecutionResult(
-            outputs={},
-            status="error",
-            error="OPENAI_API_KEY environment variable not set"
-        )
-    
     try:
-        # Initialize OpenAI client (legacy API)
-        openai.api_key = os.environ.get("OPENAI_API_KEY")
+        # Get API key from environment
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY environment variable not set or empty")
         
-        # Call OpenAI ChatCompletion API directly
-        response = openai.ChatCompletion.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": input_text}
-            ],
+        # Print debug information
+        print(f"Using OpenAI API with model: {model}")
+        print(f"API Key (first 5 chars): {api_key[:5]}...")
+        
+        # Initialize OpenAI client (v1.x API)
+        llm = ChatOpenAI(
+            model=model,  
+            openai_api_key=api_key,
             temperature=temperature,
             max_tokens=max_tokens
         )
-        ai_response = response['choices'][0]['message']['content']
-        
-        # Extract token usage information
-        usage = response.usage
-        input_tokens = usage.prompt_tokens if usage else 0
-        output_tokens = usage.completion_tokens if usage else 0
-        total_tokens = usage.total_tokens if usage else 0
+        # Prepare messages for LangChain
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=input_text)
+        ]
+        # Send the request using OpenAI client
+        # Call the LLM
+        response = llm.invoke(messages)
+        # Extract the response content
+        ai_response = response.content
+        print(f"Response received: {ai_response[:50]}...")
+        if hasattr(response, 'response_metadata'):
+            token_usage = response.response_metadata.get('token_usage', {})
+        # Get token usage
+            input_tokens = token_usage.get('prompt_tokens', 'N/A')
+            output_tokens = token_usage.get('completion_tokens', 'N/A')
+            total_tokens = token_usage.get('total_tokens', 'N/A')
+        else:
+            print("\nToken usage data not available in response.")
+            input_tokens = 0
+            output_tokens = 0
+            total_tokens = 0
     except Exception as e:
+        print(f"OpenAI execution error: {str(e)}")
         return NodeExecutionResult(
             outputs={},
             status="error",
