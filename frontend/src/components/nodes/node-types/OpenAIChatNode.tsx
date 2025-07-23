@@ -14,6 +14,7 @@ import {
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
 import { baseNodeStyles, getCategoryColor } from '../styles';
 import { NodeCategory } from '../../../types/nodes';
+import { useExecutionData } from '../hooks/useExecutionData';
 
 // OpenAI Logo SVG Component
 const OpenAILogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
@@ -39,6 +40,9 @@ export const OpenAIChatNode: React.FC<NodeComponentProps> = ({ data, selected, i
   const nodeData = data as NodeDataWithHandlers;
   const { nodeType, instance } = nodeData;
   const categoryColor = getCategoryColor(NodeCategory.PROCESSOR);
+  
+  // Use execution data hook to get fresh execution results
+  const executionData = useExecutionData(nodeData);
   
   // Get current settings from instance - FIX: Read from instance.data.settings, not instance.settings
   const currentSettings = instance?.data?.settings || {};
@@ -385,41 +389,49 @@ export const OpenAIChatNode: React.FC<NodeComponentProps> = ({ data, selected, i
           />
         ))}
         
-        {/* Execution Result/Error Display */}
-        {(executionResult || executionError) && (
-          <Box sx={{ 
-            position: 'absolute', 
-            top: '100%', 
-            left: 0, 
-            right: 0, 
-            mt: 1, 
-            zIndex: 20 
-          }}>
-            {executionResult && (
-              <Alert 
-                severity="success" 
-                icon={<CheckCircleIcon />}
-                onClose={() => setExecutionResult(null)}
-                sx={{ fontSize: '0.75rem' }}
-              >
-                <Typography variant="caption">
-                  <strong>Execution Success:</strong> {executionResult}
-                </Typography>
-              </Alert>
-            )}
-            {executionError && (
-              <Alert 
-                severity="error" 
-                icon={<ErrorIcon />}
-                onClose={() => setExecutionError(null)}
-                sx={{ fontSize: '0.75rem' }}
-              >
-                <Typography variant="caption">
-                  <strong>Execution Error:</strong> {executionError}
-                </Typography>
-              </Alert>
+        {/* Execution Results Display - Modular approach */}
+        {executionData.hasFreshResults && executionData.displayData.type === 'ai_response' && (
+          <Box sx={{ mt: 1, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+            <Typography variant="caption" sx={{ fontWeight: 'bold', color: categoryColor }}>
+              OpenAI Response:
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 0.5, wordBreak: 'break-word' }}>
+              {executionData.displayData.aiResponse}
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', mt: 0.5, display: 'block' }}>
+              Input: "{executionData.displayData.inputText}" • {new Date(executionData.displayData.timestamp).toLocaleTimeString()}
+            </Typography>
+            {executionData.displayData.metadata && (
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                Model: {executionData.displayData.metadata.model} • Tokens: {executionData.displayData.metadata.total_tokens}
+              </Typography>
             )}
           </Box>
+        )}
+        
+        {/* Success/Error indicators */}
+        {executionData.hasFreshResults && executionData.isSuccess && (
+          <Alert 
+            severity="success" 
+            icon={<CheckCircleIcon />}
+            sx={{ mt: 1, fontSize: '0.75rem' }}
+          >
+            <Typography variant="caption">
+              OpenAI response generated successfully
+            </Typography>
+          </Alert>
+        )}
+        
+        {executionData.hasFreshResults && executionData.isError && (
+          <Alert 
+            severity="error" 
+            icon={<ErrorIcon />}
+            sx={{ mt: 1, fontSize: '0.75rem' }}
+          >
+            <Typography variant="caption">
+              Execution failed
+            </Typography>
+          </Alert>
         )}
       </Paper>
       

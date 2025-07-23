@@ -3,14 +3,15 @@ import React, { useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { 
   Paper, Box, Typography, IconButton, Dialog, 
-  TextField, Button, Chip
+  TextField, Button, Chip, Alert
 } from '@mui/material';
-import { Send as SendIcon, Delete as DeleteIcon, Message as MessageIcon } from '@mui/icons-material';
+import { Send as SendIcon, Delete as DeleteIcon, Message as MessageIcon, CheckCircle as CheckCircleIcon } from '@mui/icons-material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
 import { baseNodeStyles, getCategoryColor } from '..';
 import { NodeCategory, NodeExecutionStatus } from '../../../types/nodes';
 import { nodeService } from '../../../services/nodeService';
 import { useParams } from 'react-router-dom';
+import { useExecutionData } from '../hooks/useExecutionData';
 
 export const ChatInputNode: React.FC<NodeComponentProps> = ({ data, selected, id }) => {
   const { flowId } = useParams<{ flowId: string }>();
@@ -21,6 +22,9 @@ export const ChatInputNode: React.FC<NodeComponentProps> = ({ data, selected, id
   const nodeData = data as NodeDataWithHandlers;
   const { nodeType, instance, onNodeUpdate } = nodeData;
   const categoryColor = getCategoryColor(NodeCategory.TRIGGER); // Chat Input is always a trigger
+  
+  // Use execution data hook to get fresh execution results
+  const executionData = useExecutionData(nodeData);
   
   const handleExecute = () => {
     setDialogOpen(true);
@@ -151,6 +155,34 @@ export const ChatInputNode: React.FC<NodeComponentProps> = ({ data, selected, id
             height: '20px'
           }}
         />
+        
+        {/* Execution Results Display */}
+        {executionData.hasFreshResults && executionData.displayData.type === 'message_data' && (
+          <Box sx={{ mt: 1, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+            <Typography variant="caption" sx={{ fontWeight: 'bold', color: categoryColor }}>
+              Latest Input:
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 0.5, wordBreak: 'break-word' }}>
+              "{executionData.displayData.inputText}"
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', mt: 0.5, display: 'block' }}>
+              {executionData.displayData.metadata?.word_count} words • {new Date(executionData.displayData.timestamp).toLocaleTimeString()}
+            </Typography>
+          </Box>
+        )}
+        
+        {/* Success indicator for fresh execution */}
+        {executionData.hasFreshResults && executionData.isSuccess && (
+          <Alert 
+            severity="success" 
+            icon={<CheckCircleIcon />}
+            sx={{ mt: 1, fontSize: '0.75rem' }}
+          >
+            <Typography variant="caption">
+              Input processed successfully
+            </Typography>
+          </Alert>
+        )}
         
         {/* Output Handles */}
         {nodeType.ports.outputs.map((port: any, index: number) => (

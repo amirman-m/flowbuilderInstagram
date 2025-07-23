@@ -562,6 +562,50 @@ const FlowBuilderInner: React.FC = () => {
     setExecutionDialogOpen(true);
   };
 
+  // Sync frontend node states with backend execution results
+  const syncNodeStatesWithExecutionResults = async (executionResults: Record<string, any>) => {
+    console.log('🔄 Syncing node states with execution results:', executionResults);
+    
+    // Update nodes state with execution results
+    setNodes((currentNodes) => 
+      currentNodes.map((node) => {
+        const nodeId = node.id;
+        const executionResult = executionResults[nodeId];
+        
+        if (executionResult && executionResult.outputs) {
+          console.log(`📝 Updating node ${nodeId} with outputs:`, executionResult.outputs);
+          
+          // Safely access and update node data
+          const currentData = (node.data as any) || {};
+          
+          // Update the node's data with the execution outputs
+          const updatedNode = {
+            ...node,
+            data: {
+              ...currentData,
+              // Store execution results in the node data
+              executionResult: executionResult,
+              // Update outputs for display in the node
+              outputs: executionResult.outputs,
+              // Update status and metadata
+              status: executionResult.status,
+              executionTime: executionResult.execution_time_ms,
+              lastExecuted: executionResult.completed_at,
+              // Ensure instance data is preserved
+              instance: currentData.instance
+            }
+          };
+          
+          return updatedNode;
+        }
+        
+        return node;
+      })
+    );
+    
+    console.log('✅ Frontend node states updated with execution results');
+  };
+
   const handleFlowExecution = async (triggerInputs: Record<string, any>) => {
     if (!flowId) {
       throw new Error('No flow ID available');
@@ -576,11 +620,14 @@ const FlowBuilderInner: React.FC = () => {
       
       console.log('✅ Flow execution completed:', result);
       
+      // Update frontend node states with execution results
+      await syncNodeStatesWithExecutionResults(result.execution_results);
+      
       // Close dialog after successful execution
       setExecutionDialogOpen(false);
       
       // Optionally show success notification
-      // You could add a snackbar or toast notification here
+      console.log('🔄 Node states synchronized with execution results');
       
     } catch (error) {
       console.error('❌ Flow execution failed:', error);
