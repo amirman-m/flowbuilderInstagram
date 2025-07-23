@@ -11,6 +11,7 @@ from pydantic import BaseModel
 import logging
 from ...schemas.flow_save import FlowSaveRequest, NodeSchema, EdgeSchema
 from ...models.nodes import NodeInstance, NodeConnection
+from ...services.flow_execution import create_flow_executor, FlowExecutionError
 
 router = APIRouter()
 
@@ -26,6 +27,19 @@ class NodeExecutionResponse(BaseModel):
     error: str | None = None
     startedAt: str | None = None
     completedAt: str | None = None
+
+
+class FlowExecutionRequest(BaseModel):
+    trigger_inputs: Dict[str, Any] = {}
+
+
+class FlowExecutionResponse(BaseModel):
+    flow_id: int
+    flow_name: str
+    trigger_node_id: str
+    execution_results: Dict[str, Any]
+    executed_at: str
+    total_nodes_executed: int
 
 
 @router.get("/", response_model=List[FlowSchema])
@@ -278,4 +292,38 @@ async def execute_node(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to execute node: {str(e)}"
+        )
+
+
+@router.post("/{flow_id}/execute", response_model=FlowExecutionResponse)
+async def execute_flow(
+    flow_id: int,
+    request: FlowExecutionRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Execute a complete flow starting from the trigger node."""
+    try:
+        # Create flow executor instance
+        executor = create_flow_executor(db)
+        
+        # Execute the flow
+        result = await executor.execute_flow(
+            flow_id=flow_id,
+            user_id=current_user.id,
+            trigger_inputs=request.trigger_inputs
+        )
+        
+        return FlowExecutionResponse(**result)
+        
+    except FlowExecutionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logging.exception(f"Failed to execute flow {flow_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to execute flow: {str(e)}"
         )

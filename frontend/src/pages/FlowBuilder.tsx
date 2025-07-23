@@ -43,6 +43,7 @@ import { nodeService } from '../services/nodeService';
 import { NodeComponentFactory } from '../components/nodes/NodeComponentFactory';
 import { edgeTypes } from '../components/edges/CustomEdge';
 import { NodeInspector } from '../components/inspector';
+import { FlowExecutionDialog } from '../components/dialogs/FlowExecutionDialog';
 
 // Define nodeTypes using our NodeComponentFactory for all node types
 const nodeTypes = {
@@ -116,6 +117,10 @@ const FlowBuilderInner: React.FC = () => {
   const [selectedNode, setSelectedNode] = useState<NodeInstance | null>(null);
   const [selectedNodeType, setSelectedNodeType] = useState<NodeType | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  
+  // Flow execution state
+  const [executionDialogOpen, setExecutionDialogOpen] = useState(false);
+  const [triggerNodeId, setTriggerNodeId] = useState<string | null>(null);
 
   // Load flow and node types on mount
   useEffect(() => {
@@ -515,6 +520,74 @@ const FlowBuilderInner: React.FC = () => {
     navigate('/dashboard');
   };
 
+  const handleExecuteFlow = () => {
+    console.log('🎯 Execute Flow button clicked!');
+    console.log('📊 Current nodes:', nodes);
+    console.log('📋 Available node types:', availableNodeTypes);
+    
+    // Find trigger node before opening dialog
+    const triggerNode = nodes.find(node => {
+      const nodeData = node.data as any;
+      console.log('🔍 Checking node:', node.id, 'data:', nodeData);
+      
+      // Check if nodeType is attached
+      if (nodeData?.nodeType) {
+        console.log('📝 Node type found:', nodeData.nodeType.category);
+        return nodeData.nodeType.category === NodeCategory.TRIGGER;
+      }
+      
+      // Fallback: check by instance.typeId if nodeType not attached
+      if (nodeData?.instance?.typeId) {
+        const nodeType = availableNodeTypes.find(nt => nt.id === nodeData.instance.typeId);
+        if (nodeType) {
+          console.log('📝 Node type found via typeId:', nodeType.category);
+          return nodeType.category === NodeCategory.TRIGGER;
+        }
+      }
+      
+      return false;
+    });
+    
+    console.log('🎯 Found trigger node:', triggerNode);
+    
+    if (!triggerNode) {
+      // Show error - no trigger node found
+      console.error('❌ No trigger node found in flow');
+      alert('No trigger node found in this flow. Please add a Chat Input node to execute the flow.');
+      return;
+    }
+    
+    console.log('✅ Opening execution dialog for trigger:', triggerNode.id);
+    setTriggerNodeId(triggerNode.id);
+    setExecutionDialogOpen(true);
+  };
+
+  const handleFlowExecution = async (triggerInputs: Record<string, any>) => {
+    if (!flowId) {
+      throw new Error('No flow ID available');
+    }
+    
+    try {
+      console.log('🚀 Executing flow with inputs:', triggerInputs);
+      const result = await nodeService.execution.executeFlow(
+        parseInt(flowId),
+        triggerInputs
+      );
+      
+      console.log('✅ Flow execution completed:', result);
+      
+      // Close dialog after successful execution
+      setExecutionDialogOpen(false);
+      
+      // Optionally show success notification
+      // You could add a snackbar or toast notification here
+      
+    } catch (error) {
+      console.error('❌ Flow execution failed:', error);
+      throw error; // Re-throw to let dialog handle the error display
+    }
+  };
+
   // Handle edge deletion
   const onEdgeDelete = useCallback((edgeId: string) => {
     setEdges((eds) => eds.filter((edge) => edge.id !== edgeId));
@@ -868,8 +941,8 @@ const FlowBuilderInner: React.FC = () => {
               </IconButton>
             </Tooltip>
             
-            <Tooltip title="Test Flow">
-              <IconButton color="primary">
+            <Tooltip title="Execute Flow">
+              <IconButton color="primary" onClick={handleExecuteFlow}>
                 <PlayIcon />
               </IconButton>
             </Tooltip>
@@ -978,6 +1051,15 @@ const FlowBuilderInner: React.FC = () => {
           onNodeUpdate={handleNodeUpdate}
         />
       </Box>
+      
+      {/* Flow Execution Dialog */}
+      <FlowExecutionDialog
+        open={executionDialogOpen}
+        onClose={() => setExecutionDialogOpen(false)}
+        flowName={flow?.name || 'Untitled Flow'}
+        triggerNodeId={triggerNodeId}
+        onExecute={handleFlowExecution}
+      />
     </Box>
   );
 };

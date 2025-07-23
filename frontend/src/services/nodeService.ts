@@ -213,6 +213,26 @@ export const nodeExecutionAPI = {
    */
   clearNodeExecutionHistory: async (flowId: number, nodeId: string): Promise<void> => {
     await api.delete(`/flows/${flowId}/nodes/${nodeId}/executions`);
+  },
+
+  /**
+   * Execute an entire flow starting from the trigger node
+   */
+  executeFlow: async (
+    flowId: number,
+    triggerInputs?: Record<string, any>
+  ): Promise<{
+    flow_id: number;
+    flow_name: string;
+    trigger_node_id: string;
+    execution_results: Record<string, any>;
+    executed_at: string;
+    total_nodes_executed: number;
+  }> => {
+    const response = await api.post(`/flows/${flowId}/execute`, {
+      trigger_inputs: triggerInputs || {}
+    });
+    return response.data;
   }
 };
 
