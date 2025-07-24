@@ -57,16 +57,27 @@ export const VoiceInputNode: React.FC<NodeComponentProps> = ({ data, selected, i
         settings: stream.getAudioTracks()[0]?.getSettings()
       });
       
-      // Use a more compatible MIME type
-      let mimeType = 'audio/webm;codecs=opus';
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = 'audio/webm';
-        if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = 'audio/mp4';
-          if (!MediaRecorder.isTypeSupported(mimeType)) {
-            mimeType = ''; // Let browser choose
-          }
+      // Use a more compatible MIME type - prioritize formats with best browser support
+      let mimeType = '';
+      const supportedTypes = [
+        'audio/webm;codecs=opus', 
+        'audio/webm', 
+        'audio/mp4', 
+        'audio/ogg;codecs=opus',
+        'audio/wav',
+        'audio/mpeg'
+      ];
+      
+      for (const type of supportedTypes) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          mimeType = type;
+          break;
         }
+      }
+      
+      // If none of our preferred types are supported, let the browser choose
+      if (!mimeType) {
+        console.warn('🎤 No preferred MIME types supported, using browser default');
       }
       
       console.log('🎤 Using MIME type:', mimeType);
@@ -87,8 +98,20 @@ export const VoiceInputNode: React.FC<NodeComponentProps> = ({ data, selected, i
         const finalMimeType = mimeType || 'audio/webm';
         const audioBlob = new Blob(audioChunks, { type: finalMimeType });
         setAudioBlob(audioBlob);
+        
+        // Revoke any previous object URL to prevent memory leaks
+        if (audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+        }
+        
         const url = URL.createObjectURL(audioBlob);
         setAudioUrl(url);
+        
+        // Ensure audio element is updated with the new URL
+        if (audioRef.current) {
+          audioRef.current.src = url;
+          audioRef.current.load(); // Force reload with new source
+        }
         console.log('🎤 Recording completed:', {
           size: audioBlob.size,
           type: audioBlob.type,
@@ -119,25 +142,30 @@ export const VoiceInputNode: React.FC<NodeComponentProps> = ({ data, selected, i
     }
   };
 
-  const playAudio = async () => {
-    if (audioUrl && audioRef.current) {
-      try {
-        console.log('🎵 Playing audio:', audioUrl);
-        audioRef.current.currentTime = 0; // Reset to beginning
-        await audioRef.current.play();
-      } catch (error) {
-        console.error('❌ Error playing audio:', error);
-        alert('Could not play audio. Please try recording again.');
+  const playAudio = () => {
+    if (audioRef.current && audioUrl) {
+      // Ensure audio is loaded before playing
+      audioRef.current.load();
+      const playPromise = audioRef.current.play();
+      
+      // Handle play() promise to catch any autoplay restrictions
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => console.log('🎵 Audio playback started successfully'))
+          .catch(error => console.error('🎵 Audio playback failed:', error));
       }
+    } else {
+      console.warn('🎵 Cannot play: audio reference or URL is missing');
     }
   };
 
   const deleteRecording = () => {
-    setAudioBlob(null);
+    // Revoke object URL to prevent memory leaks
     if (audioUrl) {
       URL.revokeObjectURL(audioUrl);
-      setAudioUrl(null);
     }
+    setAudioBlob(null);
+    setAudioUrl(null);
   };
 
   const handleSubmit = async () => {
@@ -150,14 +178,22 @@ export const VoiceInputNode: React.FC<NodeComponentProps> = ({ data, selected, i
       // First, ensure the node is saved to the database
       console.log('💾 Auto-saving flow to ensure node exists in database...');
       try {
-        // Get current flow state from parent component
-        const saveFlowEvent = new CustomEvent('autoSaveFlow', {
-          detail: { nodeId: id, reason: 'pre-execution' }
+        await new Promise((resolve, reject) => {
+          const saveFlowEvent = new CustomEvent('autoSaveFlow', {
+            detail: { 
+              nodeId: id, 
+              reason: 'pre-execution',
+              callback: (error?: Error) => {
+                if (error) {
+                  reject(error);
+                } else {
+                  resolve(null);
+                }
+              }
+            }
+          });
+          window.dispatchEvent(saveFlowEvent);
         });
-        window.dispatchEvent(saveFlowEvent);
-        
-        // Wait a moment for save to complete
-        await new Promise(resolve => setTimeout(resolve, 1000));
         console.log('💾 Auto-save completed');
       } catch (saveError) {
         console.warn('⚠️ Auto-save failed, continuing with execution:', saveError);
@@ -400,13 +436,17 @@ export const VoiceInputNode: React.FC<NodeComponentProps> = ({ data, selected, i
                 ref={audioRef} 
                 src={audioUrl || undefined} 
                 controls={true}
-                preload="metadata"
-                onError={(e) => console.error('🎵 Audio element error:', e)}
+                preload="auto"
+                autoPlay={false}
+                onError={(e) => console.error('🎵 Audio element error:', e.currentTarget.error)}
                 onLoadedData={() => console.log('🎵 Audio loaded successfully')}
                 onCanPlay={() => console.log('🎵 Audio can play')}
                 onLoadStart={() => console.log('🎵 Audio load started')}
+                onPlay={() => console.log('🎵 Audio playback started')}
                 style={{ width: '100%', marginTop: '8px' }} 
-              />
+              >
+                Your browser does not support the audio element.
+              </audio>
               <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.secondary' }}>
                 You can also use the audio controls above to play/pause
               </Typography>
