@@ -111,19 +111,7 @@ def update_flow(
             detail="Flow not found"
         )
     
-    # Update fields
-    if flow_update.name is not None:
-        flow.name = flow_update.name
-    if flow_update.description is not None:
-        flow.description = flow_update.description
-    if flow_update.flow_data is not None:
-        flow.flow_data = flow_update.flow_data
-    if flow_update.status is not None:
-        flow.status = flow_update.status
-    
-    db.commit()
-    db.refresh(flow)
-    return flow
+    return flow_service.update_flow(db, flow, flow_update)
 
 
 @router.delete("/{flow_id}")
@@ -149,6 +137,9 @@ def delete_flow(
     return {"message": "Flow deleted successfully"}
 
 
+from ...services import flow_service
+
+
 @router.post("/{flow_id}/save", status_code=status.HTTP_201_CREATED)
 def save_flow(
     flow_id: int,
@@ -161,58 +152,11 @@ def save_flow(
     if not flow:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Flow not found")
 
-    # Optional name update
-    if payload.flow_name:
-        flow.name = payload.flow_name
-
-    # Determine new version
-    current_version = (flow.flow_data or {}).get("version", 0)
-    new_version = current_version + 1
-
     try:
-        # Start transaction
-        # Delete existing graph
-        db.query(NodeConnection).filter(NodeConnection.flow_id == flow_id).delete()
-        db.query(NodeInstance).filter(NodeInstance.flow_id == flow_id).delete()
-        db.flush()
-
-        # Bulk insert nodes
-        node_objs = []
-        for n in payload.nodes:
-            node_objs.append(NodeInstance(
-                id=n.id,
-                flow_id=flow_id,
-                type_id=n.type_id,
-                label=n.label,
-                position=n.position,
-                settings=n.settings,
-                data=n.data or {},
-                disabled=n.disabled or False,
-            ))
-        db.bulk_save_objects(node_objs)
-
-        # Bulk insert connections
-        edge_objs = []
-        for e in payload.edges:
-            edge_objs.append(NodeConnection(
-                id=e.id,
-                flow_id=flow_id,
-                source_node_id=e.source_node_id,
-                target_node_id=e.target_node_id,
-                source_port_id=e.source_port_id,
-                target_port_id=e.target_port_id,
-            ))
-        db.bulk_save_objects(edge_objs)
-
-        # Update flow_data with version
-        flow.flow_data = {**(flow.flow_data or {}), "version": new_version}
-        db.commit()
+        new_version = flow_service.save_flow_graph(db, flow, payload)
+        return {"version": new_version, "saved_at": flow.updated_at.isoformat() if flow.updated_at else None}
     except Exception as exc:
-        logging.exception("Failed to save flow")
-        db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to save flow: {exc}")
-
-    return {"version": new_version, "saved_at": flow.updated_at.isoformat() if flow.updated_at else None}
 
 
 @router.get("/{flow_id}/nodes", response_model=List[NodeSchema])
@@ -267,15 +211,19 @@ async def execute_node(
             detail="Flow not found"
         )
     
+    node_instance = db.query(NodeInstance).filter(
+        NodeInstance.flow_id == flow_id,
+        NodeInstance.id == node_id
+    ).first()
+
+    if not node_instance:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Node not found in this flow"
+        )
+
     try:
-        # For now, we'll determine the node type from the node_id
-        # In a full implementation, you'd store node instances in the database
-        # and look up the actual node type from there
-        
-        # For the Chat Input node, we'll assume it's a chat-input type
-        # This is a simplified implementation - in production you'd have
-        # a proper node instance management system
-        node_type_id = "chat-input"  # This should come from the database
+        node_type_id = node_instance.type_id
         
         # Execute the node using the node registry
         result = await node_registry.execute_node(node_type_id, request.inputs)
