@@ -106,6 +106,9 @@ export interface NodeType {
   /** Category this node belongs to */
   category: NodeCategory;
   
+  /** Optional subcategory for finer grouping within a category */
+  subcategory?: string;
+  
   /** Version of this node type for compatibility */
   version: string;
   

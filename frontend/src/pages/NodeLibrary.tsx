@@ -50,7 +50,7 @@ import {
 } from '@mui/icons-material';
 import { NodeType, NodeCategory } from '../types/nodes';
 import { nodeService } from '../services/nodeService';
-
+import { NODE_REGISTRY } from '../config/nodeRegistry';
 const NodeLibrary: React.FC = () => {
   const [nodeTypes, setNodeTypes] = useState<NodeType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,7 +72,23 @@ const NodeLibrary: React.FC = () => {
       setLoading(true);
       setError(null);
       const types = await nodeService.types.getNodeTypes();
-      setNodeTypes(types);
+      // Temporary mapping until backend provides subcategory
+      const SUBCATEGORY_MAP: Record<string, string> = {
+        // Legacy or mock IDs
+        openAIChat: 'Chat Models',
+        deepSeekChat: 'Chat Models',
+        // Actual backend IDs
+        'simple-openai-chat': 'Chat Models',
+        'simple-deepseek-chat': 'Chat Models'
+      };
+
+      const enhancedTypes = types.map(t => {
+        const registryEntry = NODE_REGISTRY[t.id];
+        return registryEntry 
+          ? { ...t, category: registryEntry.category, subcategory: registryEntry.subcategory }
+          : t;
+      });
+      setNodeTypes(enhancedTypes);
     } catch (err) {
       setError('Failed to load node types. Please try again.');
       console.error('Error loading node types:', err);
@@ -129,16 +145,21 @@ const NodeLibrary: React.FC = () => {
     });
   }, [nodeTypes, searchQuery, selectedCategory, selectedTags, showDeprecated]);
 
-  // Group filtered node types by category
+  // Group filtered node types by category and subcategory
   const groupedNodeTypes = useMemo(() => {
-    const groups: Record<NodeCategory, NodeType[]> = {
-      [NodeCategory.TRIGGER]: [],
-      [NodeCategory.PROCESSOR]: [],
-      [NodeCategory.ACTION]: []
+    const groups: Record<NodeCategory, Record<string, NodeType[]>> = {
+      [NodeCategory.TRIGGER]: {},
+      [NodeCategory.PROCESSOR]: {},
+      [NodeCategory.ACTION]: {}
     };
 
     filteredNodeTypes.forEach(nodeType => {
-      groups[nodeType.category].push(nodeType);
+      const { category } = nodeType;
+      const sub = nodeType.subcategory || 'General';
+      if (!groups[category][sub]) {
+        groups[category][sub] = [];
+      }
+      groups[category][sub].push(nodeType);
     });
 
     return groups;
@@ -328,9 +349,10 @@ const NodeLibrary: React.FC = () => {
 
   const CategorySection: React.FC<{ 
     category: NodeCategory; 
-    nodeTypes: NodeType[];
-  }> = ({ category, nodeTypes }) => {
-    if (nodeTypes.length === 0) return null;
+    subcategoryGroups: Record<string, NodeType[]>;
+  }> = ({ category, subcategoryGroups }) => {
+    const subcategories = Object.entries(subcategoryGroups);
+    if (subcategories.length === 0) return null;
 
     return (
       <Box sx={{ mb: 4 }}>
@@ -341,18 +363,30 @@ const NodeLibrary: React.FC = () => {
           <Typography variant="h5" sx={{ flexGrow: 1, textTransform: 'capitalize' }}>
             {category} Nodes
           </Typography>
-          <Badge badgeContent={nodeTypes.length} color="primary">
+          <Badge badgeContent={subcategories.reduce((acc,[,v])=>acc+v.length,0)} color="primary">
             <Box />
           </Badge>
         </Box>
         
-        <Grid container spacing={3}>
-          {nodeTypes.map(nodeType => (
-            <Grid item xs={12} sm={6} md={4} key={nodeType.id}>
-              <NodeTypeCard nodeType={nodeType} />
-            </Grid>
-          ))}
-        </Grid>
+        {subcategories.map(([subName, types]) => (
+          <Accordion key={subName} defaultExpanded sx={{ mb:2 }}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Box sx={{ display:'flex', alignItems:'center', gap:1 }}>
+                <Chip label={subName} size="small" />
+                <Typography variant="subtitle1">{types.length} nodes</Typography>
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Grid container spacing={2}>
+                {types.map(nt => (
+                  <Grid item xs={12} sm={6} md={4} key={nt.id}>
+                    <NodeTypeCard nodeType={nt} />
+                  </Grid>
+                ))}
+              </Grid>
+            </AccordionDetails>
+          </Accordion>
+        ))}
       </Box>
     );
   };
@@ -499,15 +533,15 @@ const NodeLibrary: React.FC = () => {
         <>
           <CategorySection 
             category={NodeCategory.TRIGGER} 
-            nodeTypes={groupedNodeTypes[NodeCategory.TRIGGER]}
+            subcategoryGroups={groupedNodeTypes[NodeCategory.TRIGGER]}
           />
           <CategorySection 
             category={NodeCategory.PROCESSOR} 
-            nodeTypes={groupedNodeTypes[NodeCategory.PROCESSOR]}
+            subcategoryGroups={groupedNodeTypes[NodeCategory.PROCESSOR]}
           />
           <CategorySection 
             category={NodeCategory.ACTION} 
-            nodeTypes={groupedNodeTypes[NodeCategory.ACTION]}
+            subcategoryGroups={groupedNodeTypes[NodeCategory.ACTION]}
           />
         </>
       )}

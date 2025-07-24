@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -10,14 +10,18 @@ import {
   Toolbar,
   IconButton,
   Tooltip,
-  Divider,
+
   Chip,
-  TextField
+  TextField,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
   Save as SaveIcon,
   PlayArrow as PlayIcon,
+  ExpandMore as ExpandMoreIcon,
   Settings as SettingsIcon
 } from '@mui/icons-material';
 import {
@@ -45,6 +49,7 @@ import { NodeComponentFactory } from '../components/nodes/NodeComponentFactory';
 import { edgeTypes } from '../components/edges/CustomEdge';
 import { NodeInspector } from '../components/inspector';
 import { FlowExecutionDialog } from '../components/dialogs/FlowExecutionDialog';
+import { NODE_REGISTRY } from '../config/nodeRegistry';
 
 // Define nodeTypes using our NodeComponentFactory for all node types
 const nodeTypes = {
@@ -212,14 +217,25 @@ const FlowBuilderInner: React.FC = () => {
   const loadNodeTypes = async () => {
     try {
       // Load node types from the backend
-      console.log('🔍 Loading node types from backend...');
-      const types = await nodeService.types.getNodeTypes();
-      console.log('✅ Backend response:', types);
-      console.log('✅ Response type:', typeof types, 'Length:', types?.length);
-      
+      const types = await nodeService.types.getNodeTypes(); 
       if (types && types.length > 0) {
         console.log('✅ Using backend node types:', types.map(t => t.name));
-        setAvailableNodeTypes(types);
+        // Temporary subcategory mapping until backend provides it
+      const SUBCATEGORY_MAP: Record<string, string> = {
+        // Legacy or mock IDs
+        openAIChat: 'Chat Models',
+        deepSeekChat: 'Chat Models',
+        // Actual backend IDs
+        'simple-openai-chat': 'Chat Models',
+        'simple-deepseek-chat': 'Chat Models'
+      };
+
+      const enhancedTypes = types.map(t => {
+        const registryEntry = NODE_REGISTRY[t.id];
+        return registryEntry ? { ...t, subcategory: registryEntry.subcategory } : t;
+      });
+
+      setAvailableNodeTypes(enhancedTypes);
         return; // Exit early - backend data loaded successfully
       } else {
         // If no node types are returned from the backend, use default mock types for testing
@@ -918,6 +934,25 @@ const FlowBuilderInner: React.FC = () => {
     }
   };
 
+  // Group node types by category and subcategory for sidebar rendering
+  const groupedNodeTypes = useMemo(() => {
+    const groups: Record<NodeCategory, Record<string, NodeType[]>> = {
+      [NodeCategory.TRIGGER]: {},
+      [NodeCategory.PROCESSOR]: {},
+      [NodeCategory.ACTION]: {}
+    };
+
+    availableNodeTypes.forEach(nt => {
+      const sub = nt.subcategory || 'General';
+      if (!groups[nt.category][sub]) {
+        groups[nt.category][sub] = [];
+      }
+      groups[nt.category][sub].push(nt);
+    });
+
+    return groups;
+  }, [availableNodeTypes]);
+
   // Draggable node item in sidebar
   const DraggableNodeItem: React.FC<{ nodeType: NodeType }> = ({ nodeType }) => {
     const onDragStart = (event: React.DragEvent, nodeType: NodeType) => {
@@ -1090,42 +1125,32 @@ const FlowBuilderInner: React.FC = () => {
           </Box>
           
           <Box sx={{ flexGrow: 1, p: 2, overflow: 'auto' }}>
-            {/* Trigger Nodes */}
-            <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
-              Trigger Nodes
-            </Typography>
-            {availableNodeTypes
-              .filter(nt => nt.category === NodeCategory.TRIGGER)
-              .map(nodeType => (
-                <DraggableNodeItem key={nodeType.id} nodeType={nodeType} />
-              ))
-            }
-
-            <Divider sx={{ my: 2 }} />
-
-            {/* Processor Nodes */}
-            <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
-              Processor Nodes
-            </Typography>
-            {availableNodeTypes
-              .filter(nt => nt.category === NodeCategory.PROCESSOR)
-              .map(nodeType => (
-                <DraggableNodeItem key={nodeType.id} nodeType={nodeType} />
-              ))
-            }
-
-            <Divider sx={{ my: 2 }} />
-
-            {/* Action Nodes */}
-            <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
-              Action Nodes
-            </Typography>
-            {availableNodeTypes
-              .filter(nt => nt.category === NodeCategory.ACTION)
-              .map(nodeType => (
-                <DraggableNodeItem key={nodeType.id} nodeType={nodeType} />
-              ))
-            }
+            {([NodeCategory.TRIGGER, NodeCategory.PROCESSOR, NodeCategory.ACTION] as NodeCategory[]).map(category => {
+              const subGroups = groupedNodeTypes[category];
+              const hasNodes = Object.keys(subGroups).length > 0;
+              if (!hasNodes) return null;
+              return (
+                <Box key={category} sx={{ mb: 3 }}>
+                  <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
+                    {category.charAt(0) + category.slice(1).toLowerCase()} Nodes
+                  </Typography>
+                  {Object.entries(subGroups).map(([subName, types]) => (
+                    <Accordion key={subName} disableGutters sx={{ mb: 1 }}>
+                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 'medium' }}>
+                          {subName} ({types.length})
+                        </Typography>
+                      </AccordionSummary>
+                      <AccordionDetails sx={{ p: 1 }}>
+                        {types.map(nt => (
+                          <DraggableNodeItem key={nt.id} nodeType={nt} />
+                        ))}
+                      </AccordionDetails>
+                    </Accordion>
+                  ))}
+                </Box>
+              );
+            })}
           </Box>
         </Paper>
 
