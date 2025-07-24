@@ -10,7 +10,7 @@ import {
   Schedule
 } from '@mui/icons-material';
 import { NodeInstance, NodeExecutionStatus, NodeType, NodeCategory } from '../../types/nodes';
-import { ChatInputNode, OpenAIChatNode, DeepSeekChatNode } from './node-types';
+import { ChatInputNode, VoiceInputNode, OpenAIChatNode, DeepSeekChatNode } from './node-types';
 import { baseNodeStyles, getCategoryColor } from './styles';
 
 // Import other node components
@@ -56,6 +56,7 @@ const getStatusIcon = (status: NodeExecutionStatus | undefined) => {
 // 3. Add it to this registry
 export const nodeComponentRegistry: Record<string, React.FC<NodeComponentProps>> = {
   'chat-input': ChatInputNode,
+  'voice_input': VoiceInputNode,
   'simple-openai-chat': OpenAIChatNode,
   'simple-deepseek-chat': DeepSeekChatNode,
   // Add more node types here - Example:

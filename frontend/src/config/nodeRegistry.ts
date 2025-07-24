@@ -1,6 +1,15 @@
 // Central registry for node metadata
 import { NodeCategory } from '../types/nodes';
 export const NODE_REGISTRY: Record<string, { category: NodeCategory; subcategory: string }> = {
+    "chat-input": {
+      category: NodeCategory.TRIGGER,
+      subcategory: "Test inputs"
+    },
+    "voice_input": {
+      category: NodeCategory.TRIGGER,
+      subcategory: "Test inputs"
+    },
+    
     "simple-openai-chat": {
       category: NodeCategory.PROCESSOR,
       subcategory: "Chat Models"

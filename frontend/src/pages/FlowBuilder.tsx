@@ -83,7 +83,8 @@ const FlowBuilderInner: React.FC = () => {
 
     // If we have a flowId but no nodes yet, try loading the flow again
     // This handles the case where loadFlow() returned early waiting for node types
-    if (flowId && nodes.length === 0 && !loading) {
+    // Only retry if we haven't completed a load attempt yet (loading is still true)
+    if (flowId && nodes.length === 0 && loading) {
       console.log('🔄 Node types now available, retrying flow load...');
       loadFlow();
       return;
