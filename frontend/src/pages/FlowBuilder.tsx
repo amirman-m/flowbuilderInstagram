@@ -512,11 +512,17 @@ const FlowBuilderInner: React.FC = () => {
     }
   };
 
-  const handleSave = async () => {
-    if (!flowId) return;
+  const handleSave = async (callback?: (error?: Error) => void) => {
+    if (!flowId) {
+      callback?.(new Error("No flow ID available to save."));
+      return;
+    }
 
     try {
       setSaving(true);
+
+      // Get the current view state from React Flow
+      const currentViewport = reactFlowInstance.getViewport();
 
       // Prepare node instances with current position & settings
       const nodeInstances = nodes.map((node) => {
@@ -540,18 +546,21 @@ const FlowBuilderInner: React.FC = () => {
       await flowsAPI.saveFlowDefinition(parseInt(flowId), {
         nodes: nodeInstances,
         connections,
+        viewport: currentViewport, // Save viewport as well
       });
 
       // Re-fetch graph so canvas reflects latest saved state
-    const refreshedNodes = await flowsAPI.getFlowNodes(parseInt(flowId));
-    const refreshedConns = await flowsAPI.getFlowConnections(parseInt(flowId));
-    setNodes(refreshedNodes.map(mapNodeInstance));
-    setEdges(refreshedConns.map(mapConnection).map(attachEdgeHandlers));
-    
-    // TODO: toast/snackbar for success
+      const refreshedNodes = await flowsAPI.getFlowNodes(parseInt(flowId));
+      const refreshedConns = await flowsAPI.getFlowConnections(parseInt(flowId));
+      setNodes(refreshedNodes.map(mapNodeInstance));
+      setEdges(refreshedConns.map(mapConnection).map(attachEdgeHandlers));
+
+      // TODO: toast/snackbar for success
+      callback?.(); // Signal success
     } catch (err: any) {
       console.error('Error saving flow:', err);
       // TODO: toast/snackbar for error
+      callback?.(err); // Signal error
     } finally {
       setSaving(false);
     }
@@ -716,13 +725,19 @@ const FlowBuilderInner: React.FC = () => {
   //   }
   // }, [nodes, edges, onNodeDelete, onEdgeDelete]);
 
-  // Keyboard event listener disabled - deletion only via icons
-  // useEffect(() => {
-  //   document.addEventListener('keydown', onKeyDown);
-  //   return () => {
-  //     document.removeEventListener('keydown', onKeyDown);
-  //   };
-  // }, [onKeyDown]);
+  // Listen for custom auto-save events dispatched by node components
+  useEffect(() => {
+    const handleAutoSave = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log(`💾 Auto-saving flow due to: ${customEvent.detail.reason}`);
+      handleSave(customEvent.detail.callback);
+    };
+
+    window.addEventListener('autoSaveFlow', handleAutoSave);
+    return () => {
+      window.removeEventListener('autoSaveFlow', handleAutoSave);
+    };
+  }, [handleSave]);
 
   // Handle node selection
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {

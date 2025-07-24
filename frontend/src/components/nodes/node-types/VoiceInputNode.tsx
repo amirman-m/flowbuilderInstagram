@@ -150,17 +150,26 @@ export const VoiceInputNode: React.FC<NodeComponentProps> = ({ data, selected, i
       // First, ensure the node is saved to the database
       console.log('💾 Auto-saving flow to ensure node exists in database...');
       try {
-        // Get current flow state from parent component
-        const saveFlowEvent = new CustomEvent('autoSaveFlow', {
-          detail: { nodeId: id, reason: 'pre-execution' }
+        await new Promise((resolve, reject) => {
+          const saveFlowEvent = new CustomEvent('autoSaveFlow', {
+            detail: {
+              nodeId: id,
+              reason: 'pre-execution',
+              callback: (error?: Error) => {
+                if (error) {
+                  reject(error);
+                } else {
+                  resolve(null);
+                }
+              }
+            }
+          });
+          window.dispatchEvent(saveFlowEvent);
         });
-        window.dispatchEvent(saveFlowEvent);
-        
-        // Wait a moment for save to complete
-        await new Promise(resolve => setTimeout(resolve, 1000));
         console.log('💾 Auto-save completed');
       } catch (saveError) {
         console.warn('⚠️ Auto-save failed, continuing with execution:', saveError);
+        // Optionally, you could stop execution here if saving is critical
       }
       
       // Convert blob to base64 for transmission
@@ -405,8 +414,10 @@ export const VoiceInputNode: React.FC<NodeComponentProps> = ({ data, selected, i
                 onLoadedData={() => console.log('🎵 Audio loaded successfully')}
                 onCanPlay={() => console.log('🎵 Audio can play')}
                 onLoadStart={() => console.log('🎵 Audio load started')}
-                style={{ width: '100%', marginTop: '8px' }} 
-              />
+                style={{ width: '100%', marginTop: '8px' }}
+              >
+                Your browser does not support the audio element.
+              </audio>
               <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.secondary' }}>
                 You can also use the audio controls above to play/pause
               </Typography>
