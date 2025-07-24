@@ -11,6 +11,7 @@ import {
 } from '@mui/icons-material';
 import { NodeInstance, NodeExecutionStatus, NodeType, NodeCategory } from '../../types/nodes';
 import { ChatInputNode, VoiceInputNode, OpenAIChatNode, DeepSeekChatNode } from './node-types';
+import { TranscriptionNode } from './node-types/TranscriptionNode';
 import { baseNodeStyles, getCategoryColor } from './styles';
 
 // Import other node components
@@ -31,6 +32,9 @@ export interface NodeDataWithHandlers {
   errors?: string[];
   onNodeDelete?: (nodeId: string) => void;
   onNodeUpdate?: (nodeId: string, updates: any) => void;
+  onDelete?: (nodeId: string) => void;
+  onExecute?: (nodeId: string, data: any) => Promise<void>;
+  executionResult?: any;
 }
 
 // Helper function to get status icon
@@ -59,6 +63,7 @@ export const nodeComponentRegistry: Record<string, React.FC<NodeComponentProps>>
   'voice_input': VoiceInputNode,
   'simple-openai-chat': OpenAIChatNode,
   'simple-deepseek-chat': DeepSeekChatNode,
+  'transcription': TranscriptionNode,
   // Add more node types here - Example:
   // 'instagram-trigger': InstagramTriggerNode,
   // 'auto-reply': AutoReplyNode,
