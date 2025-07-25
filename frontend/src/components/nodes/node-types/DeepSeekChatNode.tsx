@@ -184,6 +184,7 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = ({ data, selected,
         nodeData.onNodeUpdate(id, {
           data: {
             ...instanceData,
+            inputs,
             lastExecution: {
               status: 'success',
               timestamp: new Date().toISOString(),
