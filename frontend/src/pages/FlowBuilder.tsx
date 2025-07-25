@@ -169,15 +169,15 @@ const FlowBuilderInner: React.FC = () => {
     
     console.log('✅ Connection validated, creating edge');
     
-    // Create the new edge
-    const newEdge: Edge = {
+    // Create the new edge and attach the delete handler
+    const newEdge: Edge = attachEdgeHandlers({
       id: `edge_${Date.now()}`,
-      source: connection.source,
-      target: connection.target,
+      source: connection.source!,
+      target: connection.target!,
       sourceHandle: connection.sourceHandle,
       targetHandle: connection.targetHandle,
-      type: 'custom'
-    };
+      type: 'custom',
+    });
     
     // Add the edge to the flow
     setEdges((eds) => addEdge(newEdge, eds));
@@ -590,7 +590,6 @@ const FlowBuilderInner: React.FC = () => {
       await flowsAPI.saveFlowDefinition(parseInt(flowId), {
         nodes: nodeInstances,
         connections,
-        viewport: currentViewport, // Save viewport as well
       });
 
       // Re-fetch graph so canvas reflects latest saved state
@@ -776,6 +775,9 @@ const FlowBuilderInner: React.FC = () => {
     setNodes((nds) => {
       const updatedNodes = nds.map((node) => {
         if (node.id === nodeId) {
+          // Type assertion for node.data to access its properties
+          const nodeData = node.data as any;
+          
           // Check if this is a lastExecution update from a node component
           if (updates.data?.lastExecution) {
             console.log('📊 Updating node execution results:', updates.data.lastExecution);
@@ -784,11 +786,11 @@ const FlowBuilderInner: React.FC = () => {
             const updatedNode = {
               ...node,
               data: {
-                ...node.data,
+                ...nodeData,
                 instance: {
-                  ...(node.data.instance || {}),
+                  ...(nodeData.instance || {}),
                   data: {
-                    ...(node.data.instance?.data || {}),
+                    ...(nodeData.instance?.data || {}),
                     lastExecution: updates.data.lastExecution,
                     ...(updates.data.inputs ? { inputs: updates.data.inputs } : {})
                   }
@@ -800,7 +802,7 @@ const FlowBuilderInner: React.FC = () => {
             const isCurrentlyEditingThisNode = selectedNode?.id === nodeId && inspectorOpen;
             
             // Find the updated node from the nodes array
-            const nodeInstance = updatedNode.data.instance as NodeInstance;
+            const nodeInstance = (updatedNode.data as any).instance as NodeInstance;
             
             const updatedSelectedNode: NodeInstance = {
               ...nodeInstance,
@@ -816,7 +818,7 @@ const FlowBuilderInner: React.FC = () => {
               
               // Update selectedNode and open inspector to show results
               setSelectedNode(updatedSelectedNode);
-              setSelectedNodeType(updatedNode.data.instance.nodeType);
+              setSelectedNodeType((updatedNode.data as any).instance.nodeType);
               setInspectorOpen(true);
               
               console.log('🔄 Updated selectedNode and opened inspector with execution results:', updatedSelectedNode);
@@ -841,11 +843,11 @@ const FlowBuilderInner: React.FC = () => {
             const updatedNode = {
               ...node,
               data: {
-                ...node.data,
+                ...nodeData,
                 instance: {
-                  ...(node.data.instance || {}),
+                  ...(nodeData.instance || {}),
                   data: {
-                    ...(node.data.instance?.data || {}),
+                    ...(nodeData.instance?.data || {}),
                     settings: updates.data.settings
                   }
                 }
@@ -853,7 +855,7 @@ const FlowBuilderInner: React.FC = () => {
             };
             
             // Update selectedNode to maintain inspector state
-            const updatedInstance = updatedNode.data.instance as NodeInstance;
+            const updatedInstance = (updatedNode.data as any).instance as NodeInstance;
             setSelectedNode(updatedInstance);
             
             console.log('✅ Node updated with settings:', updatedInstance.data?.settings);
@@ -864,9 +866,9 @@ const FlowBuilderInner: React.FC = () => {
           return {
             ...node,
             data: {
-              ...node.data,
+              ...nodeData,
               instance: {
-                ...(node.data.instance || {}),
+                ...(nodeData.instance || {}),
                 ...updates
               }
             }
