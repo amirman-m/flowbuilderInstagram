@@ -23,7 +23,7 @@ def get_simple_openai_chat_node_type() -> NodeType:
                     name="message_data",
                     label="Message Data",
                     description="Contains session ID, input text, and input type",
-                    data_type=NodeDataType.OBJECT,
+                    data_type=NodeDataType.STRING,
                     required=True
                 )
             ],
