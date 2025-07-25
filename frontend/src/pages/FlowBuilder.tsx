@@ -79,17 +79,7 @@ const FlowBuilderInner: React.FC = () => {
   // When node types are loaded, ensure all existing nodes have their nodeType attached
   // AND retry loading flow if it was waiting for node types
   useEffect(() => {
-    if (availableNodeTypes.length === 0) return;
-
-    // If we have a flowId but no nodes yet, try loading the flow again
-    // This handles the case where loadFlow() returned early waiting for node types
-    // Only retry if we haven't completed a load attempt yet (loading is still true)
-    if (flowId && nodes.length === 0 && loading) {
-      console.log('🔄 Node types now available, retrying flow load...');
-      loadFlow();
-      return;
-    }
-
+    if (availableNodeTypes.length === 0 || nodes.length === 0) return;
     let updated = false;
     setNodes((nds) =>
       nds.map((n) => {
@@ -148,13 +138,18 @@ const FlowBuilderInner: React.FC = () => {
   const [executionDialogOpen, setExecutionDialogOpen] = useState(false);
   const [triggerNodeId, setTriggerNodeId] = useState<string | null>(null);
 
-  // Load flow and node types on mount
+  // Load node types on mount, then load the flow
   useEffect(() => {
-    if (flowId) {
+    // This effect runs once on component mount
+    loadNodeTypes();
+  }, []);
+
+  useEffect(() => {
+    // This effect runs whenever flowId changes or after node types are loaded
+    if (flowId && availableNodeTypes.length > 0) {
       loadFlow();
     }
-    loadNodeTypes();
-  }, [flowId]);
+  }, [flowId, availableNodeTypes]);
 
   const loadFlow = async () => {
     if (!flowId) {
@@ -178,14 +173,6 @@ const FlowBuilderInner: React.FC = () => {
       const flowData = await flowsAPI.getFlow(parseInt(flowId));
       setFlow(flowData);
       setFlowName(flowData.name);
-
-      
-      // IMPORTANT: Wait for node types to be loaded before loading nodes
-      // This prevents the nodeType undefined issue
-      if (availableNodeTypes.length === 0) {
-        console.log('⏳ Waiting for node types to load before loading flow nodes...');
-        return; // Exit early, useEffect will retry when types are available
-      }
       
       // Fetch graph from backend
       const flowNodes = await flowsAPI.getFlowNodes(parseInt(flowId));
