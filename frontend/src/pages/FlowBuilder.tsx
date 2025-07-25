@@ -196,6 +196,7 @@ const FlowBuilderInner: React.FC = () => {
   // Flow execution state
   const [executionDialogOpen, setExecutionDialogOpen] = useState(false);
   const [triggerNodeId, setTriggerNodeId] = useState<string | null>(null);
+  const [triggerNodeType, setTriggerNodeType] = useState<string | null>(null);
 
   // Load node types on mount, then load the flow
   useEffect(() => {
@@ -649,8 +650,19 @@ const FlowBuilderInner: React.FC = () => {
       return;
     }
     
-    console.log('✅ Opening execution dialog for trigger:', triggerNode.id);
+    // Get trigger node type
+    const nodeData = triggerNode.data as any;
+    let nodeTypeId = null;
+    
+    if (nodeData?.nodeType) {
+      nodeTypeId = nodeData.nodeType.id;
+    } else if (nodeData?.instance?.typeId) {
+      nodeTypeId = nodeData.instance.typeId;
+    }
+    
+    console.log('✅ Opening execution dialog for trigger:', triggerNode.id, 'type:', nodeTypeId);
     setTriggerNodeId(triggerNode.id);
+    setTriggerNodeType(nodeTypeId);
     setExecutionDialogOpen(true);
   };
 
@@ -1232,6 +1244,7 @@ const FlowBuilderInner: React.FC = () => {
         onClose={() => setExecutionDialogOpen(false)}
         flowName={flow?.name || 'Untitled Flow'}
         triggerNodeId={triggerNodeId}
+        triggerNodeType={triggerNodeType}
         onExecute={handleFlowExecution}
       />
     </Box>

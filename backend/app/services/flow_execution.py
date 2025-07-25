@@ -164,7 +164,8 @@ class FlowExecutor:
         """
         # Define supported trigger node types (expandable)
         TRIGGER_NODE_TYPES = {
-            "chat-input": "Chat Input Trigger"
+            "chat-input": "Chat Input Trigger",
+            "voice-input": "Voice Input Trigger"
             # Future trigger types can be added here:
             # "webhook-trigger": "Webhook Trigger",
             # "schedule-trigger": "Schedule Trigger",
@@ -173,13 +174,20 @@ class FlowExecutor:
         
         trigger_nodes = []
         
-        for node in nodes_data:
-            node_type_id = node.get('typeId')
-            if node_type_id in TRIGGER_NODE_TYPES:
-                logger.info(f"🎯 Found trigger node: {node['id']} (type: {node_type_id} - {TRIGGER_NODE_TYPES[node_type_id]})")
-                trigger_nodes.append(node)
-        
-        logger.info(f"🔍 Modular trigger search found {len(trigger_nodes)} trigger nodes")
+        for node_data in nodes_data:
+            node_type_id = node_data.get('typeId')
+            if not node_type_id:
+                continue
+
+            try:
+                node_type = node_registry.get_node_type(node_type_id)
+                if node_type and hasattr(node_type, 'category') and node_type.category.value == 'trigger':
+                    logger.info(f"🎯 Found trigger node: {node_data['id']} (type: {node_type_id})")
+                    trigger_nodes.append(node_data)
+            except Exception as e:
+                logger.warning(f"Could not get node type for {node_type_id}: {e}")
+
+        logger.info(f"🔍 Found {len(trigger_nodes)} trigger nodes")
         return trigger_nodes
     
     async def _execute_flow_modular(self, 
