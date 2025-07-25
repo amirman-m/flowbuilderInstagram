@@ -50,6 +50,8 @@ import { edgeTypes } from '../components/edges/CustomEdge';
 import { NodeInspector } from '../components/inspector';
 import { FlowExecutionDialog } from '../components/dialogs/FlowExecutionDialog';
 import { NODE_REGISTRY } from '../config/nodeRegistry';
+import { useConnectionValidation } from '../hooks/useConnectionValidation';
+import '../styles/connectionValidation.css';
 
 // Define nodeTypes using our NodeComponentFactory for all node types
 const nodeTypes = {
@@ -128,6 +130,63 @@ const FlowBuilderInner: React.FC = () => {
       data: { ...edge.data, onEdgeDelete }
     };
   }, [onEdgeDelete]);
+  
+  // Create a map of node types for validation
+  const nodeTypesMap = useMemo(() => {
+    const map: Record<string, NodeType> = {};
+    availableNodeTypes.forEach(nodeType => {
+      map[nodeType.id] = nodeType;
+    });
+    return map;
+  }, [availableNodeTypes]);
+  
+  // Initialize connection validation
+  const {
+    validateConnection,
+    isConnectionValid,
+    getValidatedEdges,
+    onConnect: handleConnect,
+    isValidConnection,
+    getConnectionError
+  } = useConnectionValidation(nodes, nodeTypesMap, {
+    realTimeValidation: true,
+    preventInvalidConnections: true
+  });
+  
+  // Handle new connections with validation
+  const onConnect = useCallback((connection: Connection) => {
+    console.log('🔗 Attempting to create connection:', connection);
+    
+    // Validate the connection
+    const validationResult = validateConnection(connection);
+    
+    if (!validationResult.isValid) {
+      console.warn('❌ Connection blocked:', validationResult.errorMessage);
+      // Show user-friendly error message
+      alert(validationResult.errorMessage || 'Invalid connection');
+      return;
+    }
+    
+    console.log('✅ Connection validated, creating edge');
+    
+    // Create the new edge
+    const newEdge: Edge = {
+      id: `edge_${Date.now()}`,
+      source: connection.source,
+      target: connection.target,
+      sourceHandle: connection.sourceHandle,
+      targetHandle: connection.targetHandle,
+      type: 'custom'
+    };
+    
+    // Add the edge to the flow
+    setEdges((eds) => addEdge(newEdge, eds));
+  }, [validateConnection, setEdges]);
+  
+  // Apply validation styling to edges
+  const validatedEdges = useMemo(() => {
+    return getValidatedEdges(edges);
+  }, [getValidatedEdges, edges]);
   
   // Node Inspector state
   const [selectedNode, setSelectedNode] = useState<NodeInstance | null>(null);
@@ -684,18 +743,7 @@ const FlowBuilderInner: React.FC = () => {
     }
   }, [setNodes, setEdges, selectedNode]);
 
-  // Handle connections between nodes
-  const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => {
-      const newEdge = addEdge({ 
-        ...params, 
-        type: 'custom'
-      }, eds);
-      // Apply the edge deletion handler to the newly created edge
-      return newEdge.map(attachEdgeHandlers);
-    }),
-    [setEdges, attachEdgeHandlers]
-  );
+
 
   // Listen for custom auto-save events dispatched by node components
   useEffect(() => {
@@ -1146,7 +1194,7 @@ const FlowBuilderInner: React.FC = () => {
         <Box sx={{ flexGrow: 1, position: 'relative' }}>
           <ReactFlow
             nodes={nodes}
-            edges={edges}
+            edges={validatedEdges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
@@ -1158,6 +1206,7 @@ const FlowBuilderInner: React.FC = () => {
             deleteKeyCode={null}
             fitView
             attributionPosition="bottom-left"
+            isValidConnection={isValidConnection}
           >
             <Controls />
             <MiniMap />

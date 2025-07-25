@@ -23,7 +23,7 @@ const DeepSeekLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
     height={size} 
     viewBox="0 0 24 24" 
     fill="currentColor"
-    fill-rule="evenodd"
+    fillRule="evenodd"
     style={{ flexShrink: 0, lineHeight: 1 }}
   >
     <title>DeepSeek</title>
