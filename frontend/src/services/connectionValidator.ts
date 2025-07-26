@@ -271,23 +271,31 @@ export class ConnectionValidationService {
    * Check if two ports are compatible for connection
    */
   private static checkPortCompatibility(sourcePort: NodePort, targetPort: NodePort): PortCompatibility {
-    const compatibleTypes = DATA_TYPE_COMPATIBILITY_MATRIX[targetPort.dataType] || [];
-    const isCompatible = compatibleTypes.includes(sourcePort.dataType);
-    
+    const sourceTypes = Array.isArray(sourcePort.dataType) ? sourcePort.dataType : [sourcePort.dataType];
+    const targetTypes = Array.isArray(targetPort.dataType) ? targetPort.dataType : [targetPort.dataType];
     let compatibilityScore = 0;
     let incompatibilityReason = '';
+    let isCompatible = false;
     
-    if (isCompatible) {
-      // Calculate compatibility score
-      if (sourcePort.dataType === targetPort.dataType) {
-        compatibilityScore = 100; // Perfect match
-      } else if (sourcePort.dataType === NodeDataType.ANY || targetPort.dataType === NodeDataType.ANY) {
-        compatibilityScore = 80; // Good match with ANY type
-      } else {
-        compatibilityScore = 60; // Compatible but different types
+    // Check for an intersection between source and target data types
+    for (const sourceType of sourceTypes) {
+      for (const targetType of targetTypes) {
+        const compatibleTypes = DATA_TYPE_COMPATIBILITY_MATRIX[targetPort.dataType as keyof typeof DATA_TYPE_COMPATIBILITY_MATRIX] || [];
+        if (compatibleTypes.includes(sourceType)) {
+          isCompatible = true;
+          if (sourceType === targetType) {
+            compatibilityScore = Math.max(compatibilityScore, 100); // Perfect match
+          } else if (sourceType === NodeDataType.ANY || targetType === NodeDataType.ANY) {
+            compatibilityScore = Math.max(compatibilityScore, 80); // Good match with ANY type
+          } else {
+            compatibilityScore = Math.max(compatibilityScore, 60); // Compatible but different types
+          }
+        }
       }
-    } else {
-      incompatibilityReason = `Source port type '${sourcePort.dataType}' is not compatible with target port type '${targetPort.dataType}'`;
+    }
+
+    if (!isCompatible) {
+      incompatibilityReason = `Source port types '${sourceTypes.join(', ')}' are not compatible with target port types '${targetTypes.join(', ')}'`;
     }
     
     return {

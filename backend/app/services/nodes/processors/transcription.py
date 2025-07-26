@@ -23,7 +23,7 @@ def get_transcription_node_type() -> NodeType:
                     name="message_data",
                     label="Message Data",
                     description="Contains voice input data from voice input node",
-                    data_type=NodeDataType.OBJECT,
+                    data_type=[NodeDataType.OBJECT],
                     required=True
                 )
             ],

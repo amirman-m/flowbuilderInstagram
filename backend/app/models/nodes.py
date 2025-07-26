@@ -5,7 +5,8 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Any, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
+from typing import Union
 
 
 
@@ -34,8 +35,13 @@ class NodePort(BaseModel):
     name: str
     label: str
     description: str
-    data_type: NodeDataType = Field(alias="dataType")
+    data_type: Union[NodeDataType, List[NodeDataType]] = Field(alias="dataType")
     required: bool = True
+    @validator('data_type', pre=True)
+    def ensure_list(cls, v):
+        if not isinstance(v, list):
+            return [v]
+        return v
     
     class Config:
         allow_population_by_field_name = True

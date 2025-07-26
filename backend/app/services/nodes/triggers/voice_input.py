@@ -21,7 +21,7 @@ def get_voice_input_node_type() -> NodeType:
                     name="message_data",
                     label="Message Data",
                     description="Contains session ID, voice input, and input type",
-                    data_type=NodeDataType.OBJECT,
+                    data_type=[NodeDataType.OBJECT],
                     required=True
                 )
             ]
