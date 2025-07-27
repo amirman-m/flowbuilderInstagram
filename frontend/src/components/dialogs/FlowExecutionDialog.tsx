@@ -92,7 +92,7 @@ export const FlowExecutionDialog: React.FC<FlowExecutionDialogProps> = ({
       return;
     }
     
-    if (triggerNodeType === 'chat-input' && !hasTextInput) {
+    if (triggerNodeType === 'chat_input' && !hasTextInput) {
       setError('Please enter a text message before executing.');
       return;
     }

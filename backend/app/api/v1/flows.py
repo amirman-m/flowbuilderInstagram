@@ -10,7 +10,7 @@ from ...core.node_registry import node_registry
 from pydantic import BaseModel
 import logging
 from ...schemas.flow_save import FlowSaveRequest, NodeSchema, EdgeSchema
-from ...models.nodes import NodeInstance, NodeConnection
+from ...models.nodes import NodeInstance, NodeConnection , NodeCategory
 from ...services.flow_execution import create_flow_executor, FlowExecutionError
 from ...services import flow_service
 

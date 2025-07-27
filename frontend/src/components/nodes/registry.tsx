@@ -60,7 +60,7 @@ const getStatusIcon = (status: NodeExecutionStatus | undefined) => {
 // 2. Import it above
 // 3. Add it to this registry
 export const nodeComponentRegistry: Record<string, React.FC<NodeComponentProps>> = {
-  'chat-input': ChatInputNode,
+  'chat_input': ChatInputNode,
   'voice_input': VoiceInputNode,
   'simple-openai-chat': OpenAIChatNode,
   'simple-deepseek-chat': DeepSeekChatNode,

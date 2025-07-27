@@ -37,6 +37,30 @@ export const ChatInputNode: React.FC<NodeComponentProps> = ({ data, selected, id
       setExecuting(true);
       console.log('🚀 Executing Chat Input node via backend API...');
       
+      // First, ensure the node is saved to the database
+      console.log('💾 Auto-saving flow to ensure node exists in database...');
+      try {
+        await new Promise((resolve, reject) => {
+          const saveFlowEvent = new CustomEvent('autoSaveFlow', {
+            detail: { 
+              nodeId: id, 
+              reason: 'pre-execution',
+              callback: (error?: Error) => {
+                if (error) {
+                  reject(error);
+                } else {
+                  resolve(null);
+                }
+              }
+            }
+          });
+          window.dispatchEvent(saveFlowEvent);
+        });
+        console.log('💾 Auto-save completed');
+      } catch (saveError) {
+        console.warn('⚠️ Auto-save failed, continuing with execution:', saveError);
+      }
+      
       // Call backend API to execute the Chat Input node
       const executionContext = {
         user_input: inputText.trim()

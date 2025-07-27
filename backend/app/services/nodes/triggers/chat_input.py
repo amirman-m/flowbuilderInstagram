@@ -6,7 +6,7 @@ import uuid
 # Node definition
 def get_chat_input_node_type() -> NodeType:
     return NodeType(
-        id="chat-input",
+        id="chat_input",
         name="Chat Input",
         description="Manual text input trigger for testing and user interaction",
         category=NodeCategory.TRIGGER,

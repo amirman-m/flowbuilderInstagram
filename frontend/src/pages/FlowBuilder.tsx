@@ -449,7 +449,7 @@ const FlowBuilderInner: React.FC = () => {
         
         // Create Chat Input trigger node
         const chatInputNode: NodeType = {
-          id: 'chat-input',
+          id: 'chat_input',
           name: 'Chat Input',
           description: 'Manual text input trigger for chat conversations',
           category: NodeCategory.TRIGGER,

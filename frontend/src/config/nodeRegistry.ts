@@ -1,7 +1,7 @@
 // Central registry for node metadata
 import { NodeCategory } from '../types/nodes';
 export const NODE_REGISTRY: Record<string, { category: NodeCategory; subcategory: string }> = {
-    "chat-input": {
+    "chat_input": {
       category: NodeCategory.TRIGGER,
       subcategory: "Test inputs"
     },
