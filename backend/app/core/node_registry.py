@@ -79,6 +79,12 @@ class NodeRegistry:
             register_trigger_nodes(self)
         except ImportError as e:
             print(f"Warning: Could not load trigger nodes: {e}")
+        try:
+            # Import and register action nodes
+            from app.services.nodes.actions import register_action_nodes
+            register_action_nodes(self)
+        except ImportError as e:
+            print(f"Warning: Could not load action nodes: {e}")
 
         try:
             # Use lazy import to avoid circular dependency

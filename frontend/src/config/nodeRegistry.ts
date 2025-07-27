@@ -22,6 +22,10 @@ export const NODE_REGISTRY: Record<string, { category: NodeCategory; subcategory
       category: NodeCategory.PROCESSOR,
       subcategory: "Transcriptions"
     },
+    "telegram-send-message-for-self": {
+      category: NodeCategory.ACTION,
+      subcategory: "Telegram"
+    },
     // Add more nodes here in the future
     "example-action-node": {
       category: NodeCategory.ACTION,
