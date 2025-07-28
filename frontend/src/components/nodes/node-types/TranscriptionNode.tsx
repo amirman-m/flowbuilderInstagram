@@ -43,7 +43,10 @@ export const TranscriptionNode: React.FC<NodeComponentProps> = ({ data, selected
   // Handle node deletion
   const handleDelete = (event: React.MouseEvent) => {
     event.stopPropagation();
-    if (nodeData.onDelete) {
+    // Prefer onNodeDelete (standard across nodes) but fall back to onDelete for backward compatibility
+    if (nodeData.onNodeDelete) {
+      nodeData.onNodeDelete(id);
+    } else if (nodeData.onDelete) {
       nodeData.onDelete(id);
     }
   };

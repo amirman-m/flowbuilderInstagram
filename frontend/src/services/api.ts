@@ -2,10 +2,10 @@ import axios from 'axios';
 import { User, Flow, UserSession, LoginCredentials, RegisterData } from '../types';
 import { NodeInstance, NodeConnection } from '../types/nodes';
 
-// Use environment variable if available, otherwise use direct backend URL in Docker environment
-const API_BASE_URL = import.meta.env.VITE_API_URL ? 
-  `${import.meta.env.VITE_API_URL}/api/v1` : 
-  'http://backend:8000/api/v1';
+// Use environment variable if available, otherwise use localhost
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ? 
+  import.meta.env.VITE_API_BASE_URL : 
+  'http://localhost:8000/api/v1';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
