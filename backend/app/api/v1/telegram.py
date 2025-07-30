@@ -122,7 +122,7 @@ async def setup_telegram_webhook(
             )
         
         # Import here to avoid circular imports
-        from app.services.nodes.triggers.telegram_input import setup_telegram_webhook
+        from ....services.nodes.triggers.telegram_input import setup_telegram_webhook
         
         # Construct webhook URL (this should match your domain)
         # In production, this should be your actual domain

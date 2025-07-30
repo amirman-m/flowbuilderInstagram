@@ -4,9 +4,20 @@ from .core.config import settings
 from .core.database import engine, Base
 from .api.v1.api import api_router
 from .core.node_registry import node_registry
+import logging
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Create database tables with error handling
+try:
+    logger.info(f"Attempting to connect to database: {settings.database_url}")
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database tables created successfully")
+except Exception as e:
+    logger.error(f"Failed to create database tables: {e}")
+    logger.error("Application will continue but database operations may fail")
 
 # Initialize node registry (this will register all built-in nodes)
 print(f"Initialized node registry with {len(node_registry.get_all_node_types())} node types")

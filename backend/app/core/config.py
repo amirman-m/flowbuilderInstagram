@@ -3,7 +3,7 @@ from typing import Optional
 
 
 class Settings(BaseSettings):
-    # Database
+    # Database - Pydantic automatically uses DATABASE_URL env var if available
     database_url: str = "postgresql://postgres:postgres@db:5432/socialmediaflow"
     
     # API
