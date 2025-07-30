@@ -12,6 +12,7 @@ import {
 import { NodeInstance, NodeExecutionStatus, NodeType, NodeCategory } from '../../types/nodes';
 import { ChatInputNode, VoiceInputNode, OpenAIChatNode, DeepSeekChatNode } from './node-types';
 import { TranscriptionNode } from './node-types/TranscriptionNode';
+import { TelegramInputNode } from './node-types/TelegramInputNode';
 import { baseNodeStyles, getCategoryColor } from './styles';
 
 // Import other node components
@@ -61,6 +62,7 @@ const getStatusIcon = (status: NodeExecutionStatus | undefined) => {
 export const nodeComponentRegistry: Record<string, React.FC<NodeComponentProps>> = {
   'chat_input': ChatInputNode,
   'voice_input': VoiceInputNode,
+  'telegram_input': TelegramInputNode,
   'simple-openai-chat': OpenAIChatNode,
   'simple-deepseek-chat': DeepSeekChatNode,
   'transcription': TranscriptionNode,

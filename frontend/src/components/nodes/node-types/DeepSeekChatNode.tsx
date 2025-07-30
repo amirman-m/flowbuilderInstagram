@@ -15,7 +15,7 @@ import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
 import { baseNodeStyles, getCategoryColor } from '../styles';
 import { NodeCategory } from '../../../types/nodes';
 import { useExecutionData } from '../hooks/useExecutionData';
-import { API_BASE_URL } from '../../../services/api'; // Import API_BASE_URL
+import { API_BASE_URL } from "../../../services/api" // Import API_BASE_URL
 
 // DeepSeek Logo SVG Component
 const DeepSeekLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (

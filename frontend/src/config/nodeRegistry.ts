@@ -9,6 +9,10 @@ export const NODE_REGISTRY: Record<string, { category: NodeCategory; subcategory
       category: NodeCategory.TRIGGER,
       subcategory: "Test inputs"
     },
+    "telegram_input": {
+      category: NodeCategory.TRIGGER,
+      subcategory: "Telegram"
+    },
     
     "simple-openai-chat": {
       category: NodeCategory.PROCESSOR,
