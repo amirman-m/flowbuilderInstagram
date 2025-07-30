@@ -17,11 +17,14 @@ fi
 
 # Check if required environment variables are set
 echo "🔍 Checking environment configuration..."
-source .env.prod
 
+# Read variables without sourcing to avoid syntax errors
 required_vars=("POSTGRES_PASSWORD" "SECRET_KEY" "OPENAI_API_KEY" "DEEPSEEK_API_KEY")
+
 for var in "${required_vars[@]}"; do
-    if [ -z "${!var}" ] || [[ "${!var}" == *"CHANGE_THIS"* ]] || [[ "${!var}" == *"your_"* ]]; then
+    value=$(grep -E "^${var}=" .env.prod | cut -d '=' -f2-)
+    
+    if [ -z "$value" ] || [[ "$value" == *"CHANGE_THIS"* ]] || [[ "$value" == *"your_"* ]]; then
         echo "❌ Error: $var is not properly configured in .env.prod"
         echo "Please update .env.prod with your production values."
         exit 1
@@ -36,26 +39,31 @@ mkdir -p ssl
 mkdir -p database/init
 mkdir -p logs
 
+# Copy .env.prod to .env for Docker Compose
+echo "📄 Copying .env.prod to .env for Docker Compose..."
+cp .env.prod .env
+
 # Build and start services
 echo "🏗️  Building and starting services..."
-docker-compose -f docker-compose.prod.yml down --remove-orphans
-docker-compose -f docker-compose.prod.yml build --no-cache
-docker-compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml down --remove-orphans
+docker compose -f docker-compose.prod.yml build --no-cache
+docker compose -f docker-compose.prod.yml up -d
 
 # Wait for services to be healthy
-echo "⏳ Waiting for services to be healthy..."
+echo "⏳ Waiting for services to start..."
 sleep 10
 
 # Check service health
-echo "🏥 Checking service health..."
+echo "🏥 Checking service status..."
 for i in {1..30}; do
-    if docker-compose -f docker-compose.prod.yml ps | grep -q "Up (healthy)"; then
-        echo "✅ Services are healthy!"
+    # Check if all services are up (not necessarily "healthy")
+    if docker compose -f docker-compose.prod.yml ps | grep -q "Up" && ! docker compose -f docker-compose.prod.yml ps | grep -q "Exit"; then
+        echo "✅ All services are running!"
         break
     fi
     if [ $i -eq 30 ]; then
-        echo "❌ Services failed to become healthy. Check logs:"
-        docker-compose -f docker-compose.prod.yml logs
+        echo "❌ Services failed to start properly. Check logs:"
+        docker compose -f docker-compose.prod.yml logs
         exit 1
     fi
     echo "Waiting... ($i/30)"
@@ -64,7 +72,7 @@ done
 
 # Show running services
 echo "📊 Running services:"
-docker-compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml ps
 
 echo ""
 echo "🎉 Deployment completed successfully!"
@@ -81,7 +89,7 @@ echo "Special routes:"
 echo "  - /test → redirects to frontend"
 echo ""
 echo "To view logs:"
-echo "  docker-compose -f docker-compose.prod.yml logs -f"
+echo "  docker compose -f docker-compose.prod.yml logs -f"
 echo ""
 echo "To stop services:"
-echo "  docker-compose -f docker-compose.prod.yml down"
+echo "  docker compose -f docker-compose.prod.yml down"

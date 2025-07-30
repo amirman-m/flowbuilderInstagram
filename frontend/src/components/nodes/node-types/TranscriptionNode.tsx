@@ -1,5 +1,5 @@
 // src/components/nodes/node-types/TranscriptionNode.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import {
   Box, Paper, Typography, IconButton, Tooltip, CircularProgress, Alert
@@ -14,6 +14,7 @@ import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
 import { baseNodeStyles, getCategoryColor } from '../styles';
 import { NodeCategory } from '../../../types/nodes';
 import { useExecutionData } from '../hooks/useExecutionData';
+import { API_BASE_URL } from "../../../services/api" // Import API_BASE_URL
 
 // OpenAI Logo SVG Component - Reused for Transcription Node
 const OpenAILogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
@@ -184,7 +185,7 @@ export const TranscriptionNode: React.FC<NodeComponentProps> = ({ data, selected
       };
       
       // Call backend API directly
-      const response = await fetch('http://localhost:8000/api/v1/nodes/execute/transcription', {
+      const response = await fetch(`${API_BASE_URL}/nodes/execute/transcription`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

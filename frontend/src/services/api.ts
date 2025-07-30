@@ -3,7 +3,7 @@ import { User, Flow, UserSession, LoginCredentials, RegisterData } from '../type
 import { NodeInstance, NodeConnection } from '../types/nodes';
 
 // Use environment variable if available, otherwise use localhost
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ? 
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ? 
   import.meta.env.VITE_API_BASE_URL : 
   'http://localhost:8000/api/v1';
 

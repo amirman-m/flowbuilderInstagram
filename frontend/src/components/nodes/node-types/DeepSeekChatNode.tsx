@@ -15,6 +15,7 @@ import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
 import { baseNodeStyles, getCategoryColor } from '../styles';
 import { NodeCategory } from '../../../types/nodes';
 import { useExecutionData } from '../hooks/useExecutionData';
+import { API_BASE_URL } from '../../../services/api'; // Import API_BASE_URL
 
 // DeepSeek Logo SVG Component
 const DeepSeekLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
@@ -161,8 +162,8 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = ({ data, selected,
       
       console.log('🚀 DeepSeek Node - Executing with context:', executionContext);
       
-      // Call the node execution service with correct endpoint (matching OpenAI pattern)
-      const response = await fetch(`http://localhost:8000/api/v1/nodes/execute/${executionContext.nodeTypeId}`, {
+      // Use API_BASE_URL instead of hardcoded URL
+      const response = await fetch(`${API_BASE_URL}/nodes/execute/${executionContext.nodeTypeId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

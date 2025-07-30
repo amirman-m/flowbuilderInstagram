@@ -15,6 +15,7 @@ import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
 import { baseNodeStyles, getCategoryColor } from '../styles';
 import { NodeCategory } from '../../../types/nodes';
 import { useExecutionData } from '../hooks/useExecutionData';
+import { API_BASE_URL } from "../../../services/api" // Import API_BASE_URL
 
 // OpenAI Logo SVG Component
 const OpenAILogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
@@ -210,7 +211,7 @@ export const OpenAIChatNode: React.FC<NodeComponentProps> = ({ data, selected, i
       };
       
       // Call backend API
-      const response = await fetch('http://localhost:8000/api/v1/nodes/execute/simple-openai-chat', {
+      const response = await fetch(`${API_BASE_URL}/nodes/execute/simple-openai-chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
