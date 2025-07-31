@@ -34,7 +34,7 @@ async def telegram_webhook(
         # Find the Telegram trigger node in this flow
         telegram_trigger = db.query(NodeInstance).filter(
             NodeInstance.flow_id == flow_id,
-            NodeInstance.typeId == "telegram_input"
+            NodeInstance.type_id == "telegram_input"
         ).first()
         
         if not telegram_trigger:
@@ -102,7 +102,7 @@ async def setup_telegram_webhook(
         # Find the Telegram trigger node in this flow
         telegram_trigger = db.query(NodeInstance).filter(
             NodeInstance.flow_id == flow_id,
-            NodeInstance.typeId == "telegram_input"
+            NodeInstance.type_id == "telegram_input"
         ).first()
         
         if not telegram_trigger:
@@ -122,7 +122,7 @@ async def setup_telegram_webhook(
             )
         
         # Import here to avoid circular imports
-        from ....services.nodes.triggers.telegram_input import setup_telegram_webhook
+        from ...services.nodes.triggers.telegram_input import setup_telegram_webhook
         
         # Construct webhook URL (this should match your domain)
         # In production, this should be your actual domain
