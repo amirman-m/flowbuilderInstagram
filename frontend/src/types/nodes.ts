@@ -168,7 +168,6 @@ export interface NodeExecutionResult {
 export interface NodeInstance {
   /** Unique identifier for this node instance */
   id: string;
-  
   /** Reference to the node type this instance is based on */
   typeId: string;
   

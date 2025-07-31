@@ -45,7 +45,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
   const [accessToken, setAccessToken] = useState('');
 
   const nodeData = data as NodeDataWithHandlers;
-  const { nodeType, instance } = nodeData;
+  const { nodeType, instance, flowId } = nodeData;
   const categoryColor = getCategoryColor(NodeCategory.TRIGGER);
 
   // Get current settings from instance data
@@ -112,7 +112,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
     setWebhookError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/telegram/setup-webhook/${instance.flow_id}`, {
+      const response = await fetch(`${API_BASE_URL}/telegram/setup-webhook/${flowId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

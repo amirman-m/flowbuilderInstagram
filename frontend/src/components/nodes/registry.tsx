@@ -28,6 +28,7 @@ export interface NodeComponentProps {
 export interface NodeDataWithHandlers {
   nodeType: any;
   instance: any;
+  flowId?: string;
   selected?: boolean;
   executing?: boolean;
   errors?: string[];
