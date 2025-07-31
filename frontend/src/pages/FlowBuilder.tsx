@@ -965,10 +965,11 @@ const FlowBuilderInner: React.FC = () => {
         instance: ni, 
         nodeType,
         onNodeDelete: onNodeDelete,
-        onNodeUpdate: handleNodeUpdate
+        onNodeUpdate: handleNodeUpdate,
+        flowId: flowId,
       },
     } as Node;
-  }, [availableNodeTypes, onNodeDelete, handleNodeUpdate]);
+  }, [availableNodeTypes, onNodeDelete, handleNodeUpdate, flowId]);
 
   // Category colors for node types
   const getCategoryColor = (category: NodeCategory) => {
