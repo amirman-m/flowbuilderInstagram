@@ -5,6 +5,7 @@ from ...models.flow import Flow
 from ...models.nodes import NodeInstance
 from ...services.flow_execution import create_flow_executor
 from typing import Dict, Any
+from datetime import datetime, timezone
 import logging
 import json
 
@@ -63,24 +64,42 @@ async def telegram_webhook(
             logger.info(f"Flow {flow_id} executed successfully via Telegram webhook")
             
             # Store execution results in the Telegram trigger node for frontend polling
-            if execution_result and "node_results" in execution_result:
-                node_results = execution_result["node_results"]
-                trigger_result = node_results.get(telegram_trigger.id)
+            if execution_result and "execution_results" in execution_result:
+                execution_results = execution_result["execution_results"]
+                trigger_result = execution_results.get(telegram_trigger.id)
                 
                 if trigger_result:
                     # Update the node instance with execution results
                     current_data = telegram_trigger.data or {}
+                    
+                    # Extract data from NodeExecutionResult object
+                    if hasattr(trigger_result, 'outputs'):
+                        outputs = trigger_result.outputs
+                        status = trigger_result.status if hasattr(trigger_result, 'status') else "success"
+                        started_at = trigger_result.started_at if hasattr(trigger_result, 'started_at') else None
+                        completed_at = trigger_result.completed_at if hasattr(trigger_result, 'completed_at') else None
+                    else:
+                        # Fallback for dict-like structure
+                        outputs = trigger_result.get("outputs", {})
+                        status = trigger_result.get("status", "success")
+                        started_at = trigger_result.get("started_at")
+                        completed_at = trigger_result.get("completed_at")
+                    
                     current_data["lastExecution"] = {
-                        "timestamp": trigger_result.get("completed_at", trigger_result.get("started_at")),
-                        "status": trigger_result.get("status", "success"),
-                        "outputs": trigger_result.get("outputs", {}),
-                        "executionTime": trigger_result.get("execution_time", 0)
+                        "timestamp": completed_at or started_at or datetime.now(timezone.utc).isoformat(),
+                        "status": status,
+                        "outputs": outputs,
+                        "executionTime": 0  # Calculate if needed
                     }
                     
                     telegram_trigger.data = current_data
                     db.commit()
                     
-                    logger.info(f"Stored execution results for Telegram node {telegram_trigger.id}")
+                    logger.info(f"Stored execution results for Telegram node {telegram_trigger.id}: {outputs}")
+                else:
+                    logger.warning(f"No execution result found for Telegram trigger node {telegram_trigger.id}")
+            else:
+                logger.warning(f"No execution_results found in webhook execution result: {execution_result}")
             
             # Return success response to Telegram
             return {
