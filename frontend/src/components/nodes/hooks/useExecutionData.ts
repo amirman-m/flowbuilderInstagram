@@ -23,7 +23,16 @@ export const useExecutionData = (data: NodeDataWithHandlers) => {
     const hasFreshResults = Boolean(executionResult && outputs);
     
     // Get the most recent output data (execution results take priority over instance data)
-    const currentOutputs = hasFreshResults ? outputs : (instanceData.outputs || {});
+    // For Telegram webhook results, also check lastExecution.outputs
+    let currentOutputs = hasFreshResults ? outputs : (instanceData.outputs || {});
+    
+    // If no outputs found, check lastExecution data (for webhook-triggered executions)
+    if (!currentOutputs || Object.keys(currentOutputs).length === 0) {
+      const lastExecution = instanceData.lastExecution;
+      if (lastExecution && lastExecution.outputs) {
+        currentOutputs = lastExecution.outputs;
+      }
+    }
     
     // Extract specific output values based on node type
     const getOutputValue = (portId: string) => {

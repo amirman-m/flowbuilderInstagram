@@ -63,14 +63,17 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
     }
   }, [currentSettings.access_token]);
 
-  // Poll for webhook execution results when webhook is active
+  // Polling mechanism to fetch webhook execution results
   useEffect(() => {
-    if (webhookSetupState !== 'success' || !flowId || !id) return;
+    // Only poll when webhook is active
+    if (webhookSetupState !== 'success') {
+      return;
+    }
 
     const pollForResults = async () => {
       try {
-        // Fetch the latest node data from the backend
         const response = await fetch(`${API_BASE_URL}/flows/${flowId}/nodes`, {
+          method: 'GET',
           credentials: 'include'
         });
         
@@ -84,7 +87,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
             
             // Only update if we have a new execution result
             if (executionTimestamp !== lastPolledTimestamp) {
-              console.log('🔄 New webhook execution detected:', lastExecution);
+              console.log(' New webhook execution detected:', lastExecution);
               
               // Update the node state with the execution results
               if (nodeData.onNodeUpdate) {
@@ -106,7 +109,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
           }
         }
       } catch (error) {
-        console.error('❌ Failed to poll for webhook results:', error);
+        console.error(' Failed to poll for webhook results:', error);
       }
     };
 
@@ -117,7 +120,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
     pollForResults();
 
     return () => clearInterval(pollInterval);
-  }, [webhookSetupState, flowId, id, lastPolledTimestamp, nodeData.onNodeUpdate, instance.data]);
+  }, [webhookSetupState, flowId, id, lastPolledTimestamp, nodeData.onNodeUpdate]);
 
   // Settings handlers
   const closeSettingsDialog = () => setSettingsDialogOpen(false);
