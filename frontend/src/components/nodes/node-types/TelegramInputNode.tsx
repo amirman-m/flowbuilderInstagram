@@ -20,6 +20,7 @@ import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
 import { baseNodeStyles, getCategoryColor } from '../styles';
 import { NodeCategory } from '../../../types/nodes';
 import { API_BASE_URL } from '../../../services/api';
+import { useExecutionData } from '../hooks/useExecutionData';
 
 // Telegram Logo SVG Component
 const TelegramLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
@@ -43,10 +44,14 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
   const [webhookError, setWebhookError] = useState<string | null>(null);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [accessToken, setAccessToken] = useState('');
+  const [lastPolledTimestamp, setLastPolledTimestamp] = useState<string | null>(null);
 
   const nodeData = data as NodeDataWithHandlers;
   const { nodeType, instance, flowId } = nodeData;
   const categoryColor = getCategoryColor(NodeCategory.TRIGGER);
+  
+  // Use execution data hook to get fresh execution results
+  const executionData = useExecutionData(nodeData);
 
   // Get current settings from instance data
   const currentSettings = instance.data?.settings || {};
@@ -57,6 +62,62 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
       setAccessToken(currentSettings.access_token);
     }
   }, [currentSettings.access_token]);
+
+  // Poll for webhook execution results when webhook is active
+  useEffect(() => {
+    if (webhookSetupState !== 'success' || !flowId || !id) return;
+
+    const pollForResults = async () => {
+      try {
+        // Fetch the latest node data from the backend
+        const response = await fetch(`${API_BASE_URL}/flows/${flowId}/nodes`, {
+          credentials: 'include'
+        });
+        
+        if (response.ok) {
+          const nodes = await response.json();
+          const currentNode = nodes.find((node: any) => node.id === id);
+          
+          if (currentNode && currentNode.data && currentNode.data.lastExecution) {
+            const lastExecution = currentNode.data.lastExecution;
+            const executionTimestamp = lastExecution.timestamp;
+            
+            // Only update if we have a new execution result
+            if (executionTimestamp !== lastPolledTimestamp) {
+              console.log('🔄 New webhook execution detected:', lastExecution);
+              
+              // Update the node state with the execution results
+              if (nodeData.onNodeUpdate) {
+                nodeData.onNodeUpdate(id, {
+                  data: {
+                    ...instance.data,
+                    lastExecution,
+                    outputs: lastExecution.outputs || {},
+                    executionResult: lastExecution,
+                    status: lastExecution.status,
+                    executionTime: lastExecution.executionTime,
+                    lastExecuted: executionTimestamp
+                  }
+                });
+              }
+              
+              setLastPolledTimestamp(executionTimestamp);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('❌ Failed to poll for webhook results:', error);
+      }
+    };
+
+    // Poll every 2 seconds when webhook is active
+    const pollInterval = setInterval(pollForResults, 2000);
+    
+    // Initial poll
+    pollForResults();
+
+    return () => clearInterval(pollInterval);
+  }, [webhookSetupState, flowId, id, lastPolledTimestamp, nodeData.onNodeUpdate, instance.data]);
 
   // Settings handlers
   const closeSettingsDialog = () => setSettingsDialogOpen(false);
@@ -231,8 +292,28 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
           {NodeCategory.TRIGGER}
         </Typography>
 
+        {/* Execution Results Display - Show extracted Telegram data */}
+        {executionData.hasFreshResults && executionData.displayData.type === 'message_data' && (
+          <Box sx={{ mt: 1, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+            <Typography variant="caption" sx={{ fontWeight: 'bold', color: categoryColor }}>
+              Telegram Message Received:
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 0.5, wordBreak: 'break-word' }}>
+              <strong>Text:</strong> "{executionData.displayData.inputText}"
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', mt: 0.5, display: 'block' }}>
+              Chat ID: {executionData.displayData.chatId} • Type: {executionData.displayData.inputType} • {new Date(executionData.displayData.timestamp).toLocaleTimeString()}
+            </Typography>
+            {executionData.displayData.metadata && (
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                From: @{executionData.displayData.metadata.from_user} • Message ID: {executionData.displayData.metadata.telegram_message_id}
+              </Typography>
+            )}
+          </Box>
+        )}
+
         {/* Status Display */}
-        {webhookSetupState === 'success' && (
+        {!executionData.hasFreshResults && webhookSetupState === 'success' && (
           <Alert severity="success" sx={{ mt: 1, fontSize: '0.7rem', py: 0.5 }}>
             Webhook active - waiting for messages
           </Alert>
@@ -241,6 +322,13 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
         {settingsValidationState === 'error' && (
           <Alert severity="warning" sx={{ mt: 1, fontSize: '0.7rem', py: 0.5 }}>
             Configure bot token in settings
+          </Alert>
+        )}
+        
+        {/* Success indicator for received messages */}
+        {executionData.hasFreshResults && executionData.isSuccess && (
+          <Alert severity="success" sx={{ mt: 1, fontSize: '0.7rem', py: 0.5 }}>
+            Message received and processed successfully
           </Alert>
         )}
 

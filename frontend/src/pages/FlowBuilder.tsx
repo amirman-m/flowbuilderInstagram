@@ -944,7 +944,8 @@ const FlowBuilderInner: React.FC = () => {
             executing: false,
             errors: [],
             onNodeDelete: onNodeDelete, // Pass the deletion handler
-            onNodeUpdate: handleNodeUpdate // Pass the update handler for execution results
+            onNodeUpdate: handleNodeUpdate,// Pass the update handler for execution results
+            flowId: flowId,
           }
         };
 

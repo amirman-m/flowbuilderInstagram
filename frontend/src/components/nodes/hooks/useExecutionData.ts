@@ -32,11 +32,13 @@ export const useExecutionData = (data: NodeDataWithHandlers) => {
     
     // Get formatted display data for common output types
     const getDisplayData = () => {
-      // For ChatInputNode - show message_data
+      // For ChatInputNode and TelegramInputNode - show message_data
       if (currentOutputs.message_data) {
         return {
           type: 'message_data',
-          inputText: currentOutputs.message_data.input_text,
+          inputText: currentOutputs.message_data.input_text || currentOutputs.message_data.chat_input,
+          chatId: currentOutputs.message_data.chat_id,
+          inputType: currentOutputs.message_data.input_type,
           sessionId: currentOutputs.message_data.session_id,
           timestamp: currentOutputs.message_data.timestamp,
           metadata: currentOutputs.message_data.metadata

@@ -28,7 +28,7 @@ def get_telegram_input_node_type() -> NodeType:
                     id="message_data",
                     name="message_data",
                     label="Message Data",
-                    description="Contains chat_id and either chat_input or voice_input",
+                    description="Contains chat_id, input_text, and message metadata from Telegram",
                     data_type=[NodeDataType.OBJECT , NodeDataType.STRING],
                     required=True
                 )
@@ -152,11 +152,15 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
             }
         }
         
-        # Check for text message
-        if "text" in message:
-            message_data["chat_input"] = message["text"]
-            message_data["input_type"] = "message"
-            log_msg = f"Telegram text message from chat {chat_id}: \"{message['text'][:50]}{'...' if len(message['text']) > 50 else ''}\""
+        # Extract text from message
+        text_content = message.get("text")
+        
+        if text_content:
+            # For text messages - format for compatibility with OpenAI chat node
+            message_data["input_text"] = text_content  # OpenAI node expects 'input_text'
+            message_data["chat_input"] = text_content  # Keep original for backward compatibility
+            message_data["input_type"] = "text"
+            log_msg = f"Telegram text message from chat {chat_id}: \"{text_content[:50]}{'...' if len(text_content) > 50 else ''}\""
             
         # Check for voice message
         elif "voice" in message:

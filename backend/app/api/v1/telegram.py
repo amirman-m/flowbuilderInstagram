@@ -62,6 +62,26 @@ async def telegram_webhook(
             
             logger.info(f"Flow {flow_id} executed successfully via Telegram webhook")
             
+            # Store execution results in the Telegram trigger node for frontend polling
+            if execution_result and "node_results" in execution_result:
+                node_results = execution_result["node_results"]
+                trigger_result = node_results.get(telegram_trigger.id)
+                
+                if trigger_result:
+                    # Update the node instance with execution results
+                    current_data = telegram_trigger.data or {}
+                    current_data["lastExecution"] = {
+                        "timestamp": trigger_result.get("completed_at", trigger_result.get("started_at")),
+                        "status": trigger_result.get("status", "success"),
+                        "outputs": trigger_result.get("outputs", {}),
+                        "executionTime": trigger_result.get("execution_time", 0)
+                    }
+                    
+                    telegram_trigger.data = current_data
+                    db.commit()
+                    
+                    logger.info(f"Stored execution results for Telegram node {telegram_trigger.id}")
+            
             # Return success response to Telegram
             return {
                 "ok": True,
