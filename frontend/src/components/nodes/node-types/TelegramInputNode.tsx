@@ -9,12 +9,15 @@ import {
   CircularProgress,
   Paper,
   IconButton,
-  Tooltip
+  Tooltip,
+  Zoom
 } from '@mui/material';
 import { 
   Delete as DeleteIcon,
   PlayArrow as ExecuteIcon,
-  Warning as WarningIcon
+  Warning as WarningIcon,
+  CheckCircle as CheckCircleIcon,
+  Error as ErrorIcon
 } from '@mui/icons-material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
 import { baseNodeStyles, getCategoryColor } from '../styles';
@@ -40,14 +43,13 @@ const TelegramLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
 export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected, id }) => {
   const [settingsValidationState, setSettingsValidationState] = useState<'error' | 'success' | 'none'>('none');
   const [isExecuting, setIsExecuting] = useState(false);
-  const [webhookSetupState, setWebhookSetupState] = useState<'idle' | 'setting-up' | 'success' | 'error'>('idle');
-  const [webhookError, setWebhookError] = useState<string | null>(null);
+  const [executionResult, setExecutionResult] = useState<string | null>(null);
+  const [executionError, setExecutionError] = useState<string | null>(null);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [accessToken, setAccessToken] = useState('');
-  const [lastPolledTimestamp, setLastPolledTimestamp] = useState<string | null>(null);
 
   const nodeData = data as NodeDataWithHandlers;
-  const { nodeType, instance, flowId } = nodeData;
+  const { nodeType, instance } = nodeData;
   const categoryColor = getCategoryColor(NodeCategory.TRIGGER);
   
   // Use execution data hook to get fresh execution results
@@ -55,6 +57,9 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
 
   // Get current settings from instance data
   const currentSettings = instance.data?.settings || {};
+  
+  // Type guard for instance.data
+  const instanceData = instance?.data || {};
 
   // Initialize access token from settings
   useEffect(() => {
@@ -62,90 +67,6 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
       setAccessToken(currentSettings.access_token);
     }
   }, [currentSettings.access_token]);
-
-  // Polling mechanism to fetch webhook execution results
-  useEffect(() => {
-    // Only poll when webhook is active
-    if (webhookSetupState !== 'success') {
-      return;
-    }
-
-    const pollForResults = async () => {
-      try {
-        console.log('🔍 Polling for webhook results - Node ID:', id, 'Flow ID:', flowId);
-        
-        const response = await fetch(`${API_BASE_URL}/flows/${flowId}/nodes`, {
-          method: 'GET',
-          credentials: 'include'
-        });
-        
-        if (response.ok) {
-          const nodes = await response.json();
-          console.log('📊 All nodes from API:', nodes.map((n: any) => ({ id: n.id, type: n.typeId, hasLastExecution: !!n.data?.lastExecution })));
-          
-          const currentNode = nodes.find((node: any) => node.id === id);
-          console.log('🎯 Current node found:', !!currentNode, 'Node data:', currentNode);
-
-          if (currentNode && currentNode.lastExecution) {
-            const lastExecution = currentNode.lastExecution;
-            const executionTimestamp = lastExecution.timestamp;
-
-            console.log('🕰️ Execution timestamps - Current:', executionTimestamp, 'Last polled:', lastPolledTimestamp);
-
-            // Only update if we have a new execution result
-            if (executionTimestamp !== lastPolledTimestamp) {
-              console.log('🔄 NEW WEBHOOK EXECUTION DETECTED!');
-              console.log('Last execution data:', lastExecution);
-              console.log('Execution outputs:', lastExecution.outputs);
-
-              // Update the node state with the execution results
-              if (nodeData.onNodeUpdate) {
-                const updateData = {
-                  lastExecution: {
-                    status: 'success',
-                    timestamp: executionTimestamp,
-                    outputs: lastExecution.outputs || {},
-                    executionTime: lastExecution.executionTime || 0
-                  },
-                  data: {
-                    ...instance.data,
-                    outputs: lastExecution.outputs || {}, // Direct outputs for immediate access
-                    executionResult: lastExecution.outputs || {}, // For compatibility
-                    lastExecuted: executionTimestamp
-                  }
-                };
-
-                console.log('🔄 Calling onNodeUpdate with data:', updateData);
-                nodeData.onNodeUpdate(id, updateData);
-
-                console.log('✅ Updated Telegram node state with execution results');
-              } else {
-                console.error('❌ onNodeUpdate is not available!');
-              }
-
-              setLastPolledTimestamp(executionTimestamp);
-            } else {
-              console.log('🔄 No new execution results (timestamps match)');
-            }
-          } else {
-            console.log('⚠️ No lastExecution found in current node');
-          }
-        } else {
-          console.error('❌ Failed to fetch nodes:', response.status, response.statusText);
-        }
-      } catch (error) {
-        console.error('❌ Failed to poll for webhook results:', error);
-      }
-    };
-
-    // Poll every 2 seconds when webhook is active
-    const pollInterval = setInterval(pollForResults, 2000);
-    
-    // Initial poll
-    pollForResults();
-
-    return () => clearInterval(pollInterval);
-  }, [webhookSetupState, flowId, id, lastPolledTimestamp, nodeData.onNodeUpdate]);
 
   // Settings handlers
   const closeSettingsDialog = () => setSettingsDialogOpen(false);
@@ -187,42 +108,90 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
     }
   };
 
-  // Handle node execution (setup webhook and wait for message)
+  // Handle node execution - DeepSeek style direct execution
   const handleExecute = async (event: React.MouseEvent) => {
     event.stopPropagation();
     
+    // Clear previous results
+    setExecutionResult(null);
+    setExecutionError(null);
+    
+    // Validate settings
     if (settingsValidationState !== 'success') {
-      setWebhookError('Please configure a valid bot access token first');
+      setExecutionError('Node is not properly configured. Please check bot access token.');
       return;
     }
-
+    
     setIsExecuting(true);
-    setWebhookSetupState('setting-up');
-    setWebhookError(null);
-
+    
     try {
-      const response = await fetch(`${API_BASE_URL}/telegram/setup-webhook/${flowId}`, {
+      // Prepare execution context - similar to DeepSeek
+      const executionContext = {
+        nodeId: id,
+        nodeTypeId: nodeType.id,
+        inputs: {}, // Telegram trigger has no inputs
+        settings: currentSettings
+      };
+      
+      console.log('🚀 Telegram Node - Executing with context:', executionContext);
+      
+      // Use same API pattern as DeepSeek
+      const response = await fetch(`${API_BASE_URL}/nodes/execute/${executionContext.nodeTypeId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include'
+        credentials: 'include',
+        body: JSON.stringify(executionContext),
       });
-
+      
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to setup webhook');
+        throw new Error(errorData.message || 'Failed to execute node');
       }
-
-      await response.json();
-      setWebhookSetupState('success');
-      // Note: The webhook is now active and waiting for messages
-      // When a message arrives, it will trigger the flow execution automatically
-
-    } catch (error: any) {
-      console.error('Webhook setup failed:', error);
-      setWebhookError(error.message || 'Failed to setup webhook');
-      setWebhookSetupState('error');
+      
+      const result = await response.json();
+      console.log('✅ Telegram Node - Execution Result:', result);
+      
+      // Update the node instance with execution results - same as DeepSeek
+      if (nodeData.onNodeUpdate) {
+        nodeData.onNodeUpdate(id, {
+          data: {
+            ...instanceData,
+            lastExecution: {
+              status: 'success',
+              timestamp: new Date().toISOString(),
+              inputs: {},
+              outputs: result.outputs,
+              logs: result.logs
+            }
+          }
+        });
+      }
+      
+      // Show success message
+      setExecutionResult(result.logs?.[0] || 'Webhook activated - waiting for Telegram message');
+      
+    } catch (error) {
+      console.error('❌ Telegram Node - Execution Error:', error);
+      
+      // Update node with error status
+      if (nodeData.onNodeUpdate) {
+        nodeData.onNodeUpdate(id, {
+          data: {
+            ...instanceData,
+            lastExecution: {
+              status: 'error',
+              timestamp: new Date().toISOString(),
+              error: error instanceof Error ? error.message : String(error)
+            }
+          }
+        });
+      }
+      
+      // Show error message
+      setExecutionError(error instanceof Error ? error.message : String(error) || 'An unknown error occurred');
+      
     } finally {
       setIsExecuting(false);
     }
@@ -265,9 +234,11 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
         {/* Warning indicator for missing settings */}
         {settingsValidationState === 'error' && (
           <Box sx={{ position: 'absolute', top: -8, right: -8, zIndex: 1 }}>
-            <Tooltip title="Bot access token required">
-              <WarningIcon sx={{ color: '#f44336', fontSize: 20 }} />
-            </Tooltip>
+            <Zoom in={settingsValidationState === 'error'}>
+              <Tooltip title="Bot access token required">
+                <WarningIcon sx={{ color: '#f44336', fontSize: 20 }} />
+              </Tooltip>
+            </Zoom>
           </Box>
         )}
 
@@ -341,9 +312,9 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
         )}
 
         {/* Status Display */}
-        {!executionData.hasFreshResults && webhookSetupState === 'success' && (
+        {executionResult && (
           <Alert severity="success" sx={{ mt: 1, fontSize: '0.7rem', py: 0.5 }}>
-            Webhook active - waiting for messages
+            {executionResult}
           </Alert>
         )}
         
@@ -355,15 +326,34 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
         
         {/* Success indicator for received messages */}
         {executionData.hasFreshResults && executionData.isSuccess && (
-          <Alert severity="success" sx={{ mt: 1, fontSize: '0.7rem', py: 0.5 }}>
-            Message received and processed successfully
+          <Alert 
+            severity="success" 
+            icon={<CheckCircleIcon />}
+            sx={{ mt: 1, fontSize: '0.75rem' }}
+          >
+            <Typography variant="caption">
+              Telegram message processed successfully
+            </Typography>
+          </Alert>
+        )}
+        
+        {/* Error indicator */}
+        {executionData.hasFreshResults && executionData.isError && (
+          <Alert 
+            severity="error" 
+            icon={<ErrorIcon />}
+            sx={{ mt: 1, fontSize: '0.75rem' }}
+          >
+            <Typography variant="caption">
+              Execution failed
+            </Typography>
           </Alert>
         )}
 
         {/* Error Display */}
-        {webhookError && (
+        {executionError && (
           <Alert severity="error" sx={{ mt: 1, fontSize: '0.7rem', py: 0.5 }}>
-            {webhookError}
+            {executionError}
           </Alert>
         )}
 

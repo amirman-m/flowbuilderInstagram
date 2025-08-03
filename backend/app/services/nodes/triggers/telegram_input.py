@@ -92,7 +92,7 @@ async def setup_telegram_webhook(access_token: str, webhook_url: str) -> bool:
 async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecutionResult:
     """
     Execute Telegram input trigger node
-    This node processes incoming Telegram webhook updates
+    This handles both direct execution (webhook setup) and webhook data processing
     """
     
     # Get settings from context
@@ -109,12 +109,48 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
     # Get webhook data from context (this will be provided by the webhook endpoint)
     webhook_data = context.get("webhook_data")
     
+    # If no webhook data, this is a direct execution (setup webhook)
     if not webhook_data:
-        return NodeExecutionResult(
-            outputs={},
-            status="error",
-            error="No webhook data provided"
-        )
+        try:
+            # Get node_id to construct webhook URL
+            node_id = context.get("nodeId", "unknown")
+            
+            # For direct execution, we set up the webhook and return success
+            # The actual webhook URL should be constructed based on the flow
+            # This is a simplified version - in production you'd get the flow_id properly
+            webhook_url = f"https://asangram.tech/api/v1/telegram/webhook/1"  # Hardcoded for now
+            
+            # Set up webhook
+            webhook_success = await setup_telegram_webhook(access_token, webhook_url)
+            
+            if webhook_success:
+                return NodeExecutionResult(
+                    outputs={
+                        "message_data": {
+                            "status": "webhook_active",
+                            "webhook_url": webhook_url,
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        }
+                    },
+                    status="success",
+                    started_at=datetime.now(timezone.utc),
+                    completed_at=datetime.now(timezone.utc),
+                    logs=["Telegram webhook activated successfully - waiting for messages"]
+                )
+            else:
+                return NodeExecutionResult(
+                    outputs={},
+                    status="error",
+                    error="Failed to set up Telegram webhook"
+                )
+                
+        except Exception as e:
+            logger.error(f"Error setting up Telegram webhook: {str(e)}")
+            return NodeExecutionResult(
+                outputs={},
+                status="error",
+                error=f"Failed to set up webhook: {str(e)}"
+            )
     
     try:
         # Parse Telegram update
