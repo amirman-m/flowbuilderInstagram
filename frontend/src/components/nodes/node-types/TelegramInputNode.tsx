@@ -72,6 +72,8 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
 
     const pollForResults = async () => {
       try {
+        console.log('🔍 Polling for webhook results - Node ID:', id, 'Flow ID:', flowId);
+        
         const response = await fetch(`${API_BASE_URL}/flows/${flowId}/nodes`, {
           method: 'GET',
           credentials: 'include'
@@ -79,37 +81,60 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
         
         if (response.ok) {
           const nodes = await response.json();
+          console.log('📊 All nodes from API:', nodes.map(n => ({ id: n.id, type: n.typeId, hasLastExecution: !!n.data?.lastExecution })));
+          
           const currentNode = nodes.find((node: any) => node.id === id);
+          console.log('🎯 Current node found:', !!currentNode, 'Node data:', currentNode?.data);
           
           if (currentNode && currentNode.data && currentNode.data.lastExecution) {
             const lastExecution = currentNode.data.lastExecution;
             const executionTimestamp = lastExecution.timestamp;
             
+            console.log('🕰️ Execution timestamps - Current:', executionTimestamp, 'Last polled:', lastPolledTimestamp);
+            
             // Only update if we have a new execution result
             if (executionTimestamp !== lastPolledTimestamp) {
-              console.log(' New webhook execution detected:', lastExecution);
+              console.log('🔄 NEW WEBHOOK EXECUTION DETECTED!');
+              console.log('Last execution data:', lastExecution);
+              console.log('Execution outputs:', lastExecution.outputs);
               
-              // Update the node state with the execution results
+              // Update the node state with the execution results - EXACTLY like DeepSeek node
               if (nodeData.onNodeUpdate) {
-                nodeData.onNodeUpdate(id, {
+                const updateData = {
                   data: {
                     ...instance.data,
-                    lastExecution,
-                    outputs: lastExecution.outputs || {},
-                    executionResult: lastExecution,
-                    status: lastExecution.status,
-                    executionTime: lastExecution.executionTime,
+                    lastExecution: {
+                      status: 'success',
+                      timestamp: executionTimestamp,
+                      outputs: lastExecution.outputs || {},
+                      executionTime: lastExecution.executionTime || 0
+                    },
+                    outputs: lastExecution.outputs || {}, // Direct outputs for immediate access
+                    executionResult: lastExecution.outputs || {}, // For compatibility
                     lastExecuted: executionTimestamp
                   }
-                });
+                };
+                
+                console.log('🔄 Calling onNodeUpdate with data:', updateData);
+                nodeData.onNodeUpdate(id, updateData);
+                
+                console.log('✅ Updated Telegram node state with execution results');
+              } else {
+                console.error('❌ onNodeUpdate is not available!');
               }
               
               setLastPolledTimestamp(executionTimestamp);
+            } else {
+              console.log('🔄 No new execution results (timestamps match)');
             }
+          } else {
+            console.log('⚠️ No lastExecution found in current node');
           }
+        } else {
+          console.error('❌ Failed to fetch nodes:', response.status, response.statusText);
         }
       } catch (error) {
-        console.error(' Failed to poll for webhook results:', error);
+        console.error('❌ Failed to poll for webhook results:', error);
       }
     };
 
