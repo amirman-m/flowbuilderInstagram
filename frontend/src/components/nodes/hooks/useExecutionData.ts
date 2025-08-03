@@ -28,7 +28,7 @@ export const useExecutionData = (data: NodeDataWithHandlers) => {
     
     // If no outputs found, check lastExecution data (for webhook-triggered executions)
     if (!currentOutputs || Object.keys(currentOutputs).length === 0) {
-      const lastExecution = instanceData.lastExecution;
+      const lastExecution = (instance as any)?.lastExecution;
       if (lastExecution && lastExecution.outputs) {
         currentOutputs = lastExecution.outputs;
       }

@@ -84,45 +84,45 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
           console.log('📊 All nodes from API:', nodes.map(n => ({ id: n.id, type: n.typeId, hasLastExecution: !!n.data?.lastExecution })));
           
           const currentNode = nodes.find((node: any) => node.id === id);
-          console.log('🎯 Current node found:', !!currentNode, 'Node data:', currentNode?.data);
-          
-          if (currentNode && currentNode.data && currentNode.data.lastExecution) {
-            const lastExecution = currentNode.data.lastExecution;
+          console.log('🎯 Current node found:', !!currentNode, 'Node data:', currentNode);
+
+          if (currentNode && currentNode.lastExecution) {
+            const lastExecution = currentNode.lastExecution;
             const executionTimestamp = lastExecution.timestamp;
-            
+
             console.log('🕰️ Execution timestamps - Current:', executionTimestamp, 'Last polled:', lastPolledTimestamp);
-            
+
             // Only update if we have a new execution result
             if (executionTimestamp !== lastPolledTimestamp) {
               console.log('🔄 NEW WEBHOOK EXECUTION DETECTED!');
               console.log('Last execution data:', lastExecution);
               console.log('Execution outputs:', lastExecution.outputs);
-              
-              // Update the node state with the execution results - EXACTLY like DeepSeek node
+
+              // Update the node state with the execution results
               if (nodeData.onNodeUpdate) {
                 const updateData = {
+                  lastExecution: {
+                    status: 'success',
+                    timestamp: executionTimestamp,
+                    outputs: lastExecution.outputs || {},
+                    executionTime: lastExecution.executionTime || 0
+                  },
                   data: {
                     ...instance.data,
-                    lastExecution: {
-                      status: 'success',
-                      timestamp: executionTimestamp,
-                      outputs: lastExecution.outputs || {},
-                      executionTime: lastExecution.executionTime || 0
-                    },
                     outputs: lastExecution.outputs || {}, // Direct outputs for immediate access
                     executionResult: lastExecution.outputs || {}, // For compatibility
                     lastExecuted: executionTimestamp
                   }
                 };
-                
+
                 console.log('🔄 Calling onNodeUpdate with data:', updateData);
                 nodeData.onNodeUpdate(id, updateData);
-                
+
                 console.log('✅ Updated Telegram node state with execution results');
               } else {
                 console.error('❌ onNodeUpdate is not available!');
               }
-              
+
               setLastPolledTimestamp(executionTimestamp);
             } else {
               console.log('🔄 No new execution results (timestamps match)');

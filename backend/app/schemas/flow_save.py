@@ -14,6 +14,26 @@ class PortSchema(BaseModel):
     data: Optional[Dict[str, Any]] = None
 
 
+class LastExecutionSchema(BaseModel):
+    """Represents the result of the last execution of a node."""
+    timestamp: str
+    status: str
+    outputs: Dict[str, Any]
+    executionTime: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+class LastExecutionSchema(BaseModel):
+    """Represents the result of the last execution of a node."""
+    timestamp: str
+    status: str
+    outputs: Dict[str, Any]
+    executionTime: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
 class NodeSchema(BaseModel):
     """Serialized node instance coming from the front-end."""
 
@@ -24,6 +44,8 @@ class NodeSchema(BaseModel):
     settings: Optional[Dict[str, Any]] = Field(default_factory=dict)
     data: Optional[Dict[str, Any]] = None
     disabled: Optional[bool] = False
+    last_execution: Optional[LastExecutionSchema] = Field(None, alias="lastExecution")
+
 
     class Config:
         allow_population_by_field_name = True
