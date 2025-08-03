@@ -108,7 +108,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
     }
   };
 
-  // Handle node execution - DIRECT APPROACH like DeepSeek
+  // Handle node execution - USER-FOCUSED APPROACH
   const handleExecute = async (event: React.MouseEvent) => {
     event.stopPropagation();
     setExecutionResult(null);
@@ -122,7 +122,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
     setIsExecuting(true);
 
     try {
-      // Direct webhook setup - single API call like DeepSeek
+      // Step 1: Set up webhook
       setExecutionResult('Setting up Telegram webhook...');
       
       const response = await fetch(`${API_BASE_URL}/telegram/setup-webhook/1`, {
@@ -138,28 +138,73 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
 
       const result = await response.json();
       
-      // Update node with execution results - webhook activated status
-      if (nodeData.onNodeUpdate) {
-        nodeData.onNodeUpdate(id, {
-          data: {
-            ...instanceData,
-            lastExecution: {
-              status: 'success',
-              timestamp: new Date().toISOString(),
-              outputs: { 
-                message_data: {
-                  status: 'webhook_activated',
-                  webhook_url: result.webhook_url,
-                  message: 'Webhook activated - waiting for Telegram messages'
-                }
-              },
-              logs: ['Telegram webhook activated successfully']
-            }
-          }
-        });
-      }
+      // Step 2: Show waiting status and start polling for actual message
+      setExecutionResult('✅ Webhook activated! Send a Telegram message to your bot now...');
       
-      setExecutionResult('Webhook activated! Send a Telegram message to your bot to trigger the flow.');
+      // Start polling for actual message data (user-facing automation)
+      const pollForMessage = async () => {
+        const maxPolls = 60; // Poll for 60 seconds
+        const pollInterval = 1000; // Every 1 second
+        
+        for (let i = 0; i < maxPolls; i++) {
+          try {
+            // Check if we have received actual message data
+            const nodeResponse = await fetch(`${API_BASE_URL}/flows/1/nodes`, {
+              method: 'GET',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+            });
+            
+            if (nodeResponse.ok) {
+              const nodes = await nodeResponse.json();
+              const telegramNode = nodes.find((node: any) => node.type_id === 'telegram_input');
+              
+              if (telegramNode?.data?.lastExecution?.outputs?.message_data) {
+                const messageData = telegramNode.data.lastExecution.outputs.message_data;
+                
+                // Check if this is actual message data (not just webhook activation)
+                if (messageData.chat_id && messageData.input_text) {
+                  // We got actual message! Update UI
+                  const inputText = messageData.input_text || messageData.chat_input || 'N/A';
+                  const chatId = messageData.chat_id || 'N/A';
+                  const inputType = messageData.input_type || 'text';
+                  
+                  // Update node with actual execution results
+                  if (nodeData.onNodeUpdate) {
+                    nodeData.onNodeUpdate(id, {
+                      data: {
+                        ...instanceData,
+                        lastExecution: telegramNode.data.lastExecution
+                      }
+                    });
+                  }
+                  
+                  setExecutionResult(`📨 Message received! "${inputText}" from chat ${chatId} (${inputType})`);
+                  setIsExecuting(false);
+                  return;
+                }
+              }
+            }
+            
+            // Wait before next poll
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+            
+            // Update waiting message with countdown
+            const remainingTime = maxPolls - i;
+            setExecutionResult(`⏳ Waiting for Telegram message... (${remainingTime}s remaining)`);
+            
+          } catch (pollError) {
+            console.error('Polling error:', pollError);
+          }
+        }
+        
+        // Timeout reached
+        setExecutionResult('⏰ Timeout: No message received in 60 seconds. You can try again.');
+        setIsExecuting(false);
+      };
+      
+      // Start polling in background
+      pollForMessage();
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -177,7 +222,6 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
           }
         });
       }
-    } finally {
       setIsExecuting(false);
     }
   };

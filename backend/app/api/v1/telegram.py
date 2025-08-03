@@ -60,14 +60,41 @@ async def telegram_webhook(
         result = await process_webhook_message(webhook_data, access_token)
         
         if result.status == "success":
+            # Extract actual message data for user display
+            message_data = result.outputs.get("message_data", {})
+            input_text = message_data.get('input_text') or message_data.get('chat_input', 'N/A')
+            chat_id = message_data.get('chat_id', 'N/A')
+            input_type = message_data.get('input_type', 'unknown')
+            
+            # Update the Telegram trigger node with actual message data for frontend display
+            try:
+                current_data = telegram_trigger.data or {}
+                current_data["lastExecution"] = {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "status": "success",
+                    "outputs": {
+                        "message_data": message_data
+                    },
+                    "logs": [f"Telegram message received from chat {chat_id}: '{input_text}'"],
+                    "executionTime": 0
+                }
+                
+                telegram_trigger.data = current_data
+                db.commit()
+                
+                logger.info(f"Stored actual message data for frontend display: chat_id={chat_id}, text='{input_text}'")
+                
+            except Exception as e:
+                logger.error(f"Failed to store message data in node: {str(e)}")
+            
             # Execute the flow with the processed message data
             try:
-                flow_executor = create_flow_executor()
+                flow_executor = create_flow_executor(db)
                 
                 # Create execution context with webhook data
                 execution_context = {
                     "webhook_data": webhook_data,
-                    "trigger_data": result.outputs.get("message_data", {})
+                    "trigger_data": message_data
                 }
                 
                 # Execute the flow
@@ -80,8 +107,8 @@ async def telegram_webhook(
                 logger.info(f"Flow {flow_id} executed successfully via Telegram webhook")
                 return {
                     "ok": True, 
-                    "message": "Flow executed successfully",
-                    "execution_result": execution_result.dict() if hasattr(execution_result, 'dict') else str(execution_result)
+                    "message": f"Message processed: '{input_text}' from chat {chat_id}",
+                    "message_data": message_data
                 }
                 
             except Exception as e:
