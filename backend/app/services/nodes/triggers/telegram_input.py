@@ -219,16 +219,18 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
     2. Webhook processing (from webhook endpoint) - Processes and stores message data
     """
     
-    # Get settings from context
+    # Get settings from context and request payload
     settings = context.get("settings", {})
-    access_token = settings.get("access_token") or context.get("access_token")
+    # First try to get access_token from request payload, then from settings
+    access_token = context.get("access_token") or settings.get("access_token")
     
     # Debug logging to see what's in context
-    logger.info(f"Context keys: {list(context.keys())}")
-    logger.info(f"Settings: {settings}")
-    logger.info(f"Access token from settings: {settings.get('access_token')}")
-    logger.info(f"Access token from context: {context.get('access_token')}")
-    logger.info(f"Final access token: {access_token}")
+    logger.info(f"🔍 Context keys: {list(context.keys())}")
+    logger.info(f"🔍 Settings from database: {settings}")
+    logger.info(f"🔍 Settings type: {type(settings)}")
+    logger.info(f"🔍 Access token from settings: {settings.get('access_token') if isinstance(settings, dict) else 'Settings not dict'}")
+    logger.info(f"🔍 Access token from context: {context.get('access_token')}")
+    logger.info(f"🔍 Final access token: {access_token}")
     
     if not access_token:
         logger.error(f"No access token found. Context: {context}")

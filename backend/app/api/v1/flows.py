@@ -227,8 +227,17 @@ async def execute_node(
             "node_id": node_id,
             "flow_id": flow_id,
             "settings": node_instance.settings or {},
-            **request.inputs  # Include access_token and other inputs from frontend
         }
+        
+        # Add all request inputs (including access_token) to context
+        if hasattr(request, 'inputs') and request.inputs:
+            context.update(request.inputs)
+            
+        # Debug: Log what we're sending to the node
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"🔍 DEBUG: Request inputs: {getattr(request, 'inputs', 'No inputs attr')}")
+        logger.info(f"🔍 DEBUG: Final context: {context}")
         
         # Execute the node using the node registry with full context
         result = await node_registry.execute_node(node_type_id, context)
