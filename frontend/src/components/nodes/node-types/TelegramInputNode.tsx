@@ -108,7 +108,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
     }
   };
 
-  // Handle node execution - USER-FOCUSED APPROACH
+  // Handle node execution - SINGLE PROCESS APPROACH like DeepSeek
   const handleExecute = async (event: React.MouseEvent) => {
     event.stopPropagation();
     setExecutionResult(null);
@@ -122,118 +122,73 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
     setIsExecuting(true);
 
     try {
-      // Step 1: Set up webhook
-      setExecutionResult('Setting up Telegram webhook...');
-      
-      const response = await fetch(`${API_BASE_URL}/telegram/setup-webhook/1`, {
+      // Step 1: Set up webhook (only once)
+      console.log('🔧 Setting up Telegram webhook...');
+      const setupResponse = await fetch(`${API_BASE_URL}/telegram/setup-webhook/1`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
+      if (!setupResponse.ok) {
+        const errorData = await setupResponse.json();
         throw new Error(errorData.detail || 'Failed to set up webhook');
       }
 
-      await response.json(); // Webhook setup successful
+      console.log('✅ Webhook setup successful');
       
-      // Step 2: Show waiting status and start polling for actual message
-      setExecutionResult('✅ Webhook activated! Send a Telegram message to your bot now...');
+      // Step 2: Execute node directly (like DeepSeek) - this will wait for message
+      console.log('⚡ Executing Telegram node and waiting for message...');
+      setExecutionResult('Webhook activated! Waiting for Telegram message...');
       
-      // Start polling for actual message data (user-facing automation)
-      const pollForMessage = async () => {
-        const maxPolls = 60; // Poll for 60 seconds
-        const pollInterval = 1000; // Every 1 second
-        
-        for (let i = 0; i < maxPolls; i++) {
-          try {
-            // Check if we have received actual message data
-            const nodeResponse = await fetch(`${API_BASE_URL}/flows/1/nodes`, {
-              method: 'GET',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-            });
-            
-            if (nodeResponse.ok) {
-              const nodes = await nodeResponse.json();
-              const telegramNode = nodes.find((node: any) => node.type_id === 'telegram_input');
-              
-              console.log('Polling - Found telegram node:', telegramNode);
-              console.log('Polling - lastExecution:', telegramNode?.data?.lastExecution);
-              
-              if (telegramNode?.data?.lastExecution) {
-                const lastExecution = telegramNode.data.lastExecution;
-                console.log('Polling - lastExecution data:', lastExecution);
-                
-                // Check if we have message data in outputs
-                if (lastExecution.outputs?.message_data) {
-                  const messageData = lastExecution.outputs.message_data;
-                  console.log('Polling - message_data:', messageData);
-                  
-                  // Check if this is actual message data (has chat_id)
-                  if (messageData.chat_id && (messageData.input_text || messageData.chat_input)) {
-                    // We got actual message! Update UI
-                    const inputText = messageData.input_text || messageData.chat_input || 'N/A';
-                    const chatId = messageData.chat_id || 'N/A';
-                    const inputType = messageData.input_type || 'text';
-                    
-                    console.log('SUCCESS: Found message data!', { inputText, chatId, inputType });
-                    
-                    // Update node with actual execution results
-                    if (nodeData.onNodeUpdate) {
-                      nodeData.onNodeUpdate(id, {
-                        data: {
-                          ...instanceData,
-                          lastExecution: lastExecution
-                        }
-                      });
-                    }
-                    
-                    setExecutionResult(`📨 Message received! "${inputText}" from chat ${chatId} (${inputType})`);
-                    setIsExecuting(false);
-                    return;
-                  } else {
-                    console.log('Polling - No valid message data yet:', { 
-                      hasChatId: !!messageData.chat_id, 
-                      hasInputText: !!(messageData.input_text || messageData.chat_input),
-                      messageData 
-                    });
-                  }
-                } else {
-                  console.log('Polling - No message_data in outputs:', lastExecution.outputs);
-                }
-              } else {
-                console.log('Polling - No lastExecution found');
-              }
-            } else {
-              console.log('Polling - API request failed:', nodeResponse.status);
+      const executeResponse = await fetch(`${API_BASE_URL}/flows/1/nodes/${id}/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          access_token: currentSettings.access_token
+        })
+      });
+
+      if (!executeResponse.ok) {
+        const errorData = await executeResponse.json();
+        throw new Error(errorData.detail || 'Failed to execute node');
+      }
+
+      const executeData = await executeResponse.json();
+      console.log('✅ Node execution completed:', executeData);
+      
+      // Update node with execution results (like DeepSeek)
+      if (nodeData.onNodeUpdate) {
+        nodeData.onNodeUpdate(id, {
+          data: {
+            ...instanceData,
+            lastExecution: {
+              timestamp: new Date().toISOString(),
+              status: 'success',
+              outputs: executeData.outputs || {},
+              logs: executeData.logs || []
             }
-            
-            // Wait before next poll
-            await new Promise(resolve => setTimeout(resolve, pollInterval));
-            
-            // Update waiting message with countdown
-            const remainingTime = maxPolls - i;
-            setExecutionResult(`⏳ Waiting for Telegram message... (${remainingTime}s remaining)`);
-            
-          } catch (pollError) {
-            console.error('Polling error:', pollError);
           }
-        }
-        
-        // Timeout reached
-        setExecutionResult('⏰ Timeout: No message received in 60 seconds. You can try again.');
-        setIsExecuting(false);
-      };
+        });
+      }
       
-      // Start polling in background
-      pollForMessage();
+      // Show success message with actual data
+      if (executeData.outputs?.message_data) {
+        const messageData = executeData.outputs.message_data;
+        const inputText = messageData.input_text || messageData.chat_input || 'N/A';
+        const chatId = messageData.chat_id || 'N/A';
+        setExecutionResult(`📨 Message received! "${inputText}" from chat ${chatId}`);
+      } else {
+        setExecutionResult('✅ Execution completed successfully');
+      }
       
     } catch (error) {
+      console.error('❌ Telegram execution failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       setExecutionError(errorMessage);
       
+      // Update node with error (like DeepSeek)
       if (nodeData.onNodeUpdate) {
         nodeData.onNodeUpdate(id, {
           data: {
@@ -246,6 +201,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
           }
         });
       }
+    } finally {
       setIsExecuting(false);
     }
   };
