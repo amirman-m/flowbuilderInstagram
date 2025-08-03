@@ -108,7 +108,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
     }
   };
 
-  // Handle node execution - Two-step API approach
+  // Handle node execution - DIRECT APPROACH like DeepSeek
   const handleExecute = async (event: React.MouseEvent) => {
     event.stopPropagation();
     setExecutionResult(null);
@@ -122,50 +122,23 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
     setIsExecuting(true);
 
     try {
-      // Step 1: Set up webhook
+      // Direct webhook setup - single API call like DeepSeek
       setExecutionResult('Setting up Telegram webhook...');
       
-      const setupResponse = await fetch(`${API_BASE_URL}/telegram/setup-webhook-for-execution/1`, {
+      const response = await fetch(`${API_BASE_URL}/telegram/setup-webhook/1`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          access_token: currentSettings.access_token
-        }),
       });
 
-      if (!setupResponse.ok) {
-        const errorData = await setupResponse.json();
+      if (!response.ok) {
+        const errorData = await response.json();
         throw new Error(errorData.detail || 'Failed to set up webhook');
       }
 
-      const setupResult = await setupResponse.json();
-      const executionId = setupResult.execution_id;
+      const result = await response.json();
       
-      // Step 2: Wait for message
-      setExecutionResult('Webhook activated! Send a Telegram message now...');
-      
-      const waitResponse = await fetch(`${API_BASE_URL}/telegram/wait-for-message/${executionId}?timeout=30`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-      });
-
-      if (!waitResponse.ok) {
-        if (waitResponse.status === 408) {
-          // Timeout - user can retry
-          const errorData = await waitResponse.json();
-          throw new Error(errorData.detail || 'Timeout waiting for message. You can try again.');
-        } else {
-          const errorData = await waitResponse.json();
-          throw new Error(errorData.detail || 'Failed to receive message');
-        }
-      }
-
-      const waitResult = await waitResponse.json();
-      const messageData = waitResult.message_data;
-      
-      // Update node with execution results
+      // Update node with execution results - webhook activated status
       if (nodeData.onNodeUpdate) {
         nodeData.onNodeUpdate(id, {
           data: {
@@ -173,20 +146,20 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
             lastExecution: {
               status: 'success',
               timestamp: new Date().toISOString(),
-              outputs: { message_data: messageData },
-              logs: waitResult.logs || [],
-              executionTime: waitResult.execution_time || 0
+              outputs: { 
+                message_data: {
+                  status: 'webhook_activated',
+                  webhook_url: result.webhook_url,
+                  message: 'Webhook activated - waiting for Telegram messages'
+                }
+              },
+              logs: ['Telegram webhook activated successfully']
             }
           }
         });
       }
-
-      // Extract text for display
-      const inputText = messageData?.input_text || messageData?.chat_input || 'N/A';
-      const chatId = messageData?.chat_id || 'N/A';
-      const inputType = messageData?.input_type || 'unknown';
       
-      setExecutionResult(`Message received! Text: "${inputText}" • Chat ID: ${chatId} • Type: ${inputType}`);
+      setExecutionResult('Webhook activated! Send a Telegram message to your bot to trigger the flow.');
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
