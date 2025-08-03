@@ -83,10 +83,22 @@ async def setup_telegram_webhook(access_token: str, webhook_url: str) -> bool:
                     logger.info(f"Telegram webhook set up successfully for {webhook_url}")
                     return True
                 else:
-                    logger.error(f"Telegram API error: {result.get('description', 'Unknown error')}")
+                    error_desc = result.get('description', 'Unknown error')
+                    logger.error(f"Telegram API error: {error_desc}")
+                    logger.error(f"Full Telegram response: {result}")
                     return False
             else:
-                logger.error(f"Failed to set up webhook: HTTP {response.status_code}")
+                # Try to get error details from response body
+                try:
+                    error_result = response.json()
+                    error_desc = error_result.get('description', 'No description provided')
+                    logger.error(f"Failed to set up webhook: HTTP {response.status_code} - {error_desc}")
+                    logger.error(f"Full error response: {error_result}")
+                except:
+                    logger.error(f"Failed to set up webhook: HTTP {response.status_code}")
+                    logger.error(f"Response text: {response.text}")
+                
+                logger.error(f"Webhook URL attempted: {webhook_url}")
                 return False
                 
     except Exception as e:

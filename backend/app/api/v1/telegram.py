@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/webhook/{flow_id}")
+@router.get("/webhook/{flow_id}")
 async def telegram_webhook(
     flow_id: int,
     request: Request,
@@ -24,7 +25,11 @@ async def telegram_webhook(
     Telegram webhook endpoint that receives updates and triggers flow execution
     """
     try:
-        # Get the webhook payload
+        # Handle GET requests (Telegram validation)
+        if request.method == "GET":
+            return {"ok": True, "message": "Webhook endpoint is ready"}
+        
+        # Get the webhook payload for POST requests
         webhook_data = await request.json()
         logger.info(f"Received Telegram webhook for flow {flow_id} (execution_id: {execution_id}): {json.dumps(webhook_data, indent=2)}")
         
