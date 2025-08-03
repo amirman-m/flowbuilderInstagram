@@ -81,7 +81,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
         
         if (response.ok) {
           const nodes = await response.json();
-          console.log('📊 All nodes from API:', nodes.map(n => ({ id: n.id, type: n.typeId, hasLastExecution: !!n.data?.lastExecution })));
+          console.log('📊 All nodes from API:', nodes.map((n: any) => ({ id: n.id, type: n.typeId, hasLastExecution: !!n.data?.lastExecution })));
           
           const currentNode = nodes.find((node: any) => node.id === id);
           console.log('🎯 Current node found:', !!currentNode, 'Node data:', currentNode);
