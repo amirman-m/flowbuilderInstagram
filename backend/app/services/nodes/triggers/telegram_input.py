@@ -219,10 +219,11 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
     2. Webhook processing (from webhook endpoint) - Processes and stores message data
     """
     
-    # Get settings from context and request payload
+    # Get settings from context and request payload (like other nodes)
     settings = context.get("settings", {})
-    # First try to get access_token from request payload, then from settings
-    access_token = context.get("access_token") or settings.get("access_token")
+    inputs = context.get("inputs", {})
+    # First try to get access_token from request inputs, then from settings
+    access_token = inputs.get("access_token") or settings.get("access_token")
     
     # Debug logging to see what's in context
     logger.info(f"🔍 Context keys: {list(context.keys())}")
