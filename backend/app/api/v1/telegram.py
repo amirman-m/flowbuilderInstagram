@@ -36,7 +36,10 @@ async def telegram_webhook(
         # If execution_id is provided, this is for synchronous execution
         if execution_id:
             # Import here to avoid circular imports
-            from ...services.nodes.triggers.telegram_input import _message_queues, process_webhook_message
+            from ...services.nodes.triggers.telegram_input import _message_queues, process_webhook_message, _load_queue_state
+            
+            # Load queue state from file in case we're in a different process
+            _load_queue_state()
             
             # Check if there's a queue waiting for this execution
             logger.info(f"Webhook checking for execution_id {execution_id}. Available queues: {list(_message_queues.keys())}")
@@ -67,11 +70,21 @@ async def telegram_webhook(
                     result = await process_webhook_message(webhook_data, access_token)
                     
                     if result.status == "success":
-                        # Put the processed message data into the queue
+                        # Store the processed message data in database for cross-process access
                         message_data = result.outputs.get("message_data", {})
-                        _message_queues[execution_id].put(message_data, timeout=1)
-                        logger.info(f"Processed message data queued for synchronous execution {execution_id}: {message_data}")
-                        return {"ok": True, "message": "Message processed and queued"}
+                        
+                        # Import database storage function
+                        from ...services.nodes.triggers.telegram_input import _store_message_in_db
+                        
+                        # Store in database
+                        storage_success = await _store_message_in_db(execution_id, message_data)
+                        
+                        if storage_success:
+                            logger.info(f"Processed message data stored in database for synchronous execution {execution_id}: {message_data}")
+                            return {"ok": True, "message": "Message processed and stored"}
+                        else:
+                            logger.error(f"Failed to store message data for execution {execution_id}")
+                            return {"ok": False, "error": "Failed to store message data"}
                     else:
                         logger.error(f"Failed to process webhook message for execution {execution_id}: {result.error}")
                         return {"ok": False, "error": f"Message processing failed: {result.error}"}

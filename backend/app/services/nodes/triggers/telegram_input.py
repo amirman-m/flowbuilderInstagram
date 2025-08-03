@@ -9,12 +9,150 @@ import logging
 import threading
 import queue
 import time
+import threading
+import os
+import json
+import asyncio
 
 logger = logging.getLogger(__name__)
 
 # Global state to track webhook registrations and message queues
 _webhook_states = {}
 _message_queues = {}  # Store message queues for waiting executions
+_queue_lock = threading.Lock()  # Thread safety for queue operations
+
+# File-based queue tracking for multi-process coordination
+QUEUE_TRACKING_FILE = "/tmp/telegram_queues.json"
+
+def _save_queue_state():
+    """Save current queue state to file for multi-process coordination"""
+    try:
+        with _queue_lock:
+            queue_info = {exec_id: True for exec_id in _message_queues.keys()}
+            with open(QUEUE_TRACKING_FILE, 'w') as f:
+                json.dump(queue_info, f)
+    except Exception as e:
+        logger.error(f"Failed to save queue state: {e}")
+
+def _load_queue_state():
+    """Load queue state from file and recreate missing queues"""
+    try:
+        if os.path.exists(QUEUE_TRACKING_FILE):
+            with open(QUEUE_TRACKING_FILE, 'r') as f:
+                queue_info = json.load(f)
+            
+            with _queue_lock:
+                for exec_id in queue_info.keys():
+                    if exec_id not in _message_queues:
+                        _message_queues[exec_id] = queue.Queue(maxsize=1)
+                        logger.info(f"Recreated queue for execution_id {exec_id}")
+    except Exception as e:
+        logger.error(f"Failed to load queue state: {e}")
+
+# Database-based message storage for multi-process coordination
+TELEGRAM_MESSAGES_TABLE = "telegram_execution_messages"
+
+async def _store_message_in_db(execution_id: str, message_data: dict):
+    """Store Telegram message data in database for cross-process access"""
+    try:
+        from ...core.database import get_db
+        from sqlalchemy import text
+        
+        # Get database session
+        db = next(get_db())
+        
+        # Create table if it doesn't exist
+        create_table_sql = f"""
+        CREATE TABLE IF NOT EXISTS {TELEGRAM_MESSAGES_TABLE} (
+            execution_id VARCHAR(255) PRIMARY KEY,
+            message_data JSONB NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+        db.execute(text(create_table_sql))
+        
+        # Store message data
+        insert_sql = f"""
+        INSERT INTO {TELEGRAM_MESSAGES_TABLE} (execution_id, message_data)
+        VALUES (:execution_id, :message_data)
+        ON CONFLICT (execution_id) DO UPDATE SET
+            message_data = EXCLUDED.message_data,
+            created_at = CURRENT_TIMESTAMP
+        """
+        
+        db.execute(text(insert_sql), {
+            "execution_id": execution_id,
+            "message_data": json.dumps(message_data)
+        })
+        db.commit()
+        
+        logger.info(f"Stored message data in database for execution {execution_id}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to store message in database: {str(e)}")
+        return False
+    finally:
+        if 'db' in locals():
+            db.close()
+
+async def _get_message_from_db(execution_id: str) -> dict:
+    """Retrieve Telegram message data from database"""
+    try:
+        from ...core.database import get_db
+        from sqlalchemy import text
+        
+        # Get database session
+        db = next(get_db())
+        
+        # Query for message data
+        query_sql = f"""
+        SELECT message_data FROM {TELEGRAM_MESSAGES_TABLE}
+        WHERE execution_id = :execution_id
+        """
+        
+        result = db.execute(text(query_sql), {"execution_id": execution_id})
+        row = result.fetchone()
+        
+        if row:
+            message_data = json.loads(row[0])
+            logger.info(f"Retrieved message data from database for execution {execution_id}")
+            return message_data
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Failed to get message from database: {str(e)}")
+        return None
+    finally:
+        if 'db' in locals():
+            db.close()
+
+async def _cleanup_message_from_db(execution_id: str):
+    """Clean up message data from database after processing"""
+    try:
+        from ...core.database import get_db
+        from sqlalchemy import text
+        
+        # Get database session
+        db = next(get_db())
+        
+        # Delete message data
+        delete_sql = f"""
+        DELETE FROM {TELEGRAM_MESSAGES_TABLE}
+        WHERE execution_id = :execution_id
+        """
+        
+        db.execute(text(delete_sql), {"execution_id": execution_id})
+        db.commit()
+        
+        logger.info(f"Cleaned up message data from database for execution {execution_id}")
+        
+    except Exception as e:
+        logger.error(f"Failed to cleanup message from database: {str(e)}")
+    finally:
+        if 'db' in locals():
+            db.close()
 
 def get_telegram_input_node_type() -> NodeType:
     return NodeType(
@@ -149,58 +287,55 @@ async def setup_telegram_webhook_for_execution(access_token: str, flow_id: int) 
 
 async def wait_for_telegram_message(execution_id: str, timeout: int = 30) -> Dict[str, Any]:
     """
-    Step 2: Wait for Telegram message and return extracted data
+    Step 2: Wait for Telegram message using database polling (multi-process safe)
     """
     try:
-        # Check if queue exists
-        if execution_id not in _message_queues:
-            logger.error(f"No queue found for execution_id {execution_id}")
-            return {
-                "success": False,
-                "error": "Execution ID not found. Please set up webhook first."
-            }
-        
-        message_queue = _message_queues[execution_id]
         start_time = time.time()
-        
         logger.info(f"Waiting for message (execution: {execution_id}, timeout: {timeout}s)")
         
-        try:
-            # Wait for message to arrive in queue
-            message_data = message_queue.get(timeout=timeout)
+        # Poll database for message data instead of using in-memory queue
+        poll_interval = 0.5  # Check every 500ms
+        max_polls = int(timeout / poll_interval)
+        
+        for poll_count in range(max_polls):
+            # Check if message has been stored in database
+            message_data = await _get_message_from_db(execution_id)
             
-            # Clean up queue
-            _message_queues.pop(execution_id, None)
+            if message_data:
+                # Message found! Clean up and return
+                await _cleanup_message_from_db(execution_id)
+                
+                execution_time = time.time() - start_time
+                
+                # Extract text for logging
+                input_text = message_data.get('input_text') or message_data.get('chat_input', 'N/A')
+                chat_id = message_data.get('chat_id', 'N/A')
+                
+                logger.info(f"Message received for execution {execution_id}: chat {chat_id}, text: '{input_text}' (after {execution_time:.1f}s)")
+                
+                return {
+                    "success": True,
+                    "message_data": message_data,
+                    "logs": [f"Telegram message received from chat {chat_id}: '{input_text}'"],
+                    "execution_time": execution_time
+                }
             
-            execution_time = time.time() - start_time
-            
-            # Extract text for logging
-            input_text = message_data.get('input_text') or message_data.get('chat_input', 'N/A')
-            chat_id = message_data.get('chat_id', 'N/A')
-            
-            logger.info(f"Message received for execution {execution_id}: chat {chat_id}, text: '{input_text}'")
-            
-            return {
-                "success": True,
-                "message_data": message_data,
-                "logs": [f"Telegram message received from chat {chat_id}: '{input_text}'"],
-                "execution_time": execution_time
-            }
-            
-        except queue.Empty:
-            # Timeout - clean up queue but don't remove it yet (allow retry)
-            logger.warning(f"Timeout waiting for Telegram message (execution: {execution_id})")
-            
-            return {
-                "success": False,
-                "timeout": True,
-                "error": f"Timeout waiting for Telegram message ({timeout} seconds)"
-            }
+            # Wait before next poll
+            await asyncio.sleep(poll_interval)
+        
+        # Timeout reached
+        logger.warning(f"Timeout waiting for Telegram message (execution: {execution_id})")
+        await _cleanup_message_from_db(execution_id)  # Clean up any pending state
+        
+        return {
+            "success": False,
+            "timeout": True,
+            "error": f"Timeout waiting for Telegram message ({timeout} seconds)"
+        }
                 
     except Exception as e:
-        # Clean up queue on error
-        _message_queues.pop(execution_id, None)
         logger.error(f"Error waiting for message: {str(e)}")
+        await _cleanup_message_from_db(execution_id)  # Clean up on error
         return {
             "success": False,
             "error": f"Failed to wait for message: {str(e)}"
@@ -322,9 +457,11 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
         execution_id = str(uuid.uuid4())
         
         # Create execution ID and message queue for synchronous waiting
-        execution_id = str(uuid.uuid4())
-        message_queue = queue.Queue(maxsize=1)
-        _message_queues[execution_id] = message_queue
+        # Create message queue for this execution
+        with _queue_lock:
+            message_queue = queue.Queue(maxsize=1)
+            _message_queues[execution_id] = message_queue
+            _save_queue_state()
         
         logger.info(f"Created message queue for execution {execution_id}. Total queues: {len(_message_queues)}")
         logger.info(f"Current queue keys: {list(_message_queues.keys())}")
