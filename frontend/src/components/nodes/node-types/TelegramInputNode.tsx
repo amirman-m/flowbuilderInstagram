@@ -47,11 +47,9 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
   const [executionError, setExecutionError] = useState<string | null>(null);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [accessToken, setAccessToken] = useState('');
-  const [isWebhookActive, setIsWebhookActive] = useState(false);
-  const [lastPolledTimestamp, setLastPolledTimestamp] = useState<string | null>(null);
 
   const nodeData = data as NodeDataWithHandlers;
-  const { nodeType, instance, flowId } = nodeData;
+  const { nodeType, instance } = nodeData;
   const categoryColor = getCategoryColor(NodeCategory.TRIGGER);
   
   // Use execution data hook to get fresh execution results
@@ -70,82 +68,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
     }
   }, [currentSettings.access_token]);
 
-  // Smart polling mechanism - only active when webhook is set up and waiting for messages
-  useEffect(() => {
-    // Only poll when webhook is active and we haven't received message data yet
-    if (!isWebhookActive || executionData.hasFreshResults) {
-      return;
-    }
 
-    const pollForWebhookResults = async () => {
-      try {
-        console.log('🔍 Smart polling for Telegram webhook results - Node ID:', id, 'Flow ID:', flowId);
-        
-        const response = await fetch(`${API_BASE_URL}/flows/${flowId}/nodes`, {
-          method: 'GET',
-          credentials: 'include'
-        });
-        
-        if (response.ok) {
-          const nodes = await response.json();
-          const currentNode = nodes.find((node: any) => node.id === id);
-          
-          if (currentNode && currentNode.data && currentNode.data.lastExecution) {
-            const lastExecution = currentNode.data.lastExecution;
-            const executionTimestamp = lastExecution.timestamp;
-
-            // Only update if we have a new execution result (actual message data)
-            if (executionTimestamp !== lastPolledTimestamp && 
-                lastExecution.outputs && 
-                lastExecution.outputs.message_data &&
-                lastExecution.outputs.message_data.input_text) {
-              
-              console.log('🎉 NEW TELEGRAM MESSAGE RECEIVED!');
-              console.log('Message data:', lastExecution.outputs.message_data);
-
-              // Update the node state with the execution results
-              if (nodeData.onNodeUpdate) {
-                const updateData = {
-                  data: {
-                    ...instanceData,
-                    lastExecution: {
-                      status: 'success',
-                      timestamp: executionTimestamp,
-                      outputs: lastExecution.outputs,
-                      executionTime: lastExecution.executionTime || 0
-                    }
-                  }
-                };
-
-                console.log('🔄 Updating node with message data:', updateData);
-                nodeData.onNodeUpdate(id, updateData);
-
-                // Stop polling - we got the message data!
-                setIsWebhookActive(false);
-                setExecutionResult(`Message received: "${lastExecution.outputs.message_data.input_text}"`);
-                
-                console.log('✅ Telegram message processed and polling stopped');
-              }
-
-              setLastPolledTimestamp(executionTimestamp);
-            }
-          }
-        } else {
-          console.error('❌ Failed to fetch nodes:', response.status, response.statusText);
-        }
-      } catch (error) {
-        console.error('❌ Failed to poll for webhook results:', error);
-      }
-    };
-
-    // Poll every 3 seconds when webhook is active
-    const pollInterval = setInterval(pollForWebhookResults, 3000);
-    
-    // Initial poll
-    pollForWebhookResults();
-
-    return () => clearInterval(pollInterval);
-  }, [isWebhookActive, flowId, id, lastPolledTimestamp, executionData.hasFreshResults, nodeData.onNodeUpdate, instanceData]);
 
   // Settings handlers
   const closeSettingsDialog = () => setSettingsDialogOpen(false);
@@ -248,12 +171,8 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
         });
       }
       
-      // Show success message and activate smart polling
-      setExecutionResult(result.logs?.[0] || 'Webhook activated - waiting for Telegram message');
-      
-      // Activate smart polling to wait for actual Telegram messages
-      setIsWebhookActive(true);
-      console.log('🎯 Webhook activated - starting smart polling for messages');
+      // Show success message
+      setExecutionResult(result.logs?.[0] || 'Telegram message processed successfully');
       
     } catch (error) {
       console.error('❌ Telegram Node - Execution Error:', error);
@@ -376,19 +295,19 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
 
         {/* Execution Results Display - Show extracted Telegram data */}
         {executionData.hasFreshResults && executionData.displayData.type === 'message_data' && (
-          <Box sx={{ mt: 1, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+          <Box sx={{ mt: 1, p: 1, backgroundColor: '#e8f5e8', borderRadius: 1, border: '1px solid #4caf50' }}>
             <Typography variant="caption" sx={{ fontWeight: 'bold', color: categoryColor }}>
-              Telegram Message Received:
+              💬 Telegram Message Received:
             </Typography>
-            <Typography variant="body2" sx={{ mt: 0.5, wordBreak: 'break-word' }}>
-              <strong>Text:</strong> "{executionData.displayData.inputText}"
+            <Typography variant="body2" sx={{ mt: 0.5, wordBreak: 'break-word', fontWeight: 'bold' }}>
+              "{executionData.displayData.inputText}"
             </Typography>
             <Typography variant="caption" sx={{ color: 'text.secondary', mt: 0.5, display: 'block' }}>
-              Chat ID: {executionData.displayData.chatId} • Type: {executionData.displayData.inputType} • {new Date(executionData.displayData.timestamp).toLocaleTimeString()}
+              🆔 Chat ID: {executionData.displayData.chatId} • 📝 Type: {executionData.displayData.inputType} • 🕰️ {new Date(executionData.displayData.timestamp).toLocaleTimeString()}
             </Typography>
             {executionData.displayData.metadata && (
               <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                From: @{executionData.displayData.metadata.from_user} • Message ID: {executionData.displayData.metadata.telegram_message_id}
+                👤 From: @{executionData.displayData.metadata.from_user} • 🆔 Message ID: {executionData.displayData.metadata.telegram_message_id}
               </Typography>
             )}
           </Box>

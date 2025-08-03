@@ -6,11 +6,15 @@ from ....models.nodes import NodeType, NodeCategory, NodeDataType, NodePort, Nod
 from datetime import datetime, timezone
 import uuid
 import logging
+import threading
+import queue
+import time
 
 logger = logging.getLogger(__name__)
 
-# Global state to track webhook registrations
+# Global state to track webhook registrations and message queues
 _webhook_states = {}
+_message_queues = {}  # Store message queues for waiting executions
 
 def get_telegram_input_node_type() -> NodeType:
     return NodeType(
@@ -89,69 +93,10 @@ async def setup_telegram_webhook(access_token: str, webhook_url: str) -> bool:
         logger.error(f"Error setting up Telegram webhook: {str(e)}")
         return False
 
-async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecutionResult:
+async def process_webhook_message(webhook_data: Dict[str, Any], access_token: str) -> NodeExecutionResult:
     """
-    Execute Telegram input trigger node
-    This handles both direct execution (webhook setup) and webhook data processing
+    Process incoming Telegram webhook message and extract data
     """
-    
-    # Get settings from context
-    settings = context.get("settings", {})
-    access_token = settings.get("access_token")
-    
-    if not access_token:
-        return NodeExecutionResult(
-            outputs={},
-            status="error",
-            error="Bot access token not configured"
-        )
-    
-    # Get webhook data from context (this will be provided by the webhook endpoint)
-    webhook_data = context.get("webhook_data")
-    
-    # If no webhook data, this is a direct execution (setup webhook)
-    if not webhook_data:
-        try:
-            # Get node_id to construct webhook URL
-            node_id = context.get("nodeId", "unknown")
-            
-            # For direct execution, we set up the webhook and return success
-            # The actual webhook URL should be constructed based on the flow
-            # This is a simplified version - in production you'd get the flow_id properly
-            webhook_url = f"https://asangram.tech/api/v1/telegram/webhook/1"  # Hardcoded for now
-            
-            # Set up webhook
-            webhook_success = await setup_telegram_webhook(access_token, webhook_url)
-            
-            if webhook_success:
-                return NodeExecutionResult(
-                    outputs={
-                        "message_data": {
-                            "status": "webhook_active",
-                            "webhook_url": webhook_url,
-                            "timestamp": datetime.now(timezone.utc).isoformat()
-                        }
-                    },
-                    status="success",
-                    started_at=datetime.now(timezone.utc),
-                    completed_at=datetime.now(timezone.utc),
-                    logs=["Telegram webhook activated successfully - waiting for messages"]
-                )
-            else:
-                return NodeExecutionResult(
-                    outputs={},
-                    status="error",
-                    error="Failed to set up Telegram webhook"
-                )
-                
-        except Exception as e:
-            logger.error(f"Error setting up Telegram webhook: {str(e)}")
-            return NodeExecutionResult(
-                outputs={},
-                status="error",
-                error=f"Failed to set up webhook: {str(e)}"
-            )
-    
     try:
         # Parse Telegram update
         update = webhook_data
@@ -233,4 +178,95 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
             outputs={},
             status="error",
             error=f"Failed to process webhook data: {str(e)}"
+        )
+
+async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecutionResult:
+    """
+    Execute Telegram input trigger node
+    This sets up webhook, waits for message, extracts data, and returns synchronously
+    """
+    
+    # Get settings from context
+    settings = context.get("settings", {})
+    access_token = settings.get("access_token")
+    
+    if not access_token:
+        return NodeExecutionResult(
+            outputs={},
+            status="error",
+            error="Bot access token not configured"
+        )
+    
+    # Check if this is webhook data processing (called from webhook endpoint)
+    webhook_data = context.get("webhook_data")
+    if webhook_data:
+        # This is webhook data processing - extract and return immediately
+        return await process_webhook_message(webhook_data, access_token)
+    
+    # This is direct execution - set up webhook and wait for message
+    try:
+        node_id = context.get("nodeId", "unknown")
+        execution_id = str(uuid.uuid4())
+        
+        # Create message queue for this execution
+        message_queue = queue.Queue(maxsize=1)
+        _message_queues[execution_id] = message_queue
+        
+        # Set up webhook with execution_id in URL
+        webhook_url = f"https://asangram.tech/api/v1/telegram/webhook/1?execution_id={execution_id}"
+        
+        logger.info(f"Setting up Telegram webhook for execution {execution_id}")
+        webhook_success = await setup_telegram_webhook(access_token, webhook_url)
+        
+        if not webhook_success:
+            # Clean up queue
+            _message_queues.pop(execution_id, None)
+            return NodeExecutionResult(
+                outputs={},
+                status="error",
+                error="Failed to set up Telegram webhook"
+            )
+        
+        logger.info(f"Webhook set up successfully, waiting for message (execution: {execution_id})")
+        
+        # Wait for message with timeout (60 seconds)
+        timeout = 60
+        start_time = time.time()
+        
+        try:
+            # Wait for message to arrive in queue
+            message_data = message_queue.get(timeout=timeout)
+            
+            # Clean up queue
+            _message_queues.pop(execution_id, None)
+            
+            logger.info(f"Message received for execution {execution_id}: {message_data}")
+            
+            return NodeExecutionResult(
+                outputs={"message_data": message_data},
+                status="success",
+                started_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(timezone.utc),
+                logs=[f"Telegram message received: '{message_data.get('input_text', 'N/A')}'"]
+            )
+            
+        except queue.Empty:
+            # Timeout - no message received
+            _message_queues.pop(execution_id, None)
+            logger.warning(f"Timeout waiting for Telegram message (execution: {execution_id})")
+            
+            return NodeExecutionResult(
+                outputs={},
+                status="error",
+                error="Timeout waiting for Telegram message (60 seconds)"
+            )
+                
+    except Exception as e:
+        # Clean up queue on error
+        _message_queues.pop(execution_id, None)
+        logger.error(f"Error in Telegram execution: {str(e)}")
+        return NodeExecutionResult(
+            outputs={},
+            status="error",
+            error=f"Failed to execute Telegram node: {str(e)}"
         )

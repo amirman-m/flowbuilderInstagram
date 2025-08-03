@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi import APIRouter, Request, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from ...core.database import get_db
 from ...models.flow import Flow
 from ...models.nodes import NodeInstance
 from ...services.flow_execution import create_flow_executor
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 import logging
 import json
@@ -17,6 +17,7 @@ router = APIRouter()
 async def telegram_webhook(
     flow_id: int,
     request: Request,
+    execution_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
@@ -25,7 +26,26 @@ async def telegram_webhook(
     try:
         # Get the webhook payload
         webhook_data = await request.json()
-        logger.info(f"Received Telegram webhook for flow {flow_id}: {json.dumps(webhook_data, indent=2)}")
+        logger.info(f"Received Telegram webhook for flow {flow_id} (execution_id: {execution_id}): {json.dumps(webhook_data, indent=2)}")
+        
+        # If execution_id is provided, this is for synchronous execution
+        if execution_id:
+            # Import here to avoid circular imports
+            from ...services.nodes.triggers.telegram_input import _message_queues
+            
+            # Check if there's a queue waiting for this execution
+            if execution_id in _message_queues:
+                try:
+                    # Put the webhook data into the queue for synchronous processing
+                    _message_queues[execution_id].put(webhook_data, timeout=1)
+                    logger.info(f"Webhook data queued for synchronous execution {execution_id}")
+                    return {"ok": True, "message": "Message queued for processing"}
+                except Exception as e:
+                    logger.error(f"Failed to queue webhook data for execution {execution_id}: {str(e)}")
+                    return {"ok": False, "error": "Failed to queue message"}
+            else:
+                logger.warning(f"No queue found for execution_id {execution_id}")
+                return {"ok": False, "error": "No waiting execution found"}
         
         # Verify the flow exists
         flow = db.query(Flow).filter(Flow.id == flow_id).first()
