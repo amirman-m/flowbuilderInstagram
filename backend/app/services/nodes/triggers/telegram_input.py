@@ -242,12 +242,16 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
             
             logger.info(f"Message received for execution {execution_id}: {message_data}")
             
+            # Extract text for logging
+            input_text = message_data.get('input_text') or message_data.get('chat_input', 'N/A')
+            chat_id = message_data.get('chat_id', 'N/A')
+            
             return NodeExecutionResult(
                 outputs={"message_data": message_data},
                 status="success",
                 started_at=datetime.now(timezone.utc),
                 completed_at=datetime.now(timezone.utc),
-                logs=[f"Telegram message received: '{message_data.get('input_text', 'N/A')}'"]
+                logs=[f"Telegram message received from chat {chat_id}: '{input_text}'"]
             )
             
         except queue.Empty:

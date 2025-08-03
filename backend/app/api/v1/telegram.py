@@ -31,18 +31,48 @@ async def telegram_webhook(
         # If execution_id is provided, this is for synchronous execution
         if execution_id:
             # Import here to avoid circular imports
-            from ...services.nodes.triggers.telegram_input import _message_queues
+            from ...services.nodes.triggers.telegram_input import _message_queues, process_webhook_message
             
             # Check if there's a queue waiting for this execution
             if execution_id in _message_queues:
                 try:
-                    # Put the webhook data into the queue for synchronous processing
-                    _message_queues[execution_id].put(webhook_data, timeout=1)
-                    logger.info(f"Webhook data queued for synchronous execution {execution_id}")
-                    return {"ok": True, "message": "Message queued for processing"}
+                    # Process the webhook data first to extract message information
+                    # We need to get the access token from the flow's Telegram node
+                    flow = db.query(Flow).filter(Flow.id == flow_id).first()
+                    if not flow:
+                        logger.error(f"Flow {flow_id} not found for execution {execution_id}")
+                        return {"ok": False, "error": "Flow not found"}
+                    
+                    telegram_trigger = db.query(NodeInstance).filter(
+                        NodeInstance.flow_id == flow_id,
+                        NodeInstance.type_id == "telegram_input"
+                    ).first()
+                    
+                    if not telegram_trigger:
+                        logger.error(f"No Telegram trigger found in flow {flow_id}")
+                        return {"ok": False, "error": "No Telegram trigger found"}
+                    
+                    access_token = telegram_trigger.data.get("settings", {}).get("access_token")
+                    if not access_token:
+                        logger.error(f"No access token found for Telegram trigger in flow {flow_id}")
+                        return {"ok": False, "error": "No access token configured"}
+                    
+                    # Process the webhook message to extract data
+                    result = await process_webhook_message(webhook_data, access_token)
+                    
+                    if result.status == "success":
+                        # Put the processed message data into the queue
+                        message_data = result.outputs.get("message_data", {})
+                        _message_queues[execution_id].put(message_data, timeout=1)
+                        logger.info(f"Processed message data queued for synchronous execution {execution_id}: {message_data}")
+                        return {"ok": True, "message": "Message processed and queued"}
+                    else:
+                        logger.error(f"Failed to process webhook message for execution {execution_id}: {result.error}")
+                        return {"ok": False, "error": f"Message processing failed: {result.error}"}
+                        
                 except Exception as e:
-                    logger.error(f"Failed to queue webhook data for execution {execution_id}: {str(e)}")
-                    return {"ok": False, "error": "Failed to queue message"}
+                    logger.error(f"Failed to process and queue webhook data for execution {execution_id}: {str(e)}")
+                    return {"ok": False, "error": "Failed to process message"}
             else:
                 logger.warning(f"No queue found for execution_id {execution_id}")
                 return {"ok": False, "error": "No waiting execution found"}
