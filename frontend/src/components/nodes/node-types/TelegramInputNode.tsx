@@ -136,7 +136,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
         throw new Error(errorData.detail || 'Failed to set up webhook');
       }
 
-      const result = await response.json();
+      await response.json(); // Webhook setup successful
       
       // Step 2: Show waiting status and start polling for actual message
       setExecutionResult('✅ Webhook activated! Send a Telegram message to your bot now...');
@@ -159,31 +159,55 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
               const nodes = await nodeResponse.json();
               const telegramNode = nodes.find((node: any) => node.type_id === 'telegram_input');
               
-              if (telegramNode?.data?.lastExecution?.outputs?.message_data) {
-                const messageData = telegramNode.data.lastExecution.outputs.message_data;
+              console.log('Polling - Found telegram node:', telegramNode);
+              console.log('Polling - lastExecution:', telegramNode?.data?.lastExecution);
+              
+              if (telegramNode?.data?.lastExecution) {
+                const lastExecution = telegramNode.data.lastExecution;
+                console.log('Polling - lastExecution data:', lastExecution);
                 
-                // Check if this is actual message data (not just webhook activation)
-                if (messageData.chat_id && messageData.input_text) {
-                  // We got actual message! Update UI
-                  const inputText = messageData.input_text || messageData.chat_input || 'N/A';
-                  const chatId = messageData.chat_id || 'N/A';
-                  const inputType = messageData.input_type || 'text';
+                // Check if we have message data in outputs
+                if (lastExecution.outputs?.message_data) {
+                  const messageData = lastExecution.outputs.message_data;
+                  console.log('Polling - message_data:', messageData);
                   
-                  // Update node with actual execution results
-                  if (nodeData.onNodeUpdate) {
-                    nodeData.onNodeUpdate(id, {
-                      data: {
-                        ...instanceData,
-                        lastExecution: telegramNode.data.lastExecution
-                      }
+                  // Check if this is actual message data (has chat_id)
+                  if (messageData.chat_id && (messageData.input_text || messageData.chat_input)) {
+                    // We got actual message! Update UI
+                    const inputText = messageData.input_text || messageData.chat_input || 'N/A';
+                    const chatId = messageData.chat_id || 'N/A';
+                    const inputType = messageData.input_type || 'text';
+                    
+                    console.log('SUCCESS: Found message data!', { inputText, chatId, inputType });
+                    
+                    // Update node with actual execution results
+                    if (nodeData.onNodeUpdate) {
+                      nodeData.onNodeUpdate(id, {
+                        data: {
+                          ...instanceData,
+                          lastExecution: lastExecution
+                        }
+                      });
+                    }
+                    
+                    setExecutionResult(`📨 Message received! "${inputText}" from chat ${chatId} (${inputType})`);
+                    setIsExecuting(false);
+                    return;
+                  } else {
+                    console.log('Polling - No valid message data yet:', { 
+                      hasChatId: !!messageData.chat_id, 
+                      hasInputText: !!(messageData.input_text || messageData.chat_input),
+                      messageData 
                     });
                   }
-                  
-                  setExecutionResult(`📨 Message received! "${inputText}" from chat ${chatId} (${inputType})`);
-                  setIsExecuting(false);
-                  return;
+                } else {
+                  console.log('Polling - No message_data in outputs:', lastExecution.outputs);
                 }
+              } else {
+                console.log('Polling - No lastExecution found');
               }
+            } else {
+              console.log('Polling - API request failed:', nodeResponse.status);
             }
             
             // Wait before next poll
