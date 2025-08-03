@@ -222,8 +222,16 @@ async def execute_node(
     try:
         node_type_id = node_instance.type_id
         
-        # Execute the node using the node registry
-        result = await node_registry.execute_node(node_type_id, request.inputs)
+        # Build execution context with node settings and request inputs
+        context = {
+            "node_id": node_id,
+            "flow_id": flow_id,
+            "settings": node_instance.settings or {},
+            **request.inputs  # Include access_token and other inputs from frontend
+        }
+        
+        # Execute the node using the node registry with full context
+        result = await node_registry.execute_node(node_type_id, context)
         
         return NodeExecutionResponse(
             status=result.status,

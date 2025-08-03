@@ -223,7 +223,15 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
     settings = context.get("settings", {})
     access_token = settings.get("access_token") or context.get("access_token")
     
+    # Debug logging to see what's in context
+    logger.info(f"Context keys: {list(context.keys())}")
+    logger.info(f"Settings: {settings}")
+    logger.info(f"Access token from settings: {settings.get('access_token')}")
+    logger.info(f"Access token from context: {context.get('access_token')}")
+    logger.info(f"Final access token: {access_token}")
+    
     if not access_token:
+        logger.error(f"No access token found. Context: {context}")
         return NodeExecutionResult(
             outputs={},
             status="error",
