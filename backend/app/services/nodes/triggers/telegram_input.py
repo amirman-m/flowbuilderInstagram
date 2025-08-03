@@ -93,6 +93,107 @@ async def setup_telegram_webhook(access_token: str, webhook_url: str) -> bool:
         logger.error(f"Error setting up Telegram webhook: {str(e)}")
         return False
 
+async def setup_telegram_webhook_for_execution(access_token: str, flow_id: int) -> Dict[str, Any]:
+    """
+    Step 1: Set up Telegram webhook for execution with unique execution_id
+    """
+    try:
+        # Generate unique execution ID
+        execution_id = str(uuid.uuid4())
+        
+        # Create message queue for this execution
+        message_queue = queue.Queue(maxsize=1)
+        _message_queues[execution_id] = message_queue
+        
+        logger.info(f"Created message queue for execution {execution_id}. Total queues: {len(_message_queues)}")
+        
+        # Set up webhook with execution_id in URL
+        webhook_url = f"https://asangram.tech/api/v1/telegram/webhook/{flow_id}?execution_id={execution_id}"
+        
+        # Set up the webhook
+        webhook_success = await setup_telegram_webhook(access_token, webhook_url)
+        
+        if webhook_success:
+            logger.info(f"Webhook set up successfully for execution {execution_id}: {webhook_url}")
+            return {
+                "success": True,
+                "execution_id": execution_id,
+                "webhook_url": webhook_url
+            }
+        else:
+            # Clean up queue on failure
+            _message_queues.pop(execution_id, None)
+            return {
+                "success": False,
+                "error": "Failed to set up Telegram webhook"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error setting up webhook for execution: {str(e)}")
+        return {
+            "success": False,
+            "error": f"Webhook setup failed: {str(e)}"
+        }
+
+async def wait_for_telegram_message(execution_id: str, timeout: int = 30) -> Dict[str, Any]:
+    """
+    Step 2: Wait for Telegram message and return extracted data
+    """
+    try:
+        # Check if queue exists
+        if execution_id not in _message_queues:
+            logger.error(f"No queue found for execution_id {execution_id}")
+            return {
+                "success": False,
+                "error": "Execution ID not found. Please set up webhook first."
+            }
+        
+        message_queue = _message_queues[execution_id]
+        start_time = time.time()
+        
+        logger.info(f"Waiting for message (execution: {execution_id}, timeout: {timeout}s)")
+        
+        try:
+            # Wait for message to arrive in queue
+            message_data = message_queue.get(timeout=timeout)
+            
+            # Clean up queue
+            _message_queues.pop(execution_id, None)
+            
+            execution_time = time.time() - start_time
+            
+            # Extract text for logging
+            input_text = message_data.get('input_text') or message_data.get('chat_input', 'N/A')
+            chat_id = message_data.get('chat_id', 'N/A')
+            
+            logger.info(f"Message received for execution {execution_id}: chat {chat_id}, text: '{input_text}'")
+            
+            return {
+                "success": True,
+                "message_data": message_data,
+                "logs": [f"Telegram message received from chat {chat_id}: '{input_text}'"],
+                "execution_time": execution_time
+            }
+            
+        except queue.Empty:
+            # Timeout - clean up queue but don't remove it yet (allow retry)
+            logger.warning(f"Timeout waiting for Telegram message (execution: {execution_id})")
+            
+            return {
+                "success": False,
+                "timeout": True,
+                "error": f"Timeout waiting for Telegram message ({timeout} seconds)"
+            }
+                
+    except Exception as e:
+        # Clean up queue on error
+        _message_queues.pop(execution_id, None)
+        logger.error(f"Error waiting for message: {str(e)}")
+        return {
+            "success": False,
+            "error": f"Failed to wait for message: {str(e)}"
+        }
+
 async def process_webhook_message(webhook_data: Dict[str, Any], access_token: str) -> NodeExecutionResult:
     """
     Process incoming Telegram webhook message and extract data
@@ -208,9 +309,13 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
         node_id = context.get("nodeId", "unknown")
         execution_id = str(uuid.uuid4())
         
-        # Create message queue for this execution
+        # Create execution ID and message queue for synchronous waiting
+        execution_id = str(uuid.uuid4())
         message_queue = queue.Queue(maxsize=1)
         _message_queues[execution_id] = message_queue
+        
+        logger.info(f"Created message queue for execution {execution_id}. Total queues: {len(_message_queues)}")
+        logger.info(f"Current queue keys: {list(_message_queues.keys())}")
         
         # Set up webhook with execution_id in URL
         webhook_url = f"https://asangram.tech/api/v1/telegram/webhook/1?execution_id={execution_id}"

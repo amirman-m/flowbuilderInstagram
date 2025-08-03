@@ -34,6 +34,7 @@ async def telegram_webhook(
             from ...services.nodes.triggers.telegram_input import _message_queues, process_webhook_message
             
             # Check if there's a queue waiting for this execution
+            logger.info(f"Webhook checking for execution_id {execution_id}. Available queues: {list(_message_queues.keys())}")
             if execution_id in _message_queues:
                 try:
                     # Process the webhook data first to extract message information
@@ -237,3 +238,108 @@ async def setup_telegram_webhook(
     except Exception as e:
         logger.error(f"Webhook setup error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Webhook setup failed: {str(e)}")
+
+@router.post("/setup-webhook-for-execution/{flow_id}")
+async def setup_webhook_for_execution(
+    flow_id: int,
+    request_data: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Step 1: Set up Telegram webhook for execution with unique execution_id
+    """
+    try:
+        # Verify the flow exists
+        flow = db.query(Flow).filter(Flow.id == flow_id).first()
+        if not flow:
+            raise HTTPException(status_code=404, detail="Flow not found")
+        
+        # Find the Telegram trigger node in this flow
+        telegram_trigger = db.query(NodeInstance).filter(
+            NodeInstance.flow_id == flow_id,
+            NodeInstance.type_id == "telegram_input"
+        ).first()
+        
+        if not telegram_trigger:
+            raise HTTPException(
+                status_code=400, 
+                detail="No Telegram trigger node found in this flow"
+            )
+        
+        # Get the access token from request or node settings
+        access_token = request_data.get("access_token")
+        if not access_token:
+            settings = telegram_trigger.data.get("settings", {})
+            access_token = settings.get("access_token")
+        
+        if not access_token:
+            raise HTTPException(
+                status_code=400,
+                detail="Bot access token not provided"
+            )
+        
+        # Import here to avoid circular imports
+        from ...services.nodes.triggers.telegram_input import setup_telegram_webhook_for_execution
+        
+        # Set up webhook and get execution_id
+        result = await setup_telegram_webhook_for_execution(access_token, flow_id)
+        
+        if result["success"]:
+            return {
+                "ok": True,
+                "execution_id": result["execution_id"],
+                "webhook_url": result["webhook_url"],
+                "message": "Webhook set up successfully. You can now send a Telegram message."
+            }
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to set up webhook: {result.get('error', 'Unknown error')}"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Webhook setup error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Webhook setup failed: {str(e)}")
+
+@router.get("/wait-for-message/{execution_id}")
+async def wait_for_message(
+    execution_id: str,
+    timeout: int = 30,
+    db: Session = Depends(get_db)
+):
+    """
+    Step 2: Wait for Telegram message and return extracted data
+    """
+    try:
+        # Import here to avoid circular imports
+        from ...services.nodes.triggers.telegram_input import wait_for_telegram_message
+        
+        # Wait for message with specified timeout
+        result = await wait_for_telegram_message(execution_id, timeout)
+        
+        if result["success"]:
+            return {
+                "ok": True,
+                "message_data": result["message_data"],
+                "logs": result.get("logs", []),
+                "execution_time": result.get("execution_time", 0)
+            }
+        else:
+            if result.get("timeout"):
+                raise HTTPException(
+                    status_code=408,
+                    detail=f"Timeout waiting for message ({timeout}s). You can retry or send another message."
+                )
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Error waiting for message: {result.get('error', 'Unknown error')}"
+                )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Wait for message error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to wait for message: {str(e)}")

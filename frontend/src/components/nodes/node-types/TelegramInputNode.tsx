@@ -68,8 +68,6 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
     }
   }, [currentSettings.access_token]);
 
-
-
   // Settings handlers
   const closeSettingsDialog = () => setSettingsDialogOpen(false);
   
@@ -110,52 +108,64 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
     }
   };
 
-  // Handle node execution - DeepSeek style direct execution
+  // Handle node execution - Two-step API approach
   const handleExecute = async (event: React.MouseEvent) => {
     event.stopPropagation();
-    
-    // Clear previous results
     setExecutionResult(null);
     setExecutionError(null);
-    
-    // Validate settings
+
     if (settingsValidationState !== 'success') {
-      setExecutionError('Node is not properly configured. Please check bot access token.');
+      setExecutionError('Node is not properly configured. Please check settings.');
       return;
     }
-    
+
     setIsExecuting(true);
-    
+
     try {
-      // Prepare execution context - similar to DeepSeek
-      const executionContext = {
-        nodeId: id,
-        nodeTypeId: nodeType.id,
-        inputs: {}, // Telegram trigger has no inputs
-        settings: currentSettings
-      };
+      // Step 1: Set up webhook
+      setExecutionResult('Setting up Telegram webhook...');
       
-      console.log('🚀 Telegram Node - Executing with context:', executionContext);
-      
-      // Use same API pattern as DeepSeek
-      const response = await fetch(`${API_BASE_URL}/nodes/execute/${executionContext.nodeTypeId}`, {
+      const setupResponse = await fetch(`${API_BASE_URL}/telegram/setup-webhook-for-execution/1`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(executionContext),
+        body: JSON.stringify({
+          access_token: currentSettings.access_token
+        }),
       });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to execute node');
+
+      if (!setupResponse.ok) {
+        const errorData = await setupResponse.json();
+        throw new Error(errorData.detail || 'Failed to set up webhook');
       }
+
+      const setupResult = await setupResponse.json();
+      const executionId = setupResult.execution_id;
       
-      const result = await response.json();
-      console.log('✅ Telegram Node - Execution Result:', result);
+      // Step 2: Wait for message
+      setExecutionResult('Webhook activated! Send a Telegram message now...');
       
-      // Update the node instance with execution results - same as DeepSeek
+      const waitResponse = await fetch(`${API_BASE_URL}/telegram/wait-for-message/${executionId}?timeout=30`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+      });
+
+      if (!waitResponse.ok) {
+        if (waitResponse.status === 408) {
+          // Timeout - user can retry
+          const errorData = await waitResponse.json();
+          throw new Error(errorData.detail || 'Timeout waiting for message. You can try again.');
+        } else {
+          const errorData = await waitResponse.json();
+          throw new Error(errorData.detail || 'Failed to receive message');
+        }
+      }
+
+      const waitResult = await waitResponse.json();
+      const messageData = waitResult.message_data;
+      
+      // Update node with execution results
       if (nodeData.onNodeUpdate) {
         nodeData.onNodeUpdate(id, {
           data: {
@@ -163,21 +173,25 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
             lastExecution: {
               status: 'success',
               timestamp: new Date().toISOString(),
-              inputs: {},
-              outputs: result.outputs,
-              logs: result.logs
+              outputs: { message_data: messageData },
+              logs: waitResult.logs || [],
+              executionTime: waitResult.execution_time || 0
             }
           }
         });
       }
+
+      // Extract text for display
+      const inputText = messageData?.input_text || messageData?.chat_input || 'N/A';
+      const chatId = messageData?.chat_id || 'N/A';
+      const inputType = messageData?.input_type || 'unknown';
       
-      // Show success message
-      setExecutionResult(result.logs?.[0] || 'Telegram message processed successfully');
+      setExecutionResult(`Message received! Text: "${inputText}" • Chat ID: ${chatId} • Type: ${inputType}`);
       
     } catch (error) {
-      console.error('❌ Telegram Node - Execution Error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setExecutionError(errorMessage);
       
-      // Update node with error status
       if (nodeData.onNodeUpdate) {
         nodeData.onNodeUpdate(id, {
           data: {
@@ -185,15 +199,11 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
             lastExecution: {
               status: 'error',
               timestamp: new Date().toISOString(),
-              error: error instanceof Error ? error.message : String(error)
+              error: errorMessage
             }
           }
         });
       }
-      
-      // Show error message
-      setExecutionError(error instanceof Error ? error.message : String(error) || 'An unknown error occurred');
-      
     } finally {
       setIsExecuting(false);
     }
@@ -231,8 +241,6 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
           }
         }}
       >
-        {/* Input Handles - Telegram triggers have no inputs */}
-        
         {/* Warning indicator for missing settings */}
         {settingsValidationState === 'error' && (
           <Box sx={{ position: 'absolute', top: -8, right: -8, zIndex: 1 }}>
@@ -394,44 +402,37 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
             sx={{
               p: 3,
               minWidth: 400,
-              maxWidth: 600,
+              maxWidth: 500,
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <Typography variant="h6" sx={{ mb: 2 }}>
               Telegram Bot Settings
             </Typography>
-
+            
             <TextField
               fullWidth
               label="Bot Access Token"
-              placeholder="Enter your Telegram bot token from @BotFather"
               value={accessToken}
               onChange={(e) => setAccessToken(e.target.value)}
+              placeholder="Enter your Telegram bot token"
               sx={{ mb: 2 }}
-              helperText="Get this token by creating a bot with @BotFather on Telegram"
+              helperText="Get your bot token from @BotFather on Telegram"
             />
-
-            <Alert severity="info" sx={{ mb: 2 }}>
-              <Typography variant="body2">
-                <strong>Setup Instructions:</strong><br/>
-                1. Message @BotFather on Telegram<br/>
-                2. Use /newbot command to create a new bot<br/>
-                3. Copy the access token and paste it above<br/>
-                4. Click "Setup Webhook" to activate the trigger
-              </Typography>
-            </Alert>
-
+            
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-              <Button onClick={resetSettings}>Reset</Button>
-              <Button onClick={closeSettingsDialog}>Cancel</Button>
-              <Button 
-                variant="contained" 
+              <Button onClick={resetSettings} color="error">
+                Reset
+              </Button>
+              <Button onClick={closeSettingsDialog} variant="outlined">
+                Cancel
+              </Button>
+              <Button
                 onClick={() => {
                   updateSettings({ access_token: accessToken });
                   closeSettingsDialog();
                 }}
-                disabled={!accessToken?.trim()}
+                variant="contained"
               >
                 Save
               </Button>
