@@ -247,12 +247,85 @@ async def notify_sse_connections(flow_id: int, message_data: Dict[str, Any]):
             # Remove broken connection
             await unregister_sse_connection(flow_id, connection_id)
 
-async def execute_telegram_input_trigger(context: Dict[str, Any]) -> StreamingResponse:
+async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecutionResult:
     """
-    Execute Telegram input trigger node using Server-Sent Events (SSE)
+    Execute Telegram input trigger node - Regular node execution for flow system
     
-    This replaces the problematic synchronous waiting approach with real-time SSE streaming.
-    The frontend connects to this SSE endpoint and receives real-time updates when messages arrive.
+    This function handles two scenarios:
+    1. Webhook data processing (when called from webhook endpoint)
+    2. Regular node execution (returns setup status for flow system)
+    """
+    start_time = datetime.now(timezone.utc)
+    
+    # Get settings and access token
+    settings = context.get("settings", {})
+    access_token = context.get("access_token") or settings.get("access_token")
+    flow_id = context.get("flow_id", 1)
+    
+    logger.info(f"🔍 Telegram node execution - flow {flow_id}")
+    logger.info(f"🔍 Access token: {access_token[:10] if access_token else 'None'}...")
+    
+    if not access_token:
+        logger.error(f"No access token found. Context: {context}")
+        return NodeExecutionResult(
+            outputs={},
+            status="error",
+            error="Bot access token not configured",
+            started_at=start_time,
+            completed_at=datetime.now(timezone.utc)
+        )
+    
+    # Check if this is webhook data processing (called from webhook endpoint)
+    webhook_data = context.get("webhook_data")
+    if webhook_data:
+        # This is webhook data processing - process and return message data
+        logger.info("Processing webhook data for flow execution")
+        return await process_webhook_message(webhook_data, access_token, flow_id)
+    
+    # This is regular node execution - just set up webhook and return success
+    # The actual message waiting happens via SSE in the frontend
+    try:
+        webhook_url = f"https://asangram.tech/api/v1/telegram/webhook/{flow_id}"
+        
+        logger.info(f"Setting up Telegram webhook for flow {flow_id}")
+        webhook_success = await setup_telegram_webhook(access_token, webhook_url)
+        
+        if not webhook_success:
+            return NodeExecutionResult(
+                outputs={},
+                status="error",
+                error="Failed to set up Telegram webhook",
+                started_at=start_time,
+                completed_at=datetime.now(timezone.utc)
+            )
+        
+        # Return success - webhook is set up, frontend will handle SSE listening
+        return NodeExecutionResult(
+            outputs={
+                "webhook_status": "activated",
+                "message": "Webhook activated - use SSE endpoint to listen for messages"
+            },
+            status="success",
+            logs=[f"Telegram webhook set up successfully for flow {flow_id}"],
+            started_at=start_time,
+            completed_at=datetime.now(timezone.utc)
+        )
+                
+    except Exception as e:
+        logger.error(f"Error in Telegram execution: {str(e)}")
+        return NodeExecutionResult(
+            outputs={},
+            status="error",
+            error=f"Failed to execute Telegram node: {str(e)}",
+            started_at=start_time,
+            completed_at=datetime.now(timezone.utc)
+        )
+
+async def create_telegram_sse_stream(context: Dict[str, Any]) -> StreamingResponse:
+    """
+    Create SSE stream for Telegram input - Separate function for SSE endpoint
+    
+    This function is called by the SSE endpoint and handles real-time message streaming.
     """
     
     # Get settings and access token

@@ -218,8 +218,8 @@ async def listen_for_telegram_messages(
             "node_id": telegram_trigger.id
         }
         
-        from ...services.nodes.triggers.telegram_input import execute_telegram_input_trigger
-        return await execute_telegram_input_trigger(context)
+        from ...services.nodes.triggers.telegram_input import create_telegram_sse_stream
+        return await create_telegram_sse_stream(context)
         
     except HTTPException:
         raise

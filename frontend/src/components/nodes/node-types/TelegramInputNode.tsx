@@ -40,26 +40,13 @@ const TelegramLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
   </svg>
 );
 
-interface TelegramMessageData {
-  session_id: string;
-  chat_id: number;
-  timestamp: string;
-  input_text?: string;
-  chat_input?: string;
-  input_type: string;
-  metadata: {
-    telegram_message_id: number;
-    from_user: string;
-    chat_type: string;
-  };
-}
 
 export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected, id }) => {
   const [settingsValidationState, setSettingsValidationState] = useState<'error' | 'success' | 'none'>('none');
   const [isListening, setIsListening] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [receivedMessage, setReceivedMessage] = useState<TelegramMessageData | null>(null);
+
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [accessToken, setAccessToken] = useState('');
   
@@ -76,8 +63,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
   // Get current settings from instance data
   const currentSettings = instance.data?.settings || {};
   
-  // Type guard for instance.data
-  const instanceData = instance?.data || {};
+
 
   // Initialize access token from settings
   useEffect(() => {
@@ -148,7 +134,6 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
     // Clear previous state
     setStatusMessage(null);
     setErrorMessage(null);
-    setReceivedMessage(null);
     setIsListening(true);
 
     try {
@@ -185,7 +170,6 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
               
               if (data.status === 'success' && data.outputs?.message_data) {
                 const messageData = data.outputs.message_data;
-                setReceivedMessage(messageData);
                 
                 const inputText = messageData.input_text || messageData.chat_input || 'N/A';
                 const chatId = messageData.chat_id || 'N/A';
