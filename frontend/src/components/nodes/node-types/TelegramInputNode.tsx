@@ -169,7 +169,19 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
               console.log('🎉 Telegram message received!', data);
               
               if (data.status === 'success' && data.outputs?.message_data) {
-                const messageData = data.outputs.message_data;
+                // Handle nested message data structure
+                let messageData;
+                
+                // Check if we have the nested structure
+                if (data.outputs.message_data.outputs && data.outputs.message_data.outputs.message_data) {
+                  console.log('📦 Detected nested message data structure');
+                  messageData = data.outputs.message_data.outputs.message_data;
+                } else {
+                  // Fallback to direct access
+                  messageData = data.outputs.message_data;
+                }
+                
+                console.log('📝 Extracted message data:', messageData);
                 
                 const inputText = messageData.input_text || messageData.chat_input || 'N/A';
                 const chatId = messageData.chat_id || 'N/A';
@@ -178,14 +190,34 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
                 
                 // Update node data with execution result
                 if (nodeData.onNodeUpdate) {
+                  // Calculate execution time (current time - timestamp if available)
+                  const executionTime = messageData.timestamp ? 
+                    (new Date().getTime() - new Date(messageData.timestamp).getTime()) / 1000 : 0;
+                  
+                  const lastExecuted = new Date().toISOString();
+                  
+                  // Format the update to match other nodes' structure
                   nodeData.onNodeUpdate(id, {
                     data: {
                       ...instance.data,
+                      // This is for the node's internal state
                       executionResult: {
                         outputs: { message_data: messageData },
                         status: 'success',
-                        executionTime: 0,
-                        lastExecuted: new Date().toISOString()
+                        executionTime,
+                        lastExecuted
+                      },
+                      // These fields are used by the inspector/outputs tab
+                      outputs: { message_data: messageData },
+                      status: 'success',
+                      executionTime,
+                      lastExecuted,
+                      // This is what the NodeInspector component looks for
+                      lastExecution: {
+                        outputs: { message_data: messageData },
+                        status: 'success',
+                        executionTime,
+                        timestamp: lastExecuted
                       }
                     }
                   });
