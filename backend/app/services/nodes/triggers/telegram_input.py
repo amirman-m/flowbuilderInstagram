@@ -14,8 +14,31 @@ logger = logging.getLogger(__name__)
 # Global state to track webhook registrations
 _webhook_states = {}
 
-# Global SSE connections registry
-_sse_connections = {}
+# Global SSE connection registry
+_sse_connections: Dict[int, Dict[str, asyncio.Queue]] = {}
+
+async def notify_sse_connections(flow_id: int, event_data: Dict[str, Any]):
+    """
+    Notify all SSE connections for a specific flow with event data
+    """
+    connections = _sse_connections.get(flow_id, {})
+    if not connections:
+        logger.info(f"📡 No SSE connections for flow {flow_id}")
+        return
+    
+    logger.info(f"📡 Notifying {len(connections)} SSE connections for flow {flow_id}")
+    
+    # Remove closed connections and notify active ones
+    active_connections = {}
+    for connection_id, queue in connections.items():
+        try:
+            await queue.put(event_data)
+            active_connections[connection_id] = queue
+        except Exception as e:
+            logger.warning(f"Failed to notify SSE connection: {e}")
+    
+    # Update the registry with only active connections
+    _sse_connections[flow_id] = active_connections
 
 # Global message storage for SSE notifications
 _pending_messages = {}
@@ -189,7 +212,12 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
         
         # Notify SSE connections if flow_id provided
         if flow_id:
-            await notify_sse_connections(flow_id, message_data)
+            await notify_sse_connections(flow_id, {
+                "type": "telegram_message",
+                "status": "success",
+                "outputs": {"message_data": message_data},
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
         
         # Return the result
         return NodeExecutionResult(
@@ -233,6 +261,8 @@ async def notify_sse_connections(flow_id: int, message_data: Dict[str, Any]):
     connections = _sse_connections[flow_id].copy()  # Copy to avoid modification during iteration
     logger.info(f"📡 Notifying {len(connections)} SSE connections for flow {flow_id}")
     
+    # Remove closed connections and notify active ones
+    active_connections = {}
     for connection_id, queue in connections.items():
         try:
             await queue.put({
@@ -242,10 +272,12 @@ async def notify_sse_connections(flow_id: int, message_data: Dict[str, Any]):
                 "timestamp": datetime.now(timezone.utc).isoformat()
             })
             logger.info(f"📡 Notified SSE connection {connection_id}")
+            active_connections[connection_id] = queue
         except Exception as e:
-            logger.error(f"📡 Failed to notify SSE connection {connection_id}: {e}")
-            # Remove broken connection
-            await unregister_sse_connection(flow_id, connection_id)
+            logger.warning(f"Failed to notify SSE connection {connection_id}: {e}")
+    
+    # Update the registry with only active connections
+    _sse_connections[flow_id] = active_connections
 
 async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecutionResult:
     """

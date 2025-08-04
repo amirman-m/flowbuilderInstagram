@@ -335,23 +335,35 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
           {NodeCategory.TRIGGER}
         </Typography>
 
-        {/* Execution Results Display - Show extracted Telegram data */}
+        {/* Execution Results Display */}
         {executionData.hasFreshResults && executionData.displayData.type === 'message_data' && (
-          <Box sx={{ mt: 1, p: 1, backgroundColor: '#e8f5e8', borderRadius: 1, border: '1px solid #4caf50' }}>
+          <Box sx={{ mt: 1, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
             <Typography variant="caption" sx={{ fontWeight: 'bold', color: categoryColor }}>
-              💬 Telegram Message Received:
+              Telegram Message:
             </Typography>
-            <Typography variant="body2" sx={{ mt: 0.5, wordBreak: 'break-word', fontWeight: 'bold' }}>
-              "{executionData.displayData.inputText}"
+            <Typography variant="body2" sx={{ mt: 0.5, wordBreak: 'break-word' }}>
+              {executionData.displayData.inputText}
             </Typography>
+            
+            {/* Message metadata */}
             <Typography variant="caption" sx={{ color: 'text.secondary', mt: 0.5, display: 'block' }}>
-              🆔 Chat ID: {executionData.displayData.chatId} • 📝 Type: {executionData.displayData.inputType} • 🕰️ {new Date(executionData.displayData.timestamp).toLocaleTimeString()}
+              Text: '{executionData.displayData.inputText}' • Chat ID: {executionData.displayData.chatId} • Type: {executionData.displayData.inputType}
             </Typography>
+            
+            {/* User metadata */}
             {executionData.displayData.metadata && (
               <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                👤 From: @{executionData.displayData.metadata.from_user} • 🆔 Message ID: {executionData.displayData.metadata.telegram_message_id}
+                👤 From: @{executionData.displayData.metadata.from_user || 'unknown'} • 
+                🆔 Message ID: {executionData.displayData.metadata.telegram_message_id} • 
+                💬 Chat Type: {executionData.displayData.metadata.chat_type || 'private'}
               </Typography>
             )}
+            
+            {/* Execution timing information */}
+            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}>
+              ⏱️ Execution time: {executionData.executionTime ? `${executionData.executionTime.toFixed(2)}ms` : 'N/A'} • 
+              🕒 {executionData.lastExecuted ? new Date(executionData.lastExecuted).toLocaleTimeString() : new Date(executionData.displayData.timestamp).toLocaleTimeString()}
+            </Typography>
           </Box>
         )}
 
@@ -377,6 +389,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
           >
             <Typography variant="caption">
               Telegram message processed successfully
+              {executionData.executionTime && ` in ${executionData.executionTime.toFixed(2)}ms`}
             </Typography>
           </Alert>
         )}
