@@ -1,7 +1,9 @@
 import os
 import asyncio
 import httpx
+import json
 from typing import Dict, Any, Optional
+from fastapi.responses import StreamingResponse
 from ....models.nodes import NodeType, NodeCategory, NodeDataType, NodePort, NodePorts, NodeExecutionResult
 from datetime import datetime, timezone
 import uuid
@@ -9,10 +11,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Global state to track webhook registrations (simplified)
+# Global state to track webhook registrations
 _webhook_states = {}
 
-# Simplified approach - no complex queue management needed
+# Global SSE connections registry
+_sse_connections = {}
+
+# Global message storage for SSE notifications
+_pending_messages = {}
 
 def get_telegram_input_node_type() -> NodeType:
     return NodeType(
@@ -103,23 +109,7 @@ async def setup_telegram_webhook(access_token: str, webhook_url: str) -> bool:
         logger.error(f"Error setting up Telegram webhook: {str(e)}")
         return False
 
-        await _cleanup_message_from_db(execution_id)  # Clean up any pending state
-        
-        return {
-            "success": False,
-            "timeout": True,
-            "error": f"Timeout waiting for Telegram message ({timeout} seconds)"
-        }
-                
-    except Exception as e:
-        logger.error(f"Error waiting for message: {str(e)}")
-        await _cleanup_message_from_db(execution_id)  # Clean up on error
-        return {
-            "success": False,
-            "error": f"Failed to wait for message: {str(e)}"
-        }
-
-async def process_webhook_message(webhook_data: Dict[str, Any], access_token: str) -> NodeExecutionResult:
+async def process_webhook_message(webhook_data: Dict[str, Any], access_token: str, flow_id: int = None) -> NodeExecutionResult:
     """
     Process incoming Telegram webhook message and extract data
     """
@@ -147,39 +137,47 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
         # Create session ID
         session_id = str(uuid.uuid4())
         
-        # Determine message type and extract content
-        message_data = {
-            "session_id": session_id,
-            "chat_id": chat_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "metadata": {
-                "telegram_message_id": message.get("message_id"),
-                "from_user": message.get("from", {}).get("username", "unknown"),
-                "chat_type": message.get("chat", {}).get("type", "private")
-            }
-        }
-        
         # Extract text from message
         text_content = message.get("text")
         
         if text_content:
             # For text messages - format for compatibility with OpenAI chat node
-            message_data["input_text"] = text_content  # OpenAI node expects 'input_text'
-            message_data["chat_input"] = text_content  # Keep original for backward compatibility
-            message_data["input_type"] = "text"
+            message_data = {
+                "session_id": session_id,
+                "chat_id": chat_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "metadata": {
+                    "telegram_message_id": message.get("message_id"),
+                    "from_user": message.get("from", {}).get("username", "unknown"),
+                    "chat_type": message.get("chat", {}).get("type", "private")
+                },
+                "input_text": text_content,  # OpenAI node expects 'input_text'
+                "chat_input": text_content,  # Keep original for backward compatibility
+                "input_type": "text"
+            }
             log_msg = f"Telegram text message from chat {chat_id}: \"{text_content[:50]}{'...' if len(text_content) > 50 else ''}\""
             
         # Check for voice message
         elif "voice" in message:
             voice_info = message["voice"]
-            message_data["voice_input"] = {
-                "file_id": voice_info.get("file_id"),
-                "file_unique_id": voice_info.get("file_unique_id"),
-                "duration": voice_info.get("duration"),
-                "mime_type": voice_info.get("mime_type"),
-                "file_size": voice_info.get("file_size")
+            message_data = {
+                "session_id": session_id,
+                "chat_id": chat_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "metadata": {
+                    "telegram_message_id": message.get("message_id"),
+                    "from_user": message.get("from", {}).get("username", "unknown"),
+                    "chat_type": message.get("chat", {}).get("type", "private")
+                },
+                "voice_input": {
+                    "file_id": voice_info.get("file_id"),
+                    "file_unique_id": voice_info.get("file_unique_id"),
+                    "duration": voice_info.get("duration"),
+                    "mime_type": voice_info.get("mime_type"),
+                    "file_size": voice_info.get("file_size")
+                },
+                "input_type": "voice"
             }
-            message_data["input_type"] = "voice"
             log_msg = f"Telegram voice message from chat {chat_id}: {voice_info.get('duration', 0)}s"
             
         else:
@@ -189,13 +187,17 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
                 error="Unsupported message type (only text and voice are supported)"
             )
         
-        # Return the processed message data
+        # Notify SSE connections if flow_id provided
+        if flow_id:
+            await notify_sse_connections(flow_id, message_data)
+        
+        # Return the result
         return NodeExecutionResult(
             outputs={"message_data": message_data},
             status="success",
+            logs=[log_msg],
             started_at=datetime.now(timezone.utc),
-            completed_at=datetime.now(timezone.utc),
-            logs=[log_msg]
+            completed_at=datetime.now(timezone.utc)
         )
         
     except Exception as e:
@@ -206,113 +208,134 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
             error=f"Failed to process webhook data: {str(e)}"
         )
 
-# Global queue to store messages for waiting executions
-_message_queue = {}
-_queue_lock = asyncio.Lock()
+# SSE connection management
+async def register_sse_connection(flow_id: int, connection_id: str, queue: asyncio.Queue):
+    """Register a new SSE connection for a flow"""
+    if flow_id not in _sse_connections:
+        _sse_connections[flow_id] = {}
+    _sse_connections[flow_id][connection_id] = queue
+    logger.info(f"📡 Registered SSE connection {connection_id} for flow {flow_id}")
 
-async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecutionResult:
-    """
-    Execute Telegram input trigger node - SINGLE PROCESS like DeepSeek
+async def unregister_sse_connection(flow_id: int, connection_id: str):
+    """Unregister an SSE connection"""
+    if flow_id in _sse_connections and connection_id in _sse_connections[flow_id]:
+        del _sse_connections[flow_id][connection_id]
+        if not _sse_connections[flow_id]:  # Remove empty flow entry
+            del _sse_connections[flow_id]
+        logger.info(f"📡 Unregistered SSE connection {connection_id} for flow {flow_id}")
+
+async def notify_sse_connections(flow_id: int, message_data: Dict[str, Any]):
+    """Notify all SSE connections for a flow about new message"""
+    if flow_id not in _sse_connections:
+        logger.info(f"📡 No SSE connections for flow {flow_id}")
+        return
     
-    This function works in two modes:
-    1. Direct execution (from frontend) - Sets up webhook and WAITS for message
-    2. Webhook processing (from webhook endpoint) - Processes and stores message data
+    connections = _sse_connections[flow_id].copy()  # Copy to avoid modification during iteration
+    logger.info(f"📡 Notifying {len(connections)} SSE connections for flow {flow_id}")
+    
+    for connection_id, queue in connections.items():
+        try:
+            await queue.put({
+                "type": "telegram_message",
+                "status": "success",
+                "outputs": {"message_data": message_data},
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
+            logger.info(f"📡 Notified SSE connection {connection_id}")
+        except Exception as e:
+            logger.error(f"📡 Failed to notify SSE connection {connection_id}: {e}")
+            # Remove broken connection
+            await unregister_sse_connection(flow_id, connection_id)
+
+async def execute_telegram_input_trigger(context: Dict[str, Any]) -> StreamingResponse:
+    """
+    Execute Telegram input trigger node using Server-Sent Events (SSE)
+    
+    This replaces the problematic synchronous waiting approach with real-time SSE streaming.
+    The frontend connects to this SSE endpoint and receives real-time updates when messages arrive.
     """
     
-    # Get settings from context and request payload (like other nodes)
+    # Get settings and access token
     settings = context.get("settings", {})
-    inputs = context.get("inputs", {})
-    # First try to get access_token from request inputs, then from settings
-    access_token = inputs.get("access_token") or settings.get("access_token")
+    access_token = context.get("access_token") or settings.get("access_token")
+    flow_id = context.get("flow_id", 1)
     
-    # Debug logging to see what's in context
-    logger.info(f"🔍 Context keys: {list(context.keys())}")
-    logger.info(f"🔍 Settings from database: {settings}")
-    logger.info(f"🔍 Settings type: {type(settings)}")
-    logger.info(f"🔍 Access token from settings: {settings.get('access_token') if isinstance(settings, dict) else 'Settings not dict'}")
-    logger.info(f"🔍 Access token from context: {context.get('access_token')}")
-    logger.info(f"🔍 Final access token: {access_token}")
+    logger.info(f"🔍 Starting SSE stream for flow {flow_id}")
+    logger.info(f"🔍 Access token: {access_token[:10] if access_token else 'None'}...")
     
     if not access_token:
         logger.error(f"No access token found. Context: {context}")
-        return NodeExecutionResult(
-            outputs={},
-            status="error",
-            error="Bot access token not configured",
-            started_at=datetime.now(timezone.utc),
-            completed_at=datetime.now(timezone.utc)
-        )
+        # Return error as SSE event
+        async def error_stream():
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Bot access token not configured'})}\n\n"
+        return StreamingResponse(error_stream(), media_type="text/plain")
     
-    # Check if this is webhook data processing (called from webhook endpoint)
-    webhook_data = context.get("webhook_data")
-    if webhook_data:
-        # This is webhook data processing - store message and notify waiting execution
-        logger.info("Processing webhook data and notifying waiting execution")
-        result = await process_webhook_message(webhook_data, access_token)
-        
-        if result.status == "success":
-            # Store message data for waiting execution
-            async with _queue_lock:
-                _message_queue["latest_message"] = result
-            logger.info("Message stored for waiting execution")
-        
-        return result
+    # Set up webhook for this flow
+    webhook_url = f"https://asangram.tech/api/v1/telegram/webhook/{flow_id}"
     
-    # This is direct execution from frontend - set up webhook and WAIT for message
-    try:
-        flow_id = context.get("flow_id", 1)
-        node_id = context.get("node_id", "telegram_input")
+    logger.info(f"Setting up Telegram webhook for flow {flow_id}")
+    webhook_success = await setup_telegram_webhook(access_token, webhook_url)
+    
+    if not webhook_success:
+        async def error_stream():
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to set up Telegram webhook'})}\n\n"
+        return StreamingResponse(error_stream(), media_type="text/plain")
+    
+    # Create SSE stream
+    async def sse_stream():
+        connection_id = str(uuid.uuid4())
+        message_queue = asyncio.Queue()
         
-        # Set up webhook for this flow
-        webhook_url = f"https://asangram.tech/api/v1/telegram/webhook/{flow_id}"
-        
-        logger.info(f"Setting up Telegram webhook for flow {flow_id}")
-        webhook_success = await setup_telegram_webhook(access_token, webhook_url)
-        
-        if not webhook_success:
-            return NodeExecutionResult(
-                outputs={},
-                status="error",
-                error="Failed to set up Telegram webhook",
-                started_at=datetime.now(timezone.utc),
-                completed_at=datetime.now(timezone.utc)
-            )
-        
-        logger.info(f"Webhook set up successfully, now waiting for message...")
-        
-        # WAIT for message (like DeepSeek waits for API response)
-        start_time = datetime.now(timezone.utc)
-        timeout_seconds = 60  # Wait up to 60 seconds
-        
-        while True:
-            # Check if we have a message
-            async with _queue_lock:
-                if "latest_message" in _message_queue:
-                    message_result = _message_queue.pop("latest_message")
-                    logger.info("Found message! Returning to frontend.")
-                    return message_result
+        try:
+            # Register this SSE connection
+            await register_sse_connection(flow_id, connection_id, message_queue)
             
-            # Check timeout
-            elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
-            if elapsed > timeout_seconds:
-                logger.warning(f"Timeout waiting for Telegram message ({timeout_seconds}s)")
-                return NodeExecutionResult(
-                    outputs={},
-                    status="error",
-                    error=f"Timeout: No message received in {timeout_seconds} seconds",
-                    started_at=start_time,
-                    completed_at=datetime.now(timezone.utc)
-                )
+            # Send initial webhook ready event
+            yield f"data: {json.dumps({'type': 'webhook_ready', 'message': 'Webhook activated - waiting for Telegram message...'})}\n\n"
             
-            # Wait a bit before checking again
-            await asyncio.sleep(0.5)
-                
-    except Exception as e:
-        logger.error(f"Error in Telegram execution: {str(e)}")
-        return NodeExecutionResult(
-            outputs={},
-            status="error",
-            error=f"Failed to execute Telegram node: {str(e)}",
-            started_at=datetime.now(timezone.utc),
-            completed_at=datetime.now(timezone.utc)
-        )
+            # Set up timeout
+            timeout_seconds = 60
+            start_time = datetime.now(timezone.utc)
+            
+            while True:
+                try:
+                    # Wait for message with timeout
+                    remaining_time = timeout_seconds - (datetime.now(timezone.utc) - start_time).total_seconds()
+                    if remaining_time <= 0:
+                        yield f"data: {json.dumps({'type': 'timeout', 'message': f'Timeout: No message received in {timeout_seconds} seconds'})}\n\n"
+                        break
+                    
+                    # Wait for message or timeout
+                    try:
+                        message = await asyncio.wait_for(message_queue.get(), timeout=min(remaining_time, 5.0))
+                        yield f"data: {json.dumps(message)}\n\n"
+                        
+                        # If we got a telegram_message, we're done
+                        if message.get('type') == 'telegram_message':
+                            break
+                            
+                    except asyncio.TimeoutError:
+                        # Send keepalive ping
+                        yield f"data: {json.dumps({'type': 'ping', 'timestamp': datetime.now(timezone.utc).isoformat()})}\n\n"
+                        continue
+                        
+                except Exception as e:
+                    logger.error(f"Error in SSE stream: {e}")
+                    yield f"data: {json.dumps({'type': 'error', 'message': f'Stream error: {str(e)}'})}\n\n"
+                    break
+                    
+        except Exception as e:
+            logger.error(f"Error setting up SSE stream: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'message': f'Setup error: {str(e)}'})}\n\n"
+            
+        finally:
+            # Clean up connection
+            await unregister_sse_connection(flow_id, connection_id)
+            logger.info(f"🔍 SSE stream ended for connection {connection_id}")
+    
+    return StreamingResponse(sse_stream(), media_type="text/plain", headers={
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Credentials": "true"
+    })

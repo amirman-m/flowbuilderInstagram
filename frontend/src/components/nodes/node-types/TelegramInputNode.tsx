@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { 
   Box, 
@@ -40,18 +40,36 @@ const TelegramLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
   </svg>
 );
 
+interface TelegramMessageData {
+  session_id: string;
+  chat_id: number;
+  timestamp: string;
+  input_text?: string;
+  chat_input?: string;
+  input_type: string;
+  metadata: {
+    telegram_message_id: number;
+    from_user: string;
+    chat_type: string;
+  };
+}
+
 export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected, id }) => {
   const [settingsValidationState, setSettingsValidationState] = useState<'error' | 'success' | 'none'>('none');
-  const [isExecuting, setIsExecuting] = useState(false);
-  const [executionResult, setExecutionResult] = useState<string | null>(null);
-  const [executionError, setExecutionError] = useState<string | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [receivedMessage, setReceivedMessage] = useState<TelegramMessageData | null>(null);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [accessToken, setAccessToken] = useState('');
+  
+  // SSE connection reference
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   const nodeData = data as NodeDataWithHandlers;
   const { nodeType, instance } = nodeData;
   const categoryColor = getCategoryColor(NodeCategory.TRIGGER);
-  
+
   // Use execution data hook to get fresh execution results
   const executionData = useExecutionData(nodeData);
 
@@ -108,102 +126,137 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
     }
   };
 
-  // Handle node execution - SINGLE PROCESS APPROACH like DeepSeek
-  const handleExecute = async (event: React.MouseEvent) => {
-    event.stopPropagation();
-    setExecutionResult(null);
-    setExecutionError(null);
+  // Cleanup SSE connection on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, []);
 
+  // Start listening for Telegram messages using SSE
+  const startListening = async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    
     if (settingsValidationState !== 'success') {
-      setExecutionError('Node is not properly configured. Please check settings.');
+      setErrorMessage('Node is not properly configured. Please check settings.');
       return;
     }
 
-    setIsExecuting(true);
+    // Clear previous state
+    setStatusMessage(null);
+    setErrorMessage(null);
+    setReceivedMessage(null);
+    setIsListening(true);
 
     try {
-      // Step 1: Set up webhook (only once)
-      console.log('🔧 Setting up Telegram webhook...');
-      const setupResponse = await fetch(`${API_BASE_URL}/telegram/setup-webhook/1`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+      // Start SSE connection directly - backend handles webhook setup
+      console.log('🔌 Starting SSE connection for Telegram messages...');
+      const eventSource = new EventSource(`${API_BASE_URL}/telegram/listen/1`, {
+        withCredentials: true
       });
-
-      if (!setupResponse.ok) {
-        const errorData = await setupResponse.json();
-        throw new Error(errorData.detail || 'Failed to set up webhook');
-      }
-
-      console.log('✅ Webhook setup successful');
       
-      // Step 2: Execute node directly (like DeepSeek) - this will wait for message
-      console.log('⚡ Executing Telegram node and waiting for message...');
-      setExecutionResult('Webhook activated! Waiting for Telegram message...');
-      
-      const executeResponse = await fetch(`${API_BASE_URL}/flows/1/nodes/${id}/execute`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          access_token: currentSettings.access_token
-        })
-      });
+      eventSourceRef.current = eventSource;
 
-      if (!executeResponse.ok) {
-        const errorData = await executeResponse.json();
-        throw new Error(errorData.detail || 'Failed to execute node');
-      }
+      eventSource.onopen = () => {
+        console.log('✅ SSE connection opened');
+        setStatusMessage('Connecting...');
+      };
 
-      const executeData = await executeResponse.json();
-      console.log('✅ Node execution completed:', executeData);
-      
-      // Update node with execution results (like DeepSeek)
-      if (nodeData.onNodeUpdate) {
-        nodeData.onNodeUpdate(id, {
-          data: {
-            ...instanceData,
-            lastExecution: {
-              timestamp: new Date().toISOString(),
-              status: 'success',
-              outputs: executeData.outputs || {},
-              logs: executeData.logs || []
-            }
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('📨 SSE event received:', data);
+
+          switch (data.type) {
+            case 'webhook_ready':
+              setStatusMessage(data.message);
+              break;
+              
+            case 'ping':
+              // Keepalive ping - just log it
+              console.log('🏓 Keepalive ping received');
+              break;
+              
+            case 'telegram_message':
+              console.log('🎉 Telegram message received!', data);
+              
+              if (data.status === 'success' && data.outputs?.message_data) {
+                const messageData = data.outputs.message_data;
+                setReceivedMessage(messageData);
+                
+                const inputText = messageData.input_text || messageData.chat_input || 'N/A';
+                const chatId = messageData.chat_id || 'N/A';
+                setStatusMessage(`📨 Message received! "${inputText}" from chat ${chatId}`);
+                setIsListening(false);
+                
+                // Update node data with execution result
+                if (nodeData.onNodeUpdate) {
+                  nodeData.onNodeUpdate(id, {
+                    data: {
+                      ...instance.data,
+                      executionResult: {
+                        outputs: { message_data: messageData },
+                        status: 'success',
+                        executionTime: 0,
+                        lastExecuted: new Date().toISOString()
+                      }
+                    }
+                  });
+                }
+                
+                // Close SSE connection after receiving message
+                eventSource.close();
+              }
+              break;
+              
+            case 'timeout':
+              console.log('⏰ Timeout received');
+              setErrorMessage(data.message);
+              setIsListening(false);
+              eventSource.close();
+              break;
+              
+            case 'error':
+              console.error('❌ Error received:', data.message);
+              setErrorMessage(data.message);
+              setIsListening(false);
+              eventSource.close();
+              break;
+              
+            default:
+              console.log('📄 Unknown SSE event type:', data.type);
           }
-        });
-      }
-      
-      // Show success message with actual data
-      if (executeData.outputs?.message_data) {
-        const messageData = executeData.outputs.message_data;
-        const inputText = messageData.input_text || messageData.chat_input || 'N/A';
-        const chatId = messageData.chat_id || 'N/A';
-        setExecutionResult(`📨 Message received! "${inputText}" from chat ${chatId}`);
-      } else {
-        setExecutionResult('✅ Execution completed successfully');
-      }
-      
+        } catch (parseError) {
+          console.error('Failed to parse SSE event data:', parseError);
+          setErrorMessage('Failed to parse server response');
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.error('❌ SSE connection error:', error);
+        setErrorMessage('Connection error - please try again');
+        setIsListening(false);
+        eventSource.close();
+      };
+
     } catch (error) {
-      console.error('❌ Telegram execution failed:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      setExecutionError(errorMessage);
-      
-      // Update node with error (like DeepSeek)
-      if (nodeData.onNodeUpdate) {
-        nodeData.onNodeUpdate(id, {
-          data: {
-            ...instanceData,
-            lastExecution: {
-              status: 'error',
-              timestamp: new Date().toISOString(),
-              error: errorMessage
-            }
-          }
-        });
-      }
-    } finally {
-      setIsExecuting(false);
+      console.error('❌ Failed to start SSE connection:', error);
+      setErrorMessage(`Failed to start listening: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setIsListening(false);
     }
+  };
+
+  // Stop listening
+  const stopListening = () => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    setIsListening(false);
+    setStatusMessage(null);
   };
 
   // Get the current border color based on validation state
@@ -260,14 +313,14 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
           
           {/* Execute button - only appears when settings are configured */}
           {isReadyForExecution && (
-            <Tooltip title={isExecuting ? "Setting up webhook..." : "Setup Webhook & Wait for Message"}>
+            <Tooltip title={isListening ? "Listening for messages..." : "Start Listening for Telegram Messages"}>
               <IconButton 
                 size="small" 
-                onClick={handleExecute} 
+                onClick={isListening ? stopListening : startListening} 
                 sx={{ ml: 0.5 }}
-                disabled={isExecuting}
+                disabled={false}
               >
-                {isExecuting ? (
+                {isListening ? (
                   <CircularProgress size={16} />
                 ) : (
                   <ExecuteIcon fontSize="small" color="primary" />
@@ -319,9 +372,9 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
         )}
 
         {/* Status Display */}
-        {executionResult && (
-          <Alert severity="success" sx={{ mt: 1, fontSize: '0.7rem', py: 0.5 }}>
-            {executionResult}
+        {statusMessage && (
+          <Alert severity="info" sx={{ mt: 1, fontSize: '0.7rem', py: 0.5 }}>
+            {statusMessage}
           </Alert>
         )}
         
@@ -358,9 +411,9 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
         )}
 
         {/* Error Display */}
-        {executionError && (
+        {errorMessage && (
           <Alert severity="error" sx={{ mt: 1, fontSize: '0.7rem', py: 0.5 }}>
-            {executionError}
+            {errorMessage}
           </Alert>
         )}
 
