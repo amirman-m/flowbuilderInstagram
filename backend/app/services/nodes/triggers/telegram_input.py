@@ -373,7 +373,7 @@ async def create_telegram_sse_stream(context: Dict[str, Any]) -> StreamingRespon
         # Return error as SSE event
         async def error_stream():
             yield f"data: {json.dumps({'type': 'error', 'message': 'Bot access token not configured'})}\n\n"
-        return StreamingResponse(error_stream(), media_type="text/plain")
+        return StreamingResponse(error_stream(), media_type="text/event-stream")
     
     # Set up webhook for this flow
     webhook_url = f"https://asangram.tech/api/v1/telegram/webhook/{flow_id}"
@@ -384,7 +384,7 @@ async def create_telegram_sse_stream(context: Dict[str, Any]) -> StreamingRespon
     if not webhook_success:
         async def error_stream():
             yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to set up Telegram webhook'})}\n\n"
-        return StreamingResponse(error_stream(), media_type="text/plain")
+        return StreamingResponse(error_stream(), media_type="text/event-stream")
     
     # Create SSE stream
     async def sse_stream():
@@ -438,7 +438,7 @@ async def create_telegram_sse_stream(context: Dict[str, Any]) -> StreamingRespon
             await unregister_sse_connection(flow_id, connection_id)
             logger.info(f"🔍 SSE stream ended for connection {connection_id}")
     
-    return StreamingResponse(sse_stream(), media_type="text/plain", headers={
+    return StreamingResponse(sse_stream(), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
         "Access-Control-Allow-Origin": "*",
