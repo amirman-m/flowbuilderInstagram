@@ -66,12 +66,22 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
     - Upstream Telegram Input node (through flow traversal)
     """
     try:
+        # Debug: Log the entire context to see what we're receiving
+        logger.info(f"🔍 FULL EXECUTION CONTEXT: {context}")
+        
         # Get settings and inputs
         settings = context.get("settings", {})
         inputs = context.get("inputs", {})
         node_id = context.get("node_id", "unknown")
+        
         # Extract flow_id from context (handle both flowId from frontend and flow_id)
         flow_id = context.get("flow_id") or context.get("flowId")
+        
+        # Debug: Log each key separately
+        logger.info(f" Context keys: {list(context.keys())}")
+        logger.info(f" flow_id from context.get('flow_id'): {context.get('flow_id')}")
+        logger.info(f" flowId from context.get('flowId'): {context.get('flowId')}")
+        logger.info(f" Final flow_id value: {flow_id}")
         
         logger.info(f"Executing Telegram output message node {node_id}")
         logger.info(f"Inputs: {inputs}")
@@ -163,7 +173,7 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
                         if flow_id and session_id:
                             try:
                                 from sqlalchemy.orm import Session
-                                from ....db.session import get_db
+                                from ....core.database import get_db
                                 from ....models.node_instance import NodeInstance
                                 db = next(get_db())
                                 
@@ -197,7 +207,7 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
                                 db.close()
                             except Exception as e:
                                 logger.error(f"Error searching for Telegram session data: {e}")
-                    
+                        
                     # Check if there's metadata with these values
                     if "metadata" in port_data and isinstance(port_data["metadata"], dict):
                         if not chat_id and "chat_id" in port_data["metadata"]:
@@ -211,13 +221,26 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
                     # Break if we found both
                     if chat_id and access_token:
                         break
-        # If we still don't have the credentials, fetch all nodes in the flow and find telegram_input node
-        if (not access_token or not chat_id) :
+                        
+        # Final check - if we still don't have flow_id, that's the main issue
+        if not flow_id:
+            logger.error(f" CRITICAL: flow_id is None! Cannot proceed without flow_id.")
+            logger.error(f" This means the frontend is not sending flowId or it's being lost in processing.")
+            return NodeExecutionResult(
+                outputs={},
+                status="error",
+                error="Missing flow_id in execution context. Please ensure the node is executed within a flow.",
+                started_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(timezone.utc)
+            )
+        
+        # If we still don't have the credentials, fetch all nodes in the flow and find telegram_input node  
+        if (not access_token or not chat_id) and flow_id:
             logger.info(f"Searching for Telegram input node in flow {flow_id}")
             try:
                 # Make API request to get all nodes in the flow - use direct DB query
                 from sqlalchemy.orm import Session
-                from ....db.session import get_db
+                from ....core.database import get_db
                 from ....models.node_instance import NodeInstance
                 db = next(get_db())
                 
@@ -277,10 +300,9 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
                             break
                 
             except Exception as e:
-                logger.error(f"Error fetching nodes from database: {str(e)}")
-                traceback.print_exc()
-
-            
+                logger.error(f"Error fetching nodes from database: {e}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                
         # Try to convert chat_id to integer if it's a string
         if chat_id and isinstance(chat_id, str):
             try:
@@ -290,19 +312,29 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
                 # If it's not a valid integer, keep it as string
                 pass
 
-        if not chat_id:
-            return NodeExecutionResult(
-                outputs={},
-                status="error",
-                error="No Telegram chat_id found. Please configure it in node settings or connect to a Telegram Input node."
-            )   
-        # Final check for required credentials
+        # Check if we found the required credentials
         if not access_token:
+            logger.error(" No Telegram access_token found. Please configure it in node settings or connect to a Telegram Input node.")
             return NodeExecutionResult(
                 outputs={},
                 status="error",
-                error="No Telegram Bot access token found. Please configure it in node settings or connect to a Telegram Input node."
-            )          
+                error="No Telegram access_token found. Please configure it in node settings or connect to a Telegram Input node.",
+                started_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(timezone.utc)
+            )
+        
+        if not chat_id:
+            logger.error(" No Telegram chat_id found. Please configure it in node settings or connect to a Telegram Input node.")
+            logger.error(f" Searched through inputs: {list(inputs.keys())}")
+            logger.error(f" flow_id was: {flow_id}")
+            return NodeExecutionResult(
+                outputs={},
+                status="error",
+                error="No Telegram chat_id found. Please configure it in node settings or connect to a Telegram Input node.",
+                started_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(timezone.utc)
+            )
+        
         # Send message to Telegram
         url = f"https://api.telegram.org/bot{access_token}/sendMessage"
         payload = {
@@ -315,7 +347,8 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
         response = requests.post(url, json=payload)
         
         if response.status_code == 200:
-            logger.info("Message sent successfully!")
+            logger.info("✅ Successfully sent Telegram message to chat {chat_id}")
+            logger.info(f"✅ Message: {message[:100]}...")
             result = response.json()
                 
             # Create output data with metadata
@@ -349,8 +382,8 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
             )
             
     except Exception as e:
-        logger.error(f"Error in Telegram output message node: {str(e)}")
-        traceback.print_exc()
+        logger.error(f" Error in telegram_message_action: {str(e)}")
+        logger.error(f" Traceback: {traceback.format_exc()}")
         
         return NodeExecutionResult(
             outputs={},
