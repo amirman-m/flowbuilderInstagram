@@ -152,25 +152,22 @@ export const TelegramMessageActionNode: React.FC<TelegramMessageActionNodeProps>
       // Collect inputs from connected nodes
       const inputs = await collectInputsFromConnectedNodes();
       
-      // Prepare execution context
-      const executionContext = {
-        nodeId: id,
-        nodeTypeId: nodeType.id,
-        inputs,
-        settings: currentSettings,
-        flowId: flowId  // Add flowId to context
+      // Prepare execution request (for flows endpoint)
+      const executionRequest = {
+        inputs  // Only send inputs, flow_id and node_id come from URL
       };
       
-      console.log('🚀 Telegram Message Action Node - Executing with context:', executionContext);
+      console.log('🚀 Telegram Message Action Node - Executing with request:', executionRequest);
+      console.log('🚀 Using flow_id:', flowId, 'node_id:', id);
       
-      // Make direct API call to backend
-      const response = await fetch(`${API_BASE_URL}/nodes/execute/${executionContext.nodeTypeId}`, {
+      // Make API call to execute the node using the flows endpoint (includes flow_id automatically)
+      const response = await fetch(`${API_BASE_URL}/flows/${flowId}/nodes/${id}/execute`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include', // Include cookies for session authentication
-        body: JSON.stringify(executionContext),
+        credentials: 'include',
+        body: JSON.stringify(executionRequest),
       });
       
       if (!response.ok) {
