@@ -71,17 +71,21 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
         
         # Get settings and inputs
         settings = context.get("settings", {})
-        inputs = context.get("inputs", {})
         node_id = context.get("node_id", "unknown")
-        
-        # Extract flow_id from context (handle both flowId from frontend and flow_id)
         flow_id = context.get("flow_id") or context.get("flowId")
         
+        # The flows.py endpoint flattens request.inputs directly into context
+        # So we need to extract inputs from the context keys, excluding system keys
+        system_keys = {'node_id', 'flow_id', 'settings', 'flowId'}
+        inputs = {k: v for k, v in context.items() if k not in system_keys}
+        
         # Debug: Log each key separately
-        logger.info(f" Context keys: {list(context.keys())}")
-        logger.info(f" flow_id from context.get('flow_id'): {context.get('flow_id')}")
-        logger.info(f" flowId from context.get('flowId'): {context.get('flowId')}")
-        logger.info(f" Final flow_id value: {flow_id}")
+        logger.info(f"🔍 Context keys: {list(context.keys())}")
+        logger.info(f"🔍 System keys excluded: {system_keys}")
+        logger.info(f"🔍 Extracted inputs: {list(inputs.keys())}")
+        logger.info(f"🔍 flow_id from context.get('flow_id'): {context.get('flow_id')}")
+        logger.info(f"🔍 flowId from context.get('flowId'): {context.get('flowId')}")
+        logger.info(f"🔍 Final flow_id value: {flow_id}")
         
         logger.info(f"Executing Telegram output message node {node_id}")
         logger.info(f"Inputs: {inputs}")
