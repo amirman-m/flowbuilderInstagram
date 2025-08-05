@@ -25,6 +25,7 @@ import { baseNodeStyles, getCategoryColor } from '../styles';
 import { NodeCategory } from '../../../types/nodes';
 import { useExecutionData } from '../hooks/useExecutionData';
 import { API_BASE_URL } from '../../../services/api';
+import { useParams } from 'react-router-dom';
 
 // Telegram Logo SVG Component (reused from TelegramInputNode)
 const TelegramLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
@@ -41,12 +42,8 @@ const TelegramLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
   </svg>
 );
 
-// Extend NodeComponentProps to include flowId
-interface TelegramMessageActionNodeProps extends NodeComponentProps {
-  flowId?: string;
-}
-
-export const TelegramMessageActionNode: React.FC<TelegramMessageActionNodeProps> = ({ data, selected, id, flowId }) => {
+export const TelegramMessageActionNode: React.FC<NodeComponentProps> = ({ data, selected, id }) => {
+  const { flowId } = useParams<{ flowId: string }>();
   const [settingsValidationState, setSettingsValidationState] = useState<'error' | 'success' | 'none'>('none');
   const [isExecuting, setIsExecuting] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
@@ -159,6 +156,11 @@ export const TelegramMessageActionNode: React.FC<TelegramMessageActionNodeProps>
       
       console.log('🚀 Telegram Message Action Node - Executing with request:', executionRequest);
       console.log('🚀 Using flow_id:', flowId, 'node_id:', id);
+      
+      // Validate flowId before making API call
+      if (!flowId) {
+        throw new Error('No flowId found in URL parameters');
+      }
       
       // Make API call to execute the node using the flows endpoint (includes flow_id automatically)
       const response = await fetch(`${API_BASE_URL}/flows/${flowId}/nodes/${id}/execute`, {
