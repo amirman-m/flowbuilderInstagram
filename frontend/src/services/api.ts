@@ -8,34 +8,22 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?
   import.meta.env.VITE_API_BASE_URL : 
   'http://localhost:8000/api/v1';
 
+// Create axios instance with credentials for HttpOnly cookies
 const api = axios.create({
   baseURL: API_BASE_URL,
-  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  withCredentials: true, // Important: include HttpOnly cookies
 });
 
-// Add request interceptor to include access token
-api.interceptors.request.use(
-  (config) => {
-    const { accessToken } = useAuthStore.getState();
-    if (accessToken) {
-      config.headers.Authorization = `Bearer ${accessToken}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// Add response interceptor to handle token expiration
+// Response interceptor to handle token expiration
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
       // Token expired or invalid, logout user
       useAuthStore.getState().logout();
-      // Redirect to login page
-      window.location.href = '/login';
     }
     return Promise.reject(error);
   }
@@ -47,8 +35,8 @@ export const authAPI = {
     const response = await api.post('/auth/login', credentials);
     const userSession = response.data;
     
-    // Store user and access token in auth store
-    useAuthStore.getState().setAuth(userSession.user, userSession.session_token);
+    // Store user data in store (tokens are in HttpOnly cookies)
+    useAuthStore.getState().setAuth(userSession.user);
     
     return userSession;
   },

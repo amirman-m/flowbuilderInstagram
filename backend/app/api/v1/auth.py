@@ -66,9 +66,9 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
         )
 
 
-@router.post("/login", response_model=UserSession)
+@router.post("/login")
 async def login(user_credentials: UserLogin, response: Response, db: Session = Depends(get_db)):
-    """Login user via Keycloak."""
+    """Login user via Keycloak with secure HttpOnly cookies."""
     try:
         user_service = UserService(db)
         # Authenticate with Keycloak
@@ -97,21 +97,43 @@ async def login(user_credentials: UserLogin, response: Response, db: Session = D
                 detail="Inactive user"
             )
         
-        # Store refresh token in Redis and Postgres (if available)
+        # Store refresh token securely in Redis
         refresh_token = auth_result["refresh_token"]
-        expires_in = auth_result["expires_in"]
+        await redis_service.store_refresh_token(user.id, refresh_token)
         
-        # Store refresh token in Redis
-        await redis_service.store_refresh_token(user.id, refresh_token, expires_in)
+        # Set access token in HttpOnly cookie
+        response.set_cookie(
+            key="access_token",
+            value=auth_result["access_token"],
+            httponly=True,  # Cannot be accessed by JavaScript
+            secure=False,   # Set to True in production with HTTPS
+            samesite="lax", # CSRF protection
+            max_age=auth_result.get("expires_in", 300)  # Token expiry time
+        )
         
-        # Store refresh token in Postgres (you might want to create a separate table for this)
-        # For now, we'll just use Redis
+        # Set refresh token in HttpOnly cookie (for token refresh)
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=False,   # Set to True in production
+            samesite="lax",
+            max_age=86400   # 24 hours
+        )
         
-        # Return only access token to frontend
-        access_token = auth_result["access_token"]
-        
+        # Return only user data (no tokens in response)
         logger.info(f"User logged in successfully: {user.email}")
-        return UserSession(user=user, session_token=access_token)
+        return {
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "is_active": user.is_active,
+                "created_at": user.created_at,
+                "updated_at": user.updated_at
+            },
+            "message": "Login successful"
+        }
         
     except HTTPException:
         raise
@@ -125,15 +147,32 @@ async def login(user_credentials: UserLogin, response: Response, db: Session = D
 
 @router.post("/logout")
 async def logout(response: Response, db: Session = Depends(get_db)):
-    """Logout user by clearing tokens."""
+    """Logout user by clearing HttpOnly cookies and tokens."""
     try:
-        # In a full implementation, you would:
+        # Clear access token cookie
+        response.set_cookie(
+            key="access_token",
+            value="",
+            httponly=True,
+            secure=False,   # Set to True in production
+            samesite="lax",
+            max_age=0       # Expire immediately
+        )
+        
+        # Clear refresh token cookie
+        response.set_cookie(
+            key="refresh_token",
+            value="",
+            httponly=True,
+            secure=False,   # Set to True in production
+            samesite="lax",
+            max_age=0       # Expire immediately
+        )
+        
+        # TODO: In a full implementation, you would:
         # 1. Get user ID from the access token
         # 2. Delete refresh token from Redis
         # 3. Optionally invalidate the token in Keycloak
-        
-        # For now, we'll just return success
-        # TODO: Implement proper token cleanup
         
         logger.info("User logged out successfully")
         return {"message": "Successfully logged out"}
