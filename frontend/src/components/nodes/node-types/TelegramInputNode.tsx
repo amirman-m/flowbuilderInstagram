@@ -188,39 +188,26 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = ({ data, selected
                 setStatusMessage(`📨 Message received! "${inputText}" from chat ${chatId}`);
                 setIsListening(false);
                 
-                // Update node data with execution result
+                // Update node data with execution result - follow ChatInputNode pattern
                 if (nodeData.onNodeUpdate) {
-                  // Calculate execution time (current time - timestamp if available)
-                  const executionTime = messageData.timestamp ? 
-                    (new Date().getTime() - new Date(messageData.timestamp).getTime()) / 1000 : 0;
+                  // Create a simple lastExecution object like ChatInputNode
+                  const lastExecution = {
+                    timestamp: new Date().toISOString(),
+                    status: 'success',
+                    outputs: { message_data: messageData }
+                  };
                   
-                  const lastExecuted = new Date().toISOString();
-                  
-                  // Format the update to match other nodes' structure
+                  // Update the node instance with execution results - same pattern as ChatInputNode
                   nodeData.onNodeUpdate(id, {
                     data: {
                       ...instance.data,
-                      // This is for the node's internal state
-                      executionResult: {
-                        outputs: { message_data: messageData },
-                        status: 'success',
-                        executionTime,
-                        lastExecuted
-                      },
-                      // These fields are used by the inspector/outputs tab
-                      outputs: { message_data: messageData },
-                      status: 'success',
-                      executionTime,
-                      lastExecuted,
-                      // This is what the NodeInspector component looks for
-                      lastExecution: {
-                        outputs: { message_data: messageData },
-                        status: 'success',
-                        executionTime,
-                        timestamp: lastExecuted
-                      }
+                      lastExecution
                     }
                   });
+                  
+                  console.log('✅ Telegram node state updated with execution results:', lastExecution);
+                } else {
+                  console.warn('⚠️ Could not update node state: onNodeUpdate function not available');
                 }
                 
                 // Close SSE connection after receiving message
