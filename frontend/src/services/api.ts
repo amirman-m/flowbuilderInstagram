@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { User, Flow, UserSession, LoginCredentials, RegisterData } from '../types';
 import { NodeInstance, NodeConnection } from '../types/nodes';
+import { useAuthStore } from '../store/authStore';
 
 // Use environment variable if available, otherwise use localhost
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ? 
@@ -9,23 +10,70 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  withCredentials: true, // Important for cookie-based auth
+  withCredentials: true,
 });
+
+// Add request interceptor to include access token
+api.interceptors.request.use(
+  (config) => {
+    const { accessToken } = useAuthStore.getState();
+    if (accessToken) {
+      config.headers.Authorization = `Bearer ${accessToken}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor to handle token expiration
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid, logout user
+      useAuthStore.getState().logout();
+      // Redirect to login page
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Auth API
 export const authAPI = {
   login: async (credentials: LoginCredentials): Promise<UserSession> => {
     const response = await api.post('/auth/login', credentials);
-    return response.data;
+    const userSession = response.data;
+    
+    // Store user and access token in auth store
+    useAuthStore.getState().setAuth(userSession.user, userSession.session_token);
+    
+    return userSession;
   },
 
   register: async (userData: RegisterData): Promise<User> => {
-    const response = await api.post('/auth/register', userData);
+    // Transform the data to match the backend API which expects a name field
+    const apiData = {
+      email: userData.email,
+      password: userData.password,
+      name: `${userData.firstName} ${userData.lastName}`.trim()
+    };
+    const response = await api.post('/auth/register', apiData);
     return response.data;
   },
 
   logout: async (): Promise<void> => {
-    await api.post('/auth/logout');
+    try {
+      await api.post('/auth/logout');
+    } catch (error) {
+      // Even if logout fails on backend, clear local state
+      console.warn('Backend logout failed, but clearing local state');
+    } finally {
+      // Always clear local auth state
+      useAuthStore.getState().logout();
+    }
   },
 };
 

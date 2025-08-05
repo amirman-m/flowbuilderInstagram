@@ -1,73 +1,143 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 from ...core.database import get_db
-from ...core.security import verify_password, get_password_hash, create_simple_session
+from ...services.keycloak_service import keycloak_service
+from ...services.redis_service import redis_service
+from ...services.user_service import UserService
 from ...models.user import User
 from ...schemas.user import UserCreate, UserLogin, UserSession, User as UserSchema
+import logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 @router.post("/register", response_model=UserSchema)
-def register(user: UserCreate, db: Session = Depends(get_db)):
-    """Register a new user."""
-    # Check if user already exists
-    db_user = db.query(User).filter(User.email == user.email).first()
-    if db_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+async def register(user: UserCreate, db: Session = Depends(get_db)):
+    """Register a new user via Keycloak."""
+    try:
+        user_service = UserService(db)
+        
+        # Check if user already exists in our system
+        existing_user = await user_service.get_user_by_email(user.email)
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
+        
+        # Create user in Keycloak
+        keycloak_result = await keycloak_service.create_user_in_keycloak(
+            email=user.email,
+            password=user.password,
+            first_name=user.name.split()[0] if user.name else "",
+            last_name=" ".join(user.name.split()[1:]) if len(user.name.split()) > 1 else ""
         )
-    
-    # Create new user
-    hashed_password = get_password_hash(user.password)
-    db_user = User(
-        email=user.email,
-        name=user.name,
-        hashed_password=hashed_password
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    
-    return db_user
+        
+        if not keycloak_result["success"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Registration failed: {keycloak_result['error']}"
+            )
+        
+        # Create user in our database with Keycloak ID
+        db_user = await user_service.create_user(
+            email=user.email,
+            name=user.name,
+            keycloak_id=keycloak_result["keycloak_id"]
+        )
+        
+        if not db_user:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create user in database"
+            )
+        
+        logger.info(f"User registered successfully: {user.email}")
+        return db_user
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Registration error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during registration"
+        )
 
 
 @router.post("/login", response_model=UserSession)
-def login(user_credentials: UserLogin, response: Response, db: Session = Depends(get_db)):
-    """Login user with simple session."""
-    # Find user
-    user = db.query(User).filter(User.email == user_credentials.email).first()
-    
-    if not user or not verify_password(user_credentials.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password"
+async def login(user_credentials: UserLogin, response: Response, db: Session = Depends(get_db)):
+    """Login user via Keycloak."""
+    try:
+        user_service = UserService(db)
+        # Authenticate with Keycloak
+        auth_result = await keycloak_service.authenticate_user(
+            email=user_credentials.email,
+            password=user_credentials.password
         )
-    
-    if not user.is_active:
+        
+        if not auth_result["success"]:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password"
+            )
+        
+        # Get user from our database
+        user = await user_service.get_user_by_email(user_credentials.email)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found in database"
+            )
+        
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Inactive user"
+            )
+        
+        # Store refresh token in Redis and Postgres (if available)
+        refresh_token = auth_result["refresh_token"]
+        expires_in = auth_result["expires_in"]
+        
+        # Store refresh token in Redis
+        await redis_service.store_refresh_token(user.id, refresh_token, expires_in)
+        
+        # Store refresh token in Postgres (you might want to create a separate table for this)
+        # For now, we'll just use Redis
+        
+        # Return only access token to frontend
+        access_token = auth_result["access_token"]
+        
+        logger.info(f"User logged in successfully: {user.email}")
+        return UserSession(user=user, session_token=access_token)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Inactive user"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during login"
         )
-    
-    # Create simple session
-    session_token = create_simple_session(user.id)
-    
-    # Set cookie
-    response.set_cookie(
-        key="session_token",
-        value=session_token,
-        httponly=True,
-        max_age=86400,  # 24 hours
-        samesite="lax"
-    )
-    
-    return UserSession(user=user, session_token=session_token)
 
 
 @router.post("/logout")
-def logout(response: Response):
-    """Logout user by clearing session cookie."""
-    response.delete_cookie(key="session_token")
-    return {"message": "Successfully logged out"}
+async def logout(response: Response, db: Session = Depends(get_db)):
+    """Logout user by clearing tokens."""
+    try:
+        # In a full implementation, you would:
+        # 1. Get user ID from the access token
+        # 2. Delete refresh token from Redis
+        # 3. Optionally invalidate the token in Keycloak
+        
+        # For now, we'll just return success
+        # TODO: Implement proper token cleanup
+        
+        logger.info("User logged out successfully")
+        return {"message": "Successfully logged out"}
+        
+    except Exception as e:
+        logger.error(f"Logout error: {str(e)}")
+        return {"message": "Logout completed with warnings"}

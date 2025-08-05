@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { CssBaseline } from '@mui/material';
 import { useAuthStore } from './store/authStore';
@@ -22,15 +22,16 @@ const theme = createTheme({
   },
 });
 
-const App: React.FC = () => {
+// Component to conditionally render the header
+const AppContent: React.FC = () => {
   const { isAuthenticated } = useAuthStore();
+  const location = useLocation();
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Router>
-        <Header />
-        <Routes>
+    <>
+      {!isAuthPage && <Header />}
+      <Routes>
           <Route
             path="/login"
             element={
@@ -68,6 +69,16 @@ const App: React.FC = () => {
             }
           />
         </Routes>
+    </>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Router>
+        <AppContent />
       </Router>
     </ThemeProvider>
   );

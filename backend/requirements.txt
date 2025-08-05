@@ -16,3 +16,7 @@ requests==2.31.0
 langchain==0.3.26
 langchain-openai==0.3.28
 openai==1.86.0
+# Keycloak and Redis dependencies
+python-keycloak==5.7.0
+redis==5.0.1
+httpx==0.25.2

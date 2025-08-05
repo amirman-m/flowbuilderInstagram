@@ -1,10 +1,20 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, List
+import os
 
 
 class Settings(BaseSettings):
-    # Database - Pydantic automatically uses DATABASE_URL env var if available
-    database_url: str = "postgresql://postgres:postgres@db:5432/socialmediaflow"
+    # Database
+    database_url: str
+    
+    # Redis
+    redis_url: str
+    
+    # Keycloak
+    keycloak_url: str
+    keycloak_realm: str
+    keycloak_client_id: str
+    keycloak_client_secret: str
     
     # API
     api_v1_str: str = "/api/v1"
@@ -21,6 +31,7 @@ class Settings(BaseSettings):
     
     class Config:
         env_file = ".env"
+        case_sensitive = False
 
 
 settings = Settings()
