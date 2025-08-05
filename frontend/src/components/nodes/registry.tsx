@@ -13,6 +13,7 @@ import { NodeInstance, NodeExecutionStatus, NodeType, NodeCategory } from '../..
 import { ChatInputNode, VoiceInputNode, OpenAIChatNode, DeepSeekChatNode } from './node-types';
 import { TranscriptionNode } from './node-types/TranscriptionNode';
 import { TelegramInputNode } from './node-types/TelegramInputNode';
+import { TelegramMessageActionNode } from './node-types/TelegramMessageActionNode';
 import { baseNodeStyles, getCategoryColor } from './styles';
 
 // Import other node components
@@ -67,6 +68,7 @@ export const nodeComponentRegistry: Record<string, React.FC<NodeComponentProps>>
   'simple-openai-chat': OpenAIChatNode,
   'simple-deepseek-chat': DeepSeekChatNode,
   'transcription': TranscriptionNode,
+  'send_telegram_message': TelegramMessageActionNode,
   // Add more node types here - Example:
   // 'instagram-trigger': InstagramTriggerNode,
   // 'auto-reply': AutoReplyNode,
