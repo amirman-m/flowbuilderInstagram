@@ -20,6 +20,7 @@ router = APIRouter()
 # Request/Response models for node execution
 class NodeExecutionRequest(BaseModel):
     inputs: Dict[str, Any] = {}
+    settings: Dict[str, Any] = {}
 
 
 class NodeExecutionResponse(BaseModel):
@@ -229,6 +230,10 @@ async def execute_node(
             "settings": node_instance.settings or {},
         }
         
+        # Use settings from request if provided, otherwise use settings from database
+        if hasattr(request, 'settings') and request.settings:
+            context["settings"] = request.settings
+        
         # Add all request inputs (including access_token) to context
         if hasattr(request, 'inputs') and request.inputs:
             context.update(request.inputs)
@@ -237,6 +242,8 @@ async def execute_node(
         import logging
         logger = logging.getLogger(__name__)
         logger.info(f"🔍 DEBUG: Request inputs: {getattr(request, 'inputs', 'No inputs attr')}")
+        logger.info(f"🔍 DEBUG: Request settings: {getattr(request, 'settings', 'No settings attr')}")
+        logger.info(f"🔍 DEBUG: Request dict: {request.dict()}")
         logger.info(f"🔍 DEBUG: Final context: {context}")
         
         # Execute the node using the node registry with full context

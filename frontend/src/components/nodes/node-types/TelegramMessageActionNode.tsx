@@ -150,11 +150,18 @@ export const TelegramMessageActionNode: React.FC<NodeComponentProps> = ({ data, 
       const inputs = await collectInputsFromConnectedNodes();
       
       // Prepare execution request (for flows endpoint)
+      // Include settings directly in inputs to ensure they're processed by the backend
       const executionRequest = {
-        inputs  // Only send inputs, flow_id and node_id come from URL
+        inputs: {
+          ...inputs,
+          access_token: currentSettings.access_token,
+          chat_id: currentSettings.chat_id
+        },
+        settings: currentSettings  // Also include settings separately for future compatibility
       };
       
       console.log('🚀 Telegram Message Action Node - Executing with request:', executionRequest);
+      console.log('🚀 Including settings:', currentSettings);
       console.log('🚀 Using flow_id:', flowId, 'node_id:', id);
       
       // Validate flowId before making API call

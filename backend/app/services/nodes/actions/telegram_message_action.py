@@ -244,15 +244,17 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
             try:
                 # Make API request to get all nodes in the flow - use direct DB query
                 from sqlalchemy.orm import Session
-                from ....core.database import get_db
-                from ....models.node_instance import NodeInstance
+                from app.core.database import get_db
+                from app.models.nodes import NodeInstance
                 db = next(get_db())
                 
                 # Query the database for nodes in this flow
                 nodes = db.query(NodeInstance).filter(NodeInstance.flow_id == flow_id).all()
                 logger.info(f"Found {len(nodes)} nodes in flow {flow_id}")
+                logger.info(f"Nodes: {nodes}")
                 # Find the telegram_input node
                 for node in nodes:
+                    logger.info(f"node.type_id: {node.type_id}")
                     if node.type_id == "telegram_input":
                         logger.info(f"Found telegram_input node: {node.id}")
                         node_data = node.data
