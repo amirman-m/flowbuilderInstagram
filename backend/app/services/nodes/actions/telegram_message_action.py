@@ -134,18 +134,69 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
         
         # If access_token or chat_id not in settings, try to find them in connected nodes
         if not access_token or not chat_id:
+            logger.info(f"Searching for chat_id and access_token in inputs: {list(inputs.keys())}")
+            
             # Look for telegram credentials in the inputs
             for port_id, port_data in inputs.items():
+                logger.info(f"Checking port {port_id} with data type: {type(port_data)}")
+                
                 if isinstance(port_data, dict):
-                    # Check if this is output from a telegram_input node
+                    # Log the structure for debugging
+                    logger.info(f"Port {port_id} data keys: {list(port_data.keys())}")
+                    
+                    # Check if this is output from a telegram_input node (direct chat_id)
                     if "chat_id" in port_data:
                         chat_id = port_data["chat_id"]
                         logger.info(f"Found chat_id from connected node: {chat_id}")
                     
-                    # Check if there's metadata with access_token
+                    # Check if there's access_token at top level
                     if "access_token" in port_data:
                         access_token = port_data["access_token"]
                         logger.info(f"Found access_token from connected node")
+                    
+                    # Check session_id to find matching Telegram session data
+                    if "session_id" in port_data:
+                        session_id = port_data["session_id"]
+                        logger.info(f"Found session_id: {session_id}, searching for matching Telegram data")
+                        
+                        # If we have a session_id, search through all flow nodes for matching Telegram data
+                        if flow_id and session_id:
+                            try:
+                                from sqlalchemy.orm import Session
+                                from ....db.session import get_db
+                                from ....models.node_instance import NodeInstance
+                                db = next(get_db())
+                                
+                                # Query for telegram_input nodes in this flow
+                                telegram_nodes = db.query(NodeInstance).filter(
+                                    NodeInstance.flow_id == flow_id,
+                                    NodeInstance.type_id == "telegram_input"
+                                ).all()
+                                
+                                for tg_node in telegram_nodes:
+                                    node_data = tg_node.data
+                                    if isinstance(node_data, dict):
+                                        # Check lastExecution for matching session_id
+                                        last_exec = node_data.get("lastExecution", {})
+                                        if isinstance(last_exec, dict):
+                                            outputs = last_exec.get("outputs", {})
+                                            message_data = outputs.get("message_data", {})
+                                            
+                                            if isinstance(message_data, dict) and message_data.get("session_id") == session_id:
+                                                if not chat_id and "chat_id" in message_data:
+                                                    chat_id = message_data["chat_id"]
+                                                    logger.info(f"Found matching chat_id from Telegram node session: {chat_id}")
+                                                
+                                        # Check settings for access_token
+                                        if not access_token:
+                                            settings_data = node_data.get("settings", {})
+                                            if "access_token" in settings_data:
+                                                access_token = settings_data["access_token"]
+                                                logger.info(f"Found access_token from Telegram node settings")
+                                                
+                                db.close()
+                            except Exception as e:
+                                logger.error(f"Error searching for Telegram session data: {e}")
                     
                     # Check if there's metadata with these values
                     if "metadata" in port_data and isinstance(port_data["metadata"], dict):
@@ -156,8 +207,12 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
                         if not access_token and "access_token" in port_data["metadata"]:
                             access_token = port_data["metadata"]["access_token"]
                             logger.info(f"Found access_token from metadata")
+                    
+                    # Break if we found both
+                    if chat_id and access_token:
+                        break
         # If we still don't have the credentials, fetch all nodes in the flow and find telegram_input node
-        if (not access_token or not chat_id) and flow_id:
+        if (not access_token or not chat_id) :
             logger.info(f"Searching for Telegram input node in flow {flow_id}")
             try:
                 # Make API request to get all nodes in the flow - use direct DB query
