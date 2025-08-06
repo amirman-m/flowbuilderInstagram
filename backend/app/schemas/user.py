@@ -29,4 +29,8 @@ class User(UserBase):
 
 class UserSession(BaseModel):
     user: User
-    session_token: str
+    message: str = "Authentication successful"
+
+class AuthResponse(BaseModel):
+    user: User
+    message: str

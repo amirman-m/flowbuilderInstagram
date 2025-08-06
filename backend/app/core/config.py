@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     keycloak_realm: str
     keycloak_client_id: str
     keycloak_client_secret: str
+    keycloak_admin_username: str
+    keycloak_admin_password: str
     
     # API
     api_v1_str: str = "/api/v1"
@@ -28,6 +30,12 @@ class Settings(BaseSettings):
     
     # Environment
     environment: str = "development"
+    
+    # Cookie Settings for Authentication
+    cookie_secure: bool = False  # Set to True in production with HTTPS
+    cookie_samesite: str = "lax"  # "strict" for maximum security, "lax" for better UX
+    access_token_expire_minutes: int = 5  # 5 minutes (short-lived for security)
+    refresh_token_expire_minutes: int = 30  # 30 minutes (token rotation enabled)
     
     class Config:
         env_file = ".env"

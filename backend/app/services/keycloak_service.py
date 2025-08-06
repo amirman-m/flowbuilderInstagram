@@ -20,8 +20,8 @@ class KeycloakService:
         data = {
             "grant_type": "password",
             "client_id": "admin-cli",
-            "username": "admin",
-            "password": "admin"
+            "username": settings.keycloak_admin_username,
+            "password": settings.keycloak_admin_password
         }
         
         async with httpx.AsyncClient() as client:
@@ -157,5 +157,53 @@ class KeycloakService:
         except Exception as e:
             logger.error(f"Error getting user info: {str(e)}")
             return {"success": False, "error": str(e)}
+    
+    async def revoke_tokens(self, token: str, token_type_hint: str = "access_token") -> Dict[str, Any]:
+        """Revoke access or refresh token using Keycloak's revocation endpoint"""
+        try:
+            url = f"{self.keycloak_url}/realms/{self.realm}/protocol/openid-connect/revoke"
+            data = {
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "token": token,
+                "token_type_hint": token_type_hint
+            }
+        
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, data=data)
+            
+                if response.status_code == 200:
+                    return {"success": True, "message": "Token successfully revoked"}
+                else:
+                    logger.error(f"Token revocation failed: {response.text}")
+                    return {"success": False, "error": "Token revocation failed"}
+                
+        except Exception as e:
+            logger.error(f"Error revoking token: {str(e)}")
+            return {"success": False, "error": str(e)}
+    
+    async def logout_user(self, refresh_token: str) -> Dict[str, Any]:
+        """Logout user by ending the session in Keycloak"""
+        try:
+            url = f"{self.keycloak_url}/realms/{self.realm}/protocol/openid-connect/logout"
+            data = {
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "refresh_token": refresh_token
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, data=data)
+                
+                if response.status_code == 204:  # Keycloak returns 204 No Content on successful logout
+                    return {"success": True, "message": "User logged out successfully"}
+                else:
+                    logger.error(f"Keycloak logout failed: {response.text}")
+                    return {"success": False, "error": "Keycloak logout failed"}
+                    
+        except Exception as e:
+            logger.error(f"Error during Keycloak logout: {str(e)}")
+            return {"success": False, "error": str(e)}
+    
 
 keycloak_service = KeycloakService()

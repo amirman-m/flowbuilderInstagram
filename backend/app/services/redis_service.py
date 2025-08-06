@@ -1,4 +1,4 @@
-import redis
+import redis.asyncio as redis
 import json
 import logging
 from typing import Dict, Any, Optional
@@ -13,7 +13,13 @@ class RedisService:
     async def ping(self) -> bool:
         """Check if Redis is available"""
         try:
-            return self.redis_client.ping()
+            return await self.redis_client.ping()
+        except redis.ConnectionError as e:
+            logger.error(f"Redis connection failed: {str(e)}")
+            return False
+        except redis.TimeoutError as e:
+            logger.error(f"Redis timeout: {str(e)}")
+            return False
         except Exception as e:
             logger.error(f"Redis ping failed: {str(e)}")
             return False
@@ -22,38 +28,60 @@ class RedisService:
         """Store refresh token in Redis with expiration"""
         try:
             key = f"refresh_token:{user_id}"
-            self.redis_client.setex(key, expires_in, refresh_token)
+            await self.redis_client.setex(key, expires_in, refresh_token)
             logger.info(f"Refresh token stored for user {user_id}")
             return True
+        except redis.ConnectionError as e:
+            logger.error(f"Redis connection failed while storing token for user {user_id}: {str(e)}")
+            return False
+        except redis.TimeoutError as e:
+            logger.error(f"Redis timeout while storing token for user {user_id}: {str(e)}")
+            return False
         except Exception as e:
-            logger.error(f"Failed to store refresh token: {str(e)}")
+            logger.error(f"Failed to store refresh token for user {user_id}: {str(e)}")
             return False
     
     async def get_refresh_token(self, user_id: int) -> Optional[str]:
         """Get refresh token from Redis"""
         try:
             key = f"refresh_token:{user_id}"
-            return self.redis_client.get(key)
+            return await self.redis_client.get(key)
+        except redis.ConnectionError as e:
+            logger.error(f"Redis connection failed while getting token for user {user_id}: {str(e)}")
+            return None
+        except redis.TimeoutError as e:
+            logger.error(f"Redis timeout while getting token for user {user_id}: {str(e)}")
+            return None
         except Exception as e:
-            logger.error(f"Failed to get refresh token: {str(e)}")
+            logger.error(f"Failed to get refresh token for user {user_id}: {str(e)}")
             return None
     
     async def delete_refresh_token(self, user_id: int) -> bool:
         """Delete refresh token from Redis"""
         try:
             key = f"refresh_token:{user_id}"
-            self.redis_client.delete(key)
-            logger.info(f"Refresh token deleted for user {user_id}")
-            return True
+            result = await self.redis_client.delete(key)
+            if result > 0:
+                logger.info(f"Refresh token deleted for user {user_id}")
+                return True
+            else:
+                logger.warning(f"No refresh token found to delete for user {user_id}")
+                return False
+        except redis.ConnectionError as e:
+            logger.error(f"Redis connection failed while deleting token for user {user_id}: {str(e)}")
+            return False
+        except redis.TimeoutError as e:
+            logger.error(f"Redis timeout while deleting token for user {user_id}: {str(e)}")
+            return False
         except Exception as e:
-            logger.error(f"Failed to delete refresh token: {str(e)}")
+            logger.error(f"Failed to delete refresh token for user {user_id}: {str(e)}")
             return False
     
     async def store_user_backup(self, user_id: int, user_data: Dict[str, Any]) -> bool:
         """Store user data backup in Redis"""
         try:
             key = f"user_backup:{user_id}"
-            self.redis_client.set(key, json.dumps(user_data))
+            await self.redis_client.set(key, json.dumps(user_data))
             logger.info(f"User backup stored for user {user_id}")
             return True
         except Exception as e:
@@ -64,7 +92,7 @@ class RedisService:
         """Get user data backup from Redis"""
         try:
             key = f"user_backup:{user_id}"
-            data = self.redis_client.get(key)
+            data = await self.redis_client.get(key)
             return json.loads(data) if data else None
         except Exception as e:
             logger.error(f"Failed to get user backup: {str(e)}")
@@ -74,7 +102,7 @@ class RedisService:
         """Store user data backup by email in Redis"""
         try:
             key = f"user_email_backup:{email}"
-            self.redis_client.set(key, json.dumps(user_data))
+            await self.redis_client.set(key, json.dumps(user_data))
             logger.info(f"User email backup stored for {email}")
             return True
         except Exception as e:
@@ -85,7 +113,7 @@ class RedisService:
         """Get user data backup by email from Redis"""
         try:
             key = f"user_email_backup:{email}"
-            data = self.redis_client.get(key)
+            data = await self.redis_client.get(key)
             return json.loads(data) if data else None
         except Exception as e:
             logger.error(f"Failed to get user email backup: {str(e)}")
