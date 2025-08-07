@@ -37,12 +37,16 @@ const Register: React.FC = () => {
     setError('');
 
     try {
-      // The authAPI.register function now handles the transformation
+      // Backend handles user registration with Keycloak
       await authAPI.register(userData);
-      // Registration successful, redirect to login
-      navigate('/login', { state: { message: 'Registration successful! Please login.' } });
+      // Registration successful, redirect to login with success message
+      navigate('/login', { 
+        state: { 
+          message: 'Registration successful! You can now log in with your credentials.' 
+        } 
+      });
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Registration failed');
+      setError(err.response?.data?.detail || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }

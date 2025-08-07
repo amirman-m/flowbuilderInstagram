@@ -134,10 +134,54 @@ class UserService:
             if user:
                 return user
             
-            # For Redis fallback, we'd need to implement a keycloak_id index
-            # For now, we'll skip Redis fallback for this method
+            logger.warning(f"User not found in Postgres for keycloak_id: {keycloak_id}")
             return None
             
         except Exception as e:
             logger.error(f"Error getting user by Keycloak ID: {str(e)}")
-            return None
+            
+            # Fallback to Redis - perform reverse lookup by scanning user backups
+            logger.warning("Postgres unavailable for keycloak lookup, trying Redis backup")
+            
+            try:
+                import json
+                import redis.asyncio as redis
+                from ..core.config import settings
+                
+                # Create Redis client
+                redis_client = redis.from_url(
+                    settings.redis_url, 
+                    decode_responses=True
+                )
+                
+                # Scan for user_backup keys and check keycloak_id
+                async for key in redis_client.scan_iter("user_backup:*"):
+                    try:
+                        user_data_str = await redis_client.get(key)
+                        if user_data_str:
+                            user_data = json.loads(user_data_str)
+                            if user_data.get("keycloak_id") == keycloak_id:
+                                # Reconstruct User object from Redis data
+                                user = User()
+                                user.id = user_data["id"]
+                                user.email = user_data["email"]
+                                user.name = user_data["name"]
+                                user.keycloak_id = user_data["keycloak_id"]
+                                user.is_active = user_data["is_active"]
+                                
+                                logger.info(f"Found user in Redis backup for keycloak_id: {keycloak_id}")
+                                await redis_client.close()
+                                return user
+                    except json.JSONDecodeError:
+                        continue  # Skip invalid JSON entries
+                    except Exception as key_error:
+                        logger.warning(f"Error processing Redis key {key}: {str(key_error)}")
+                        continue
+                
+                await redis_client.close()
+                logger.warning(f"User not found in Redis backup for keycloak_id: {keycloak_id}")
+                return None
+                
+            except Exception as redis_error:
+                logger.error(f"Redis keycloak_id lookup failed: {str(redis_error)}")
+                return None

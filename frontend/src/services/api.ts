@@ -13,13 +13,11 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// Add request interceptor to include access token
+// Request interceptor - no need to add Authorization header since we use HttpOnly cookies
 api.interceptors.request.use(
   (config) => {
-    const { accessToken } = useAuthStore.getState();
-    if (accessToken) {
-      config.headers.Authorization = `Bearer ${accessToken}`;
-    }
+    // HttpOnly cookies are automatically included with withCredentials: true
+    // No manual token management needed
     return config;
   },
   (error) => {
@@ -27,16 +25,43 @@ api.interceptors.request.use(
   }
 );
 
-// Add response interceptor to handle token expiration
+// Response interceptor to handle token expiration
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Token expired or invalid, logout user
-      useAuthStore.getState().logout();
-      // Redirect to login page
-      window.location.href = '/login';
+  async (error) => {
+    const originalRequest = error.config;
+    
+    // Don't retry if this is already a refresh request to prevent infinite loops
+    if (originalRequest.url?.includes('/auth/refresh')) {
+      return Promise.reject(error);
     }
+    
+    // Don't try to refresh on login/register failures - only for authenticated users
+    if (originalRequest.url?.includes('/auth/login') || originalRequest.url?.includes('/auth/register')) {
+      return Promise.reject(error);
+    }
+    
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      try {
+        // Try to refresh tokens using HttpOnly cookies
+        const refreshResponse = await api.post('/auth/refresh');
+        const authResponse = refreshResponse.data;
+        
+        // Update user data in store (tokens handled by cookies)
+        useAuthStore.getState().setUser(authResponse.user);
+        
+        // Retry the original request
+        return api(originalRequest);
+      } catch (refreshError) {
+        // Refresh failed, redirect to login
+        useAuthStore.getState().logout();
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      }
+    }
+    
     return Promise.reject(error);
   }
 );
@@ -45,12 +70,16 @@ api.interceptors.response.use(
 export const authAPI = {
   login: async (credentials: LoginCredentials): Promise<UserSession> => {
     const response = await api.post('/auth/login', credentials);
-    const userSession = response.data;
+    const authResponse = response.data;
     
-    // Store user and access token in auth store
-    useAuthStore.getState().setAuth(userSession.user, userSession.session_token);
+    // Backend now uses HttpOnly cookies for tokens, only returns user data
+    // Store user in auth store (no token needed - handled by cookies)
+    useAuthStore.getState().setUser(authResponse.user);
     
-    return userSession;
+    return {
+      user: authResponse.user,
+      message: authResponse.message
+    };
   },
 
   register: async (userData: RegisterData): Promise<User> => {
@@ -64,15 +93,38 @@ export const authAPI = {
     return response.data;
   },
 
+  refresh: async (): Promise<UserSession | null> => {
+    try {
+      // Backend will use refresh token from HttpOnly cookie
+      const response = await api.post('/auth/refresh');
+      const authResponse = response.data;
+      
+      // Update user data in store (tokens handled by cookies)
+      useAuthStore.getState().setUser(authResponse.user);
+      
+      return {
+        user: authResponse.user,
+        message: authResponse.message
+      };
+    } catch (error) {
+      // Refresh failed, user needs to login again
+      useAuthStore.getState().logout();
+      return null;
+    }
+  },
+
   logout: async (): Promise<void> => {
     try {
+      // Backend will clear HttpOnly cookies and revoke tokens
       await api.post('/auth/logout');
     } catch (error) {
       // Even if logout fails on backend, clear local state
       console.warn('Backend logout failed, but clearing local state');
     } finally {
-      // Always clear local auth state
+      // Clear local auth state (user data only, cookies handled by backend)
       useAuthStore.getState().logout();
+      // Redirect to login page
+      window.location.href = '/login';
     }
   },
 };

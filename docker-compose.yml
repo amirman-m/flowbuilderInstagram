@@ -83,6 +83,9 @@ services:
       KC_DB_PASSWORD: postgres
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USERNAME}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # Force RSA algorithms for tokens (not HMAC)
+      KC_SPI_TOKEN_EXCHANGE_TOKEN_HANDLER_DEFAULT_ALGORITHM: RS256
+      KC_SPI_KEYS_DEFAULT_ALGORITHM: RS256
     ports:
       - "8080:8080"
     depends_on:

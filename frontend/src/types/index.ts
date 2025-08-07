@@ -20,6 +20,12 @@ export interface Flow {
 
 export interface UserSession {
   user: User;
+  message?: string;
+}
+
+// Legacy interface for backward compatibility
+export interface UserSessionWithToken {
+  user: User;
   session_token: string;
 }
 

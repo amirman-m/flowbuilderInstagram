@@ -115,6 +115,10 @@ class KeycloakService:
         try:
             url = f"{self.keycloak_url}/realms/{self.realm}/protocol/openid-connect/token"
             
+            # Log the refresh token attempt (first/last 10 chars only for security)
+            token_preview = f"{refresh_token[:10]}...{refresh_token[-10:]}" if len(refresh_token) > 20 else "[token too short]"
+            logger.info(f"Attempting to refresh token: {token_preview}")
+            
             data = {
                 "grant_type": "refresh_token",
                 "client_id": self.client_id,
@@ -122,11 +126,22 @@ class KeycloakService:
                 "refresh_token": refresh_token
             }
             
+            # Log request details (excluding the full token)
+            logger.info(f"Refresh token request to: {url}")
+            logger.info(f"With client_id: {self.client_id}")
+            logger.info(f"Client secret used: {'*' * 8}")
+            
             async with httpx.AsyncClient() as client:
+                # Send request and capture full response
                 response = await client.post(url, data=data)
+                
+                # Log response details
+                logger.info(f"Keycloak refresh response status: {response.status_code}")
+                logger.info(f"Keycloak refresh response headers: {dict(response.headers)}")
                 
                 if response.status_code == 200:
                     tokens = response.json()
+                    logger.info("Token refresh successful")
                     return {
                         "success": True,
                         "access_token": tokens["access_token"],
@@ -134,10 +149,13 @@ class KeycloakService:
                         "expires_in": tokens["expires_in"]
                     }
                 else:
-                    return {"success": False, "error": "Token refresh failed"}
+                    # Log error response
+                    error_content = response.text
+                    logger.error(f"Token refresh failed with status {response.status_code}: {error_content}")
+                    return {"success": False, "error": f"Token refresh failed: {error_content}"}
                     
         except Exception as e:
-            logger.error(f"Error refreshing token: {str(e)}")
+            logger.exception(f"Error refreshing token: {str(e)}")
             return {"success": False, "error": str(e)}
     
     async def get_user_info(self, access_token: str) -> Dict[str, Any]:

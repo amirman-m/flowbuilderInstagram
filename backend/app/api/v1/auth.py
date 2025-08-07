@@ -85,7 +85,7 @@ class AuthService:
             httponly=True,  # Prevents JavaScript access
             secure=settings.cookie_secure,  # HTTPS only in production
             samesite=settings.cookie_samesite,  # CSRF protection
-            max_age=settings.refresh_token_expire_days * 24 * 60 * 60,  # 7 days
+            max_age=settings.refresh_token_expire_minutes * 60,  # 30 minutes
             path="/auth/refresh"  # Only sent to refresh endpoint
         )
 
@@ -206,20 +206,22 @@ async def refresh_token(request: Request, response: Response,
     Refresh access token using HttpOnly cookies (hybrid approach with Redis fallback).
     """
     try:
-        # Try to get access token from request to extract user_id
-        access_token = token_service.extract_access_token_from_request(request)
-        if not access_token:
-            raise HTTPException(status_code=401, detail="Access token missing")
-        
-        # Decode access token to get user_id (with proper signature verification)
-        user_id = await token_service.get_user_id_from_token(access_token)
-        
-        # Get refresh token using hybrid approach (cookie first, then Redis fallback)
-        refresh_token = await token_service.get_refresh_token_hybrid(request, user_id, redis_service)
-        
+        # Get refresh token from HttpOnly cookie first
+        refresh_token = token_service.extract_refresh_token_from_request(request)
         if not refresh_token:
-            logger.warning(f"No refresh token found for user {user_id}")
-            raise HTTPException(status_code=401, detail="Refresh token not found")
+            raise HTTPException(status_code=401, detail="Refresh token missing")
+        
+        # Get user_id from refresh token using specialized refresh token validation
+        try:
+            user_id = await token_service.get_user_id_from_refresh_token(refresh_token)
+        except HTTPException:
+            # If refresh token validation fails, try Redis fallback
+            try:
+                user_id = await redis_service.get_user_by_refresh_token(refresh_token)
+                if not user_id:
+                    raise HTTPException(status_code=401, detail="Invalid refresh token")
+            except Exception:
+                raise HTTPException(status_code=401, detail="Invalid refresh token")
         
         # Exchange refresh token for new tokens with Keycloak
         refresh_result = await keycloak_service.refresh_token(refresh_token)

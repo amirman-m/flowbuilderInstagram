@@ -16,6 +16,7 @@ import { Visibility, VisibilityOff } from '@mui/icons-material';
 import GoogleColorIcon from '../components/icons/GoogleColorIcon';
 import AppleIcon from '@mui/icons-material/Apple';
 import FacebookIcon from '@mui/icons-material/Facebook';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import { LoginCredentials } from '../types';
 
@@ -27,7 +28,11 @@ const Login: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  // Auth store now handles setting user and token automatically in authAPI.login
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Get success message from registration redirect
+  const registrationMessage = location.state?.message;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,9 +40,12 @@ const Login: React.FC = () => {
     setError('');
 
     try {
-      // authAPI.login now automatically stores user and access token in auth store
+      // Backend now uses HttpOnly cookies for authentication
+      // authAPI.login stores user data and cookies are handled automatically
       await authAPI.login(credentials);
-      // No need to manually set user - it's handled in authAPI.login
+      
+      // Navigate to dashboard/home page after successful login
+      navigate('/', { replace: true });
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Login failed');
     } finally {
@@ -90,6 +98,12 @@ const Login: React.FC = () => {
             boxShadow: 'none'
           }}
         >
+          {registrationMessage && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              {registrationMessage}
+            </Alert>
+          )}
+          
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {error}
