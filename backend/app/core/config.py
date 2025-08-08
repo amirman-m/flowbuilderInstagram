@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     secret_key: str = "simple-secret-key-change-in-production"
     
     # Environment
-    environment: str = "development"
+    environment: str = "production"
     
     # Cookie Settings for Authentication
     cookie_secure: bool = False  # Set to True in production with HTTPS

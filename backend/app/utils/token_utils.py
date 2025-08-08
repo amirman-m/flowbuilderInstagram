@@ -137,7 +137,8 @@ class TokenService:
                             options={
                                 "verify_signature": True,
                                 "verify_exp": True,
-                                "verify_aud": True
+                                "verify_aud": True,
+                                "verify_iss": True
                             }
                         )
                     elif algorithm.startswith('HS'):
@@ -151,7 +152,8 @@ class TokenService:
                             options={
                                 "verify_signature": True,
                                 "verify_exp": True,
-                                "verify_aud": True
+                                "verify_aud": True,
+                                "verify_iss": True
                             }
                         )
                 else:
@@ -161,9 +163,9 @@ class TokenService:
                         token,
                         options={
                             "verify_signature": False,  # Disabled for localhost development
-                            "verify_exp": False,        # Disabled to handle time sync issues
-                            "verify_aud": False,
-                            "verify_iss": False
+                            "verify_exp": True,        # Disabled to handle time sync issues
+                            "verify_aud": True,
+                            "verify_iss": True
                         }
                     )
             except jwt.InvalidTokenError as e:

@@ -3,7 +3,7 @@ import json
 from typing import Dict, Any, Optional
 from ..core.config import settings
 import logging
-
+import jwt
 logger = logging.getLogger(__name__)
 
 class KeycloakService:
@@ -221,6 +221,167 @@ class KeycloakService:
                     
         except Exception as e:
             logger.error(f"Error during Keycloak logout: {str(e)}")
+            return {"success": False, "error": str(e)}
+    
+    async def validate_access_token(self, access_token: str) -> Dict[str, Any]:
+        # Debug token structure first
+        try:
+            unverified = jwt.decode(access_token, options={"verify_signature": False})
+            logger.info(f"Token payload keys: {list(unverified.keys())}")
+            logger.info(f"Token aud (audience): {unverified.get('aud')}")
+            logger.info(f"Token iss (issuer): {unverified.get('iss')}")
+            logger.info(f"Token exp (expires): {unverified.get('exp')}")
+            logger.info(f"Token typ (type): {unverified.get('typ')}")
+            logger.info(f"Token scope: {unverified.get('scope')}")
+        except Exception as debug_e:
+            logger.warning(f"Could not debug token structure: {debug_e}")
+        try:
+            # Debug token structure
+            unverified = jwt.decode(access_token, options={"verify_signature": False})
+            token_aud = unverified.get('aud')
+            
+            logger.info(f"Token audience: {token_aud}")
+            logger.info(f"Expected client_id: {self.client_id}")
+            
+            # Handle different audience formats
+            valid_audiences = [
+                self.client_id,  # Our client ID
+                'account',       # Keycloak's default account service
+                'account-console' # Another common Keycloak audience
+            ]
+            
+            # Check if token audience is valid
+            if isinstance(token_aud, list):
+                audience_valid = any(aud in valid_audiences for aud in token_aud)
+            else:
+                audience_valid = token_aud in valid_audiences
+                
+            logger.info(f"Audience validation result: {audience_valid}")
+            url = f"{self.keycloak_url}/realms/{self.realm}/protocol/openid-connect/userinfo"
+            headers = {"Authorization": f"Bearer {access_token}"}
+            
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(url, headers=headers)
+                
+                if response.status_code == 200:
+                    user_info = response.json()
+                    logger.info(f"Token validation successful for user: {user_info.get('sub', 'unknown')}")
+                    return {
+                        "success": True, 
+                        "user_info": user_info
+                    }
+                elif response.status_code == 401:
+                    logger.warning("Token validation failed: Invalid or expired token")
+                    return {
+                        "success": False, 
+                        "error": "Invalid or expired token"
+                    }
+                else:
+                    logger.error(f"Token validation failed with status {response.status_code}: {response.text}")
+                    return {
+                        "success": False, 
+                        "error": f"Validation failed with status {response.status_code}"
+                    }
+                    
+        except httpx.TimeoutException:
+            logger.error("Token validation timeout")
+            return {"success": False, "error": "Validation timeout"}
+        except Exception as e:
+            logger.error(f"Error validating token: {str(e)}")
+            return {"success": False, "error": str(e)}
+    
+    async def introspect_token(self, token: str, token_type_hint: str = "access_token") -> Dict[str, Any]:
+        """
+    Alternative: Use Keycloak's introspection endpoint for more detailed token info.
+    This provides more information but requires client credentials.
+    """
+        try:
+            url = f"{self.keycloak_url}/realms/{self.realm}/protocol/openid-connect/token/introspect"
+            
+            data = {
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "token": token,
+                "token_type_hint": token_type_hint
+            }
+            
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(url, data=data)
+                
+                if response.status_code == 200:
+                    introspection_result = response.json()
+                    is_active = introspection_result.get("active", False)
+                    
+                    if is_active:
+                        return {
+                            "success": True,
+                            "active": True,
+                            "token_info": introspection_result
+                        }
+                    else:
+                        return {
+                            "success": False,
+                            "active": False,
+                            "error": "Token is not active"
+                        }
+                else:
+                    logger.error(f"Token introspection failed: {response.text}")
+                    return {
+                        "success": False,
+                        "error": "Introspection failed"
+                    }
+                    
+        except Exception as e:
+            logger.error(f"Error during token introspection: {str(e)}")
+            return {"success": False, "error": str(e)}
+    async def validate_refresh_token(self, refresh_token: str) -> Dict[str, Any]:
+        """
+        Validate refresh token by attempting to use it.
+        This is more reliable than JWT parsing for refresh tokens.
+        """
+        try:
+            # The most reliable way to validate a refresh token is to try using it
+            # We'll do a lightweight introspection call
+            url = f"{self.keycloak_url}/realms/{self.realm}/protocol/openid-connect/token/introspect"
+            
+            data = {
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "token": refresh_token,
+                "token_type_hint": "refresh_token"
+            }
+            
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(url, data=data)
+                
+                if response.status_code == 200:
+                    introspection_result = response.json()
+                    is_active = introspection_result.get("active", False)
+                    
+                    if is_active:
+                        return {
+                            "success": True,
+                            "user_id": introspection_result.get("sub"),
+                            "expires_at": introspection_result.get("exp"),
+                            "client_id": introspection_result.get("client_id")
+                        }
+                    else:
+                        return {
+                            "success": False,
+                            "error": "Refresh token is not active or expired"
+                        }
+                else:
+                    logger.error(f"Refresh token validation failed with status {response.status_code}: {response.text}")
+                    return {
+                        "success": False,
+                        "error": f"Validation failed with status {response.status_code}"
+                    }
+                
+        except httpx.TimeoutException:
+            logger.error("Refresh token validation timeout")
+            return {"success": False, "error": "Validation timeout"}
+        except Exception as e:
+            logger.error(f"Error validating refresh token: {str(e)}")
             return {"success": False, "error": str(e)}
     
 

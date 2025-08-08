@@ -8,6 +8,9 @@ from ...models.user import User
 from ...schemas.user import UserCreate, UserLogin, UserSession, AuthResponse, User as UserSchema
 from ...utils.token_utils import token_service
 from ...core.config import settings
+from ...utils.rate_limiter import multi_layer_rate_limit, check_email_rate_limit, analyze_rate_limit_patterns
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
+from sqlalchemy.orm import Session
 import logging
 
 logger = logging.getLogger(__name__)
@@ -71,14 +74,20 @@ class AuthService:
 
         if not user.is_active:
             raise HTTPException(status_code=400, detail="Inactive user")
-
+        keycloak_user_id = user.keycloak_id
         # Store refresh token in Redis with 30-minute expiration (token rotation)
         await redis_service.store_refresh_token(
-            user.id, 
+            keycloak_user_id, 
             auth_result["refresh_token"], 
             settings.refresh_token_expire_minutes * 60  # 30 minutes in seconds
         )
-
+        # Store new access token (5 minutes - short-lived)
+        await redis_service.store_access_token(
+            keycloak_user_id, 
+            auth_result["access_token"], 
+            settings.access_token_expire_minutes * 60
+        )
+        logger.info(f"Tokens stored in Redis for keycloak_user: {keycloak_user_id}")
         response.set_cookie(
             key="refresh_token",
             value=auth_result["refresh_token"],
@@ -105,11 +114,15 @@ class AuthService:
 
 
 @router.post("/register", response_model=UserSchema)
+@multi_layer_rate_limit("registration", clear_on_success=False)
 async def register(
     user: UserCreate,
     user_service: UserService = Depends(get_user_service)
 ):
     try:
+        # Additional email-based rate limiting
+        # 2 registration attempts per email per 30 minutes (stricter than IP)
+        await check_email_rate_limit(user.email, max_attempts=3, window_seconds=1800)
         auth_service = AuthService(user_service)
         db_user = await auth_service.register_user(user)
         logger.info(f"User registered: {user.email}")
@@ -122,12 +135,16 @@ async def register(
 
 
 @router.post("/login", response_model=AuthResponse)
+@multi_layer_rate_limit("login", clear_on_success=True)
 async def login(
     user_credentials: UserLogin,
     response: Response,
     user_service: UserService = Depends(get_user_service)
 ):
     try:
+        # Additional email-based rate limiting for login attempts
+        # 3 login attempts per email per 15 minutes
+        await check_email_rate_limit(user_credentials.email, max_attempts=3, window_seconds=900)
         auth_service = AuthService(user_service)
         auth_response = await auth_service.login_user(user_credentials, response)
         logger.info(f"User logged in: {user_credentials.email}")
@@ -144,7 +161,7 @@ async def logout(request: Request, response: Response):
     """Logout user by clearing HttpOnly cookies and revoking tokens."""
     try:
         # Extract user_id from request (hybrid approach: cookies + Redis fallback)
-        user_id = await token_service.get_user_id_from_request(request, redis_service)
+        keycloak_user_id = await token_service.get_user_id_from_request(request, redis_service)
         
         # Get access token from request for revocation
         access_token = token_service.extract_access_token_from_request(request)
@@ -152,42 +169,39 @@ async def logout(request: Request, response: Response):
             raise HTTPException(status_code=401, detail="Access token missing")
         
         # Get refresh token using hybrid approach
-        refresh_token = await token_service.get_refresh_token_hybrid(request, user_id, redis_service)
+        refresh_token = await token_service.get_refresh_token_hybrid(request, keycloak_user_id, redis_service)
         
-        # Revoke access token
+        # Revoke tokens with Keycloak (parallel execution for better performance)
+        import asyncio
+        revocation_tasks = []
+        
         if access_token:
-            access_result = await keycloak_service.revoke_tokens(access_token)
-            if not access_result["success"]:
-                logger.warning(f"Access token revocation failed for user {user_id}: {access_result.get('error')}")
-        
-        # Revoke refresh token if we have it
+            revocation_tasks.append(keycloak_service.revoke_tokens(access_token))
         if refresh_token:
-            refresh_result = await keycloak_service.revoke_tokens(refresh_token, "refresh_token")
-            if not refresh_result["success"]:
-                logger.warning(f"Refresh token revocation failed for user {user_id}: {refresh_result.get('error')}")
-            
-            # Call Keycloak's logout endpoint to end the session
-            logout_result = await keycloak_service.logout_user(refresh_token)
-            if not logout_result["success"]:
-                logger.warning(f"Keycloak session logout failed for user {user_id}: {logout_result.get('error')}")
-        else:
-            logger.warning(f"No refresh token found for user {user_id}")
+            revocation_tasks.append(keycloak_service.revoke_tokens(refresh_token, "refresh_token"))
+            revocation_tasks.append(keycloak_service.logout_user(refresh_token))
+
+        # Execute all revocation tasks in parallel
+        if revocation_tasks:
+            revocation_results = await asyncio.gather(*revocation_tasks, return_exceptions=True)
+            for i, result in enumerate(revocation_results):
+                if isinstance(result, Exception):
+                    logger.warning(f"Revocation task {i} failed: {str(result)}")
+                elif not result.get("success"):
+                    logger.warning(f"Revocation task {i} unsuccessful: {result.get('error')}")
         
-        # Delete refresh token from Redis
-        try:
-            deleted = await redis_service.delete_refresh_token(user_id)
-            if deleted:
-                logger.info(f"User {user_id} logged out and refresh token deleted from Redis")
-            else:
-                logger.warning(f"User {user_id} logout attempted but refresh token not found in Redis")
-        except Exception as e:
-            logger.error(f"Redis token deletion error: {str(e)}")
+        # Clean up all Redis tokens and cache
+        cleanup_success = await redis_service.cleanup_user_tokens(keycloak_user_id)
+        if cleanup_success:
+            logger.info(f"All tokens cleaned up for user {keycloak_user_id}")
+        else:
+            logger.warning(f"Token cleanup may have been incomplete for user {keycloak_user_id}")
         
         # Clear HttpOnly cookies
         response.delete_cookie(key="access_token", path="/")
         response.delete_cookie(key="refresh_token", path="/auth/refresh")
         
-        logger.info(f"User {user_id} successfully logged out with cookies cleared")
+        logger.info(f"User {keycloak_user_id} successfully logged out with complete token cleanup")
         return {"message": "Successfully logged out"}
 
     except HTTPException:
@@ -210,24 +224,21 @@ async def refresh_token(request: Request, response: Response,
         refresh_token = token_service.extract_refresh_token_from_request(request)
         if not refresh_token:
             raise HTTPException(status_code=401, detail="Refresh token missing")
-        
-        # Get user_id from refresh token using specialized refresh token validation
-        try:
-            user_id = await token_service.get_user_id_from_refresh_token(refresh_token)
-        except HTTPException:
-            # If refresh token validation fails, try Redis fallback
-            try:
-                user_id = await redis_service.get_user_by_refresh_token(refresh_token)
-                if not user_id:
-                    raise HTTPException(status_code=401, detail="Invalid refresh token")
-            except Exception:
-                raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+        # Validate refresh token with Keycloak first (security best practice)
+        refresh_validation = await keycloak_service.validate_refresh_token(refresh_token)
+        if not refresh_validation.get("success"):
+            logger.warning(f"Refresh token validation failed with keycloak: {refresh_validation.get('error')}")
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+        # Get user_id from validated refresh token
+        keycloak_user_id = refresh_validation.get("user_id") or await token_service.get_user_id_from_refresh_token(refresh_token)
         
         # Exchange refresh token for new tokens with Keycloak
         refresh_result = await keycloak_service.refresh_token(refresh_token)
         
         if not refresh_result.get("success"):
-            logger.error(f"Token refresh failed for user {user_id}: {refresh_result.get('error')}")
+            logger.error(f"Token refresh failed for user: {refresh_result.get('error')}")
             raise HTTPException(status_code=401, detail="Token refresh failed")
         
         # Extract new tokens
@@ -237,12 +248,28 @@ async def refresh_token(request: Request, response: Response,
         
         # Token Rotation: Always update refresh token in Redis (hybrid approach)
         # Store new refresh token with 30-minute expiration for token rotation
-        await redis_service.store_refresh_token(
-            user_id, 
-            new_refresh_token, 
-            settings.refresh_token_expire_minutes * 60  # 30 minutes in seconds
-        )
+
+        # Store both tokens in Redis with proper expiration
+        token_storage_tasks = [
+            # Store new refresh token (30 minutes for token rotation)
+            redis_service.store_refresh_token(
+                keycloak_user_id, 
+                new_refresh_token, 
+                settings.refresh_token_expire_minutes * 60 
+            ),
+            # Store new access token (5 minutes - short-lived)
+            redis_service.store_access_token(
+                keycloak_user_id, 
+                new_access_token, 
+                settings.access_token_expire_minutes * 60
+            )
+        ]
+        
+        # Execute Redis operations in parallel for better performance
+        import asyncio
+        await asyncio.gather(*token_storage_tasks)
         logger.info(f"Token rotation: New refresh token stored in Redis for user {user_id} (30min expiry)")
+        logger.info(f"Token rotation: New access token stored in Redis for user {user_id} (5min expiry)")
         
         # Set new refresh token as HttpOnly cookie (30 minutes - token rotation)
         response.set_cookie(
