@@ -268,8 +268,8 @@ async def refresh_token(request: Request, response: Response,
         # Execute Redis operations in parallel for better performance
         import asyncio
         await asyncio.gather(*token_storage_tasks)
-        logger.info(f"Token rotation: New refresh token stored in Redis for user {user_id} (30min expiry)")
-        logger.info(f"Token rotation: New access token stored in Redis for user {user_id} (5min expiry)")
+        logger.info(f"Token rotation: New refresh token stored in Redis for user {keycloak_user_id} (30min expiry)")
+        logger.info(f"Token rotation: New access token stored in Redis for user {keycloak_user_id} (5min expiry)")
         
         # Set new refresh token as HttpOnly cookie (30 minutes - token rotation)
         response.set_cookie(
@@ -294,13 +294,13 @@ async def refresh_token(request: Request, response: Response,
         )
         
         # Get user from database using keycloak_id
-        user = await user_service.get_user_by_keycloak_id(user_id)
+        user = await user_service.get_user_by_keycloak_id(keycloak_user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         if not user.is_active:
             raise HTTPException(status_code=400, detail="Inactive user")
         
-        logger.info(f"Tokens refreshed successfully for user {user_id} with HttpOnly cookies")
+        logger.info(f"Tokens refreshed successfully for user {keycloak_user_id} with HttpOnly cookies")
         
         # Return user data without tokens (tokens are in secure cookies)
         return AuthResponse(user=user, message="Tokens refreshed successfully")

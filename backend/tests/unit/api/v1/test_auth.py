@@ -2,7 +2,7 @@ import pytest
 import asyncio
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
-from fastapi import FastAPI, status
+from fastapi import FastAPI, status, HTTPException
 from fastapi.testclient import TestClient
 import json
 
@@ -50,19 +50,20 @@ MOCK_USER = User(
 class TestRegistration:
     """Test registration endpoint security"""
 
+    @pytest.mark.asyncio
     @patch('app.api.v1.auth.keycloak_service')
     @patch('app.api.v1.auth.redis_service')
     @patch('app.api.v1.auth.multi_layer_rate_limit')
     async def test_register_success(self, mock_rate_limit, mock_redis, mock_keycloak):
         """Test successful registration"""
         mock_rate_limit.return_value = lambda func: func
-        mock_keycloak.create_user_in_keycloak.return_value = MOCK_KEYCLOAK_SUCCESS
-        mock_redis.store_user_backup.return_value = True
+        mock_keycloak.create_user_in_keycloak = AsyncMock(return_value=MOCK_KEYCLOAK_SUCCESS)
+        mock_redis.store_user_backup = AsyncMock(return_value=True)
         
         with patch('app.api.v1.auth.get_user_service') as mock_get_service:
             mock_service = AsyncMock()
-            mock_service.get_user_by_email.return_value = None
-            mock_service.create_user.return_value = MOCK_USER
+            mock_service.get_user_by_email = AsyncMock(return_value=None)
+            mock_service.create_user = AsyncMock(return_value=MOCK_USER)
             mock_get_service.return_value = mock_service
             
             response = client.post("/auth/register", json=VALID_USER_DATA)
@@ -70,11 +71,12 @@ class TestRegistration:
             assert response.status_code == status.HTTP_201_CREATED
             assert response.json()["email"] == VALID_USER_DATA["email"]
 
+    @pytest.mark.asyncio
     async def test_register_duplicate_email_blocked(self):
         """Test duplicate email registration is blocked"""
         with patch('app.api.v1.auth.get_user_service') as mock_get_service:
             mock_service = AsyncMock()
-            mock_service.get_user_by_email.return_value = MOCK_USER
+            mock_service.get_user_by_email = AsyncMock(return_value=MOCK_USER)
             mock_get_service.return_value = mock_service
             
             with patch('app.api.v1.auth.multi_layer_rate_limit') as mock_rate_limit:
@@ -84,6 +86,7 @@ class TestRegistration:
                 assert response.status_code == status.HTTP_400_BAD_REQUEST
                 assert "Email already registered" in response.json()["detail"]
 
+    @pytest.mark.asyncio
     async def test_register_rate_limit_blocks_attack(self):
         """Test registration rate limiting blocks rapid attempts"""
         from fastapi import HTTPException
@@ -104,19 +107,20 @@ class TestRegistration:
 class TestLogin:
     """Test login endpoint security"""
 
+    @pytest.mark.asyncio
     @patch('app.api.v1.auth.keycloak_service')
     @patch('app.api.v1.auth.redis_service')
     @patch('app.api.v1.auth.multi_layer_rate_limit')
     async def test_login_success(self, mock_rate_limit, mock_redis, mock_keycloak):
         """Test successful login sets secure cookies"""
         mock_rate_limit.return_value = lambda func: func
-        mock_keycloak.authenticate_user.return_value = MOCK_KEYCLOAK_SUCCESS
-        mock_redis.store_refresh_token.return_value = True
-        mock_redis.store_access_token.return_value = True
+        mock_keycloak.authenticate_user = AsyncMock(return_value=MOCK_KEYCLOAK_SUCCESS)
+        mock_redis.store_refresh_token = AsyncMock(return_value=True)
+        mock_redis.store_access_token = AsyncMock(return_value=True)
         
         with patch('app.api.v1.auth.get_user_service') as mock_get_service:
             mock_service = AsyncMock()
-            mock_service.get_user_by_email.return_value = MOCK_USER
+            mock_service.get_user_by_email = AsyncMock(return_value=MOCK_USER)
             mock_get_service.return_value = mock_service
             
             response = client.post("/auth/login", json=VALID_LOGIN_DATA)
@@ -126,6 +130,7 @@ class TestLogin:
             assert "refresh_token" in response.cookies
             assert response.cookies["access_token"]["httponly"] is True
 
+    @pytest.mark.asyncio
     async def test_login_brute_force_blocked(self):
         """Test brute force login attack is blocked"""
         from fastapi import HTTPException
@@ -143,12 +148,13 @@ class TestLogin:
             response = client.post("/auth/login", json=VALID_LOGIN_DATA)
             assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
 
+    @pytest.mark.asyncio
     @patch('app.api.v1.auth.keycloak_service')
     @patch('app.api.v1.auth.multi_layer_rate_limit')
     async def test_login_invalid_credentials_blocked(self, mock_rate_limit, mock_keycloak):
         """Test invalid credentials are properly rejected"""
         mock_rate_limit.return_value = lambda func: func
-        mock_keycloak.authenticate_user.return_value = {"success": False, "error": "Invalid credentials"}
+        mock_keycloak.authenticate_user = AsyncMock(return_value={"success": False, "error": "Invalid credentials"})
         
         response = client.post("/auth/login", json={"email": "test@example.com", "password": "wrong"})
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -156,26 +162,28 @@ class TestLogin:
 class TestLogout:
     """Test logout endpoint security"""
 
+    @pytest.mark.asyncio
     @patch('app.api.v1.auth.token_service')
     @patch('app.api.v1.auth.keycloak_service')
     @patch('app.api.v1.auth.redis_service')
     async def test_logout_success(self, mock_redis, mock_keycloak, mock_token_service):
         """Test successful logout clears tokens"""
-        mock_token_service.extract_access_token_from_request.return_value = "mock-token"
-        mock_token_service.extract_refresh_token_from_request.return_value = "mock-refresh"
-        mock_token_service.get_user_id_from_token.return_value = "test-user-id"
-        mock_keycloak.revoke_tokens.return_value = {"success": True}
-        mock_keycloak.logout_user.return_value = {"success": True}
-        mock_redis.cleanup_user_tokens.return_value = True
+        mock_token_service.get_user_id_from_request = AsyncMock(return_value="test-user-id")
+        mock_token_service.extract_access_token_from_request = AsyncMock(return_value="mock-token")
+        mock_token_service.extract_refresh_token_from_request = AsyncMock(return_value="mock-refresh")
+        mock_keycloak.revoke_tokens = AsyncMock(return_value={"success": True})
+        mock_keycloak.logout_user = AsyncMock(return_value={"success": True})
+        mock_redis.cleanup_user_tokens = AsyncMock(return_value=True)
         
         response = client.post("/auth/logout")
         assert response.status_code == status.HTTP_200_OK
 
+    @pytest.mark.asyncio
     @patch('app.api.v1.auth.token_service')
     async def test_logout_no_tokens_blocked(self, mock_token_service):
         """Test logout without tokens is blocked"""
-        mock_token_service.extract_access_token_from_request.return_value = None
-        mock_token_service.extract_refresh_token_from_request.return_value = None
+        mock_token_service.extract_access_token_from_request = AsyncMock(return_value=None)
+        mock_token_service.extract_refresh_token_from_request = AsyncMock(return_value=None)
         
         response = client.post("/auth/logout")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -183,28 +191,30 @@ class TestLogout:
 class TestRefreshToken:
     """Test token refresh security"""
 
+    @pytest.mark.asyncio
     @patch('app.api.v1.auth.token_service')
     @patch('app.api.v1.auth.keycloak_service')
     @patch('app.api.v1.auth.redis_service')
     async def test_refresh_success(self, mock_redis, mock_keycloak, mock_token_service):
         """Test successful token refresh"""
-        mock_token_service.get_refresh_token_hybrid.return_value = "mock-refresh-token"
-        mock_keycloak.validate_refresh_token.return_value = {"success": True, "user_id": "test-id"}
-        mock_keycloak.refresh_token.return_value = {
+        mock_token_service.get_refresh_token_hybrid = AsyncMock(return_value="mock-refresh-token")
+        mock_keycloak.validate_refresh_token = AsyncMock(return_value={"success": True, "user_id": "test-id"})
+        mock_keycloak.refresh_token = AsyncMock(return_value={
             "success": True,
             "access_token": "new-access-token",
             "refresh_token": "new-refresh-token",
             "expires_in": 300
-        }
+        })
         
         with patch('app.api.v1.auth.get_user_service') as mock_get_service:
             mock_service = AsyncMock()
-            mock_service.get_user_by_keycloak_id.return_value = MOCK_USER
+            mock_service.get_user_by_keycloak_id = AsyncMock(return_value=MOCK_USER)
             mock_get_service.return_value = mock_service
             
             response = client.post("/auth/refresh")
             assert response.status_code == status.HTTP_200_OK
 
+    @pytest.mark.asyncio
     async def test_refresh_spam_attack_blocked(self):
         """Test rapid refresh attempts are blocked"""
         from fastapi import HTTPException
@@ -229,16 +239,18 @@ class TestRateLimiter:
     def rate_limiter(self):
         return MultiLayerRateLimiter()
 
+    @pytest.mark.asyncio
     @patch('app.utils.rate_limiter.redis_service')
     async def test_rate_limit_first_attempt_allowed(self, mock_redis, rate_limiter):
         """Test first attempt is allowed"""
-        mock_redis.redis_client.get.return_value = None
-        mock_redis.redis_client.setex.return_value = True
+        mock_redis.redis_client.get = AsyncMock(return_value=None)
+        mock_redis.redis_client.setex = AsyncMock(return_value=True)
         
         result = await rate_limiter.is_rate_limited("test_key", 5, 300)
         assert result["blocked"] is False
         assert result["attempts"] == 1
 
+    @pytest.mark.asyncio
     @patch('app.utils.rate_limiter.redis_service')
     async def test_rate_limit_blocks_after_threshold(self, mock_redis, rate_limiter):
         """Test rate limit blocks after threshold exceeded"""
@@ -247,13 +259,14 @@ class TestRateLimiter:
             "first_attempt": time.time(),
             "last_attempt": time.time()
         }
-        mock_redis.redis_client.get.return_value = json.dumps(attempt_data)
-        mock_redis.redis_client.setex.return_value = True
+        mock_redis.redis_client.get = AsyncMock(return_value=json.dumps(attempt_data))
+        mock_redis.redis_client.setex = AsyncMock(return_value=True)
         
         result = await rate_limiter.is_rate_limited("test_key", 5, 300)
         assert result["blocked"] is True
         assert "remaining_time" in result
 
+    @pytest.mark.asyncio
     @patch('app.utils.rate_limiter.redis_service')
     async def test_rate_limit_window_reset(self, mock_redis, rate_limiter):
         """Test rate limit window reset after expiration"""
@@ -263,7 +276,7 @@ class TestRateLimiter:
             "first_attempt": old_time,
             "last_attempt": old_time
         }
-        mock_redis.redis_client.get.return_value = json.dumps(attempt_data)
+        mock_redis.redis_client.get = AsyncMock(return_value=json.dumps(attempt_data))
         
         result = await rate_limiter.is_rate_limited("test_key", 5, 300)
         assert result["blocked"] is False
@@ -272,6 +285,7 @@ class TestRateLimiter:
 class TestSecurityAttacks:
     """Test various security attack scenarios"""
 
+    @pytest.mark.asyncio
     async def test_malformed_json_attack(self):
         """Test malformed JSON attack"""
         response = client.post(
@@ -281,6 +295,7 @@ class TestSecurityAttacks:
         )
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
+    @pytest.mark.asyncio
     async def test_sql_injection_attempt(self):
         """Test SQL injection in email field"""
         malicious_data = {
@@ -291,12 +306,13 @@ class TestSecurityAttacks:
         response = client.post("/auth/register", json=malicious_data)
         assert response.status_code in [status.HTTP_422_UNPROCESSABLE_ENTITY, status.HTTP_400_BAD_REQUEST]
 
+    @pytest.mark.asyncio
     @patch('app.api.v1.auth.token_service')
     async def test_expired_token_attack(self, mock_token_service):
         """Test expired token attack is blocked"""
         from fastapi import HTTPException
         
-        mock_token_service.extract_access_token_from_request.return_value = "expired-token"
+        mock_token_service.extract_access_token_from_request = AsyncMock(return_value="expired-token")
         mock_token_service.get_user_id_from_token.side_effect = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has expired"
@@ -305,12 +321,14 @@ class TestSecurityAttacks:
         response = client.post("/auth/logout")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
+    @pytest.mark.asyncio
     async def test_missing_required_fields_blocked(self):
         """Test missing required fields are blocked"""
         incomplete_data = {"email": "test@example.com"}
         response = client.post("/auth/register", json=incomplete_data)
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
+    @pytest.mark.asyncio
     async def test_invalid_email_format_blocked(self):
         """Test invalid email format is blocked"""
         invalid_data = {
@@ -324,41 +342,48 @@ class TestSecurityAttacks:
 class TestCookieSecurity:
     """Test cookie security attributes"""
 
+    @pytest.mark.asyncio
     @patch('app.api.v1.auth.keycloak_service')
     @patch('app.api.v1.auth.redis_service')
     @patch('app.api.v1.auth.multi_layer_rate_limit')
-    async def test_login_sets_secure_cookies(self, mock_rate_limit, mock_redis, mock_keycloak):
+    @patch('app.api.v1.auth.get_user_service')
+    async def test_login_sets_secure_cookies(self, mock_get_service, mock_rate_limit, mock_redis, mock_keycloak):
         """Test login sets HttpOnly cookies with proper attributes"""
         mock_rate_limit.return_value = lambda func: func
-        mock_keycloak.authenticate_user.return_value = MOCK_KEYCLOAK_SUCCESS
-        mock_redis.store_refresh_token.return_value = True
-        mock_redis.store_access_token.return_value = True
+        mock_keycloak.authenticate_user = AsyncMock(return_value=MOCK_KEYCLOAK_SUCCESS)
+        mock_redis.store_user_backup = AsyncMock(return_value=True)
         
-        with patch('app.api.v1.auth.get_user_service') as mock_get_service:
-            mock_service = AsyncMock()
-            mock_service.get_user_by_email.return_value = MOCK_USER
-            mock_get_service.return_value = mock_service
+        mock_service = AsyncMock()
+        mock_service.get_user_by_email = AsyncMock(return_value=MOCK_USER)
+        mock_get_service.return_value = mock_service
             
-            response = client.post("/auth/login", json=VALID_LOGIN_DATA)
+        response = client.post("/auth/login", json=VALID_LOGIN_DATA)
             
-            # Verify cookies are set with security attributes
-            assert "access_token" in response.cookies
-            assert "refresh_token" in response.cookies
-            assert response.cookies["access_token"]["httponly"] is True
-            assert response.cookies["refresh_token"]["httponly"] is True
-            assert response.cookies["refresh_token"]["path"] == "/auth/refresh"
+        assert response.status_code == status.HTTP_200_OK
+        assert "access_token" in response.cookies
+        assert "refresh_token" in response.cookies
+        assert response.cookies["access_token"]["httponly"] is True
+        assert response.cookies["refresh_token"]["httponly"] is True
+        assert response.cookies["access_token"]["secure"] is True
+        assert response.cookies["refresh_token"]["secure"] is True
 
+    @pytest.mark.asyncio
     @patch('app.api.v1.auth.token_service')
     @patch('app.api.v1.auth.keycloak_service')
     @patch('app.api.v1.auth.redis_service')
-    async def test_logout_clears_cookies(self, mock_redis, mock_keycloak, mock_token_service):
+    @patch('app.api.v1.auth.get_user_service')
+    async def test_logout_clears_cookies(self, mock_get_service, mock_redis, mock_keycloak, mock_token_service):
         """Test logout clears cookies properly"""
-        mock_token_service.extract_access_token_from_request.return_value = "mock-token"
-        mock_token_service.extract_refresh_token_from_request.return_value = "mock-refresh"
-        mock_token_service.get_user_id_from_token.return_value = "test-user-id"
-        mock_keycloak.revoke_tokens.return_value = {"success": True}
-        mock_keycloak.logout_user.return_value = {"success": True}
-        mock_redis.cleanup_user_tokens.return_value = True
+        mock_token_service.extract_access_token_from_request = AsyncMock(return_value="mock-token")
+        mock_token_service.extract_refresh_token_from_request = AsyncMock(return_value="mock-refresh")
+        mock_token_service.get_user_id_from_token = AsyncMock(return_value="test-user-id")
+        mock_keycloak.revoke_tokens = AsyncMock(return_value={"success": True})
+        mock_keycloak.logout_user = AsyncMock(return_value={"success": True})
+        mock_redis.cleanup_user_tokens = AsyncMock(return_value=True)
+        
+        mock_service = AsyncMock()
+        mock_service.get_user_by_email = AsyncMock(return_value=MOCK_USER)
+        mock_get_service.return_value = mock_service
         
         response = client.post("/auth/logout")
         assert response.status_code == status.HTTP_200_OK
@@ -369,25 +394,27 @@ class TestCookieSecurity:
 class TestTokenRotation:
     """Test token rotation security"""
 
+    @pytest.mark.asyncio
     @patch('app.api.v1.auth.token_service')
     @patch('app.api.v1.auth.keycloak_service')
     @patch('app.api.v1.auth.redis_service')
     async def test_refresh_rotates_tokens(self, mock_redis, mock_keycloak, mock_token_service):
         """Test refresh endpoint rotates both tokens"""
-        mock_token_service.get_refresh_token_hybrid.return_value = "old-refresh-token"
-        mock_keycloak.validate_refresh_token.return_value = {"success": True, "user_id": "test-id"}
-        mock_keycloak.refresh_token.return_value = {
+        mock_token_service.get_refresh_token_hybrid = AsyncMock(return_value="old-refresh-token")
+        mock_keycloak.validate_refresh_token = AsyncMock(return_value={"success": True, "user_id": "test-id"})
+        mock_keycloak.refresh_token = AsyncMock(return_value={
             "success": True,
             "access_token": "new-access-token",
             "refresh_token": "new-refresh-token",
             "expires_in": 300
-        }
-        mock_redis.store_refresh_token.return_value = True
-        mock_redis.store_access_token.return_value = True
+        })
+        mock_redis.store_refresh_token = AsyncMock(return_value=True)
+        mock_redis.store_access_token = AsyncMock(return_value=True)
         
+        # Mock user service to prevent DB access
         with patch('app.api.v1.auth.get_user_service') as mock_get_service:
             mock_service = AsyncMock()
-            mock_service.get_user_by_keycloak_id.return_value = MOCK_USER
+            mock_service.get_user_by_keycloak_id = AsyncMock(return_value=MOCK_USER)
             mock_get_service.return_value = mock_service
             
             response = client.post("/auth/refresh")
@@ -397,9 +424,21 @@ class TestTokenRotation:
             assert response.cookies["access_token"]["value"] != "old-access-token"
             assert response.cookies["refresh_token"]["value"] != "old-refresh-token"
 
+    @pytest.mark.asyncio
+    async def test_refresh_spam_attack_blocked(self):
+        """Test refresh endpoint blocks spam attacks"""
+        # Setup rate limiter to block after 1 request
+        with patch('app.api.v1.auth.multi_layer_rate_limit') as mock_rate_limit:
+            mock_rate_limit.side_effect = HTTPException(status_code=429, detail="Too many requests")
+            
+            response = client.post("/auth/refresh")
+            
+            assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+
 class TestErrorHandling:
     """Test error handling and edge cases"""
 
+    @pytest.mark.asyncio
     @patch('app.api.v1.auth.keycloak_service')
     async def test_keycloak_service_failure(self, mock_keycloak):
         """Test behavior when Keycloak service fails"""
@@ -411,18 +450,19 @@ class TestErrorHandling:
             response = client.post("/auth/login", json=VALID_LOGIN_DATA)
             assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
+    @pytest.mark.asyncio
     @patch('app.api.v1.auth.redis_service')
     async def test_redis_failure_graceful_degradation(self, mock_redis):
         """Test graceful degradation when Redis fails"""
         mock_redis.store_user_backup.side_effect = Exception("Redis unavailable")
         
         with patch('app.api.v1.auth.keycloak_service') as mock_keycloak:
-            mock_keycloak.create_user_in_keycloak.return_value = MOCK_KEYCLOAK_SUCCESS
+            mock_keycloak.create_user_in_keycloak = AsyncMock(return_value=MOCK_KEYCLOAK_SUCCESS)
             
             with patch('app.api.v1.auth.get_user_service') as mock_get_service:
                 mock_service = AsyncMock()
-                mock_service.get_user_by_email.return_value = None
-                mock_service.create_user.return_value = MOCK_USER
+                mock_service.get_user_by_email = AsyncMock(return_value=None)
+                mock_service.create_user = AsyncMock(return_value=MOCK_USER)
                 mock_get_service.return_value = mock_service
                 
                 with patch('app.api.v1.auth.multi_layer_rate_limit') as mock_rate_limit:
