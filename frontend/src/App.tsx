@@ -9,6 +9,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import NodeLibrary from './pages/NodeLibrary';
 import FlowBuilder from './pages/FlowBuilder';
+import GoogleCallback from './pages/GoogleCallback';
 
 const theme = createTheme({
   palette: {
@@ -43,6 +44,10 @@ const AppContent: React.FC = () => {
             element={
               isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />
             }
+          />
+          <Route
+            path="/auth/google/callback"
+            element={<GoogleCallback />}
           />
           <Route
             path="/dashboard"

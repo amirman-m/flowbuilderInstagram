@@ -18,6 +18,7 @@ import GoogleColorIcon from '../components/icons/GoogleColorIcon';
 import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import { RegisterData } from '../types';
+import { generateGoogleOAuthUrl } from '../config/oauth';
 
 const Register: React.FC = () => {
   const [userData, setUserData] = useState<RegisterData>({
@@ -65,6 +66,11 @@ const Register: React.FC = () => {
     setShowPassword((show) => !show);
   };
 
+  const handleGoogleRegister = () => {
+    // Redirect to Keycloak Google OAuth flow (same as login - backend handles registration)
+    window.location.href = generateGoogleOAuthUrl();
+  };
+
   return (
     <Container maxWidth="sm" sx={{ height: '100vh', display: 'flex', alignItems: 'center' }}>
       <Box
@@ -109,6 +115,7 @@ const Register: React.FC = () => {
               fullWidth
               variant="outlined"
               startIcon={<GoogleColorIcon />}
+              onClick={handleGoogleRegister}
               sx={{ 
                 mb: 2, 
                 py: 1.2,

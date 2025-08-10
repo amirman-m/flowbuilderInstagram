@@ -127,6 +127,19 @@ export const authAPI = {
       window.location.href = '/login';
     }
   },
+
+  googleCallback: async (data: { code: string }): Promise<UserSession> => {
+    const response = await api.post('/auth/google/callback', data);
+    const authResponse = response.data;
+    
+    // Store user in auth store (tokens handled by HttpOnly cookies)
+    useAuthStore.getState().setUser(authResponse.user);
+    
+    return {
+      user: authResponse.user,
+      message: authResponse.message
+    };
+  },
 };
 
 // Flows API

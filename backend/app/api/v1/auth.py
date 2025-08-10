@@ -310,4 +310,151 @@ async def refresh_token(request: Request, response: Response,
     except Exception as e:
         logger.exception("Token refresh error")
         raise HTTPException(status_code=500, detail="Internal server error")
-    
+
+
+@router.post("/google/callback")
+async def google_oauth_callback(
+    request: Request,
+    response: Response,
+    user_service: UserService = Depends(get_user_service)
+):
+    """
+    Handle Google OAuth callback from frontend.
+    Exchange authorization code for tokens via Keycloak and set HttpOnly cookies.
+    """
+    try:
+        # Get the authorization code from request body
+        body = await request.json()
+        auth_code = body.get("code")
+        
+        if not auth_code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Authorization code missing"
+            )
+        
+        logger.info(f"Processing Google OAuth callback with code: {auth_code[:10]}...")
+        
+        # Exchange code for tokens via Keycloak
+        token_result = await keycloak_service.exchange_code_for_tokens(auth_code)
+        
+        if not token_result.get("success"):
+            logger.error(f"Token exchange failed: {token_result.get('error')}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Token exchange failed: {token_result.get('error')}"
+            )
+        
+        access_token = token_result["access_token"]
+        refresh_token = token_result["refresh_token"]
+        
+        # Get user info from access token to find or create user
+        user_info = await keycloak_service.get_user_info(access_token)
+        if not user_info.get("success"):
+            logger.error(f"Failed to get user info: {user_info.get('error')}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to get user information"
+            )
+        
+        user_data = user_info["user_info"]
+        email = user_data.get("email")
+        keycloak_user_id = user_data.get("sub")
+        name = user_data.get("name", f"{user_data.get('given_name', '')} {user_data.get('family_name', '')}").strip()
+        
+        if not email or not keycloak_user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Required user information missing from Google"
+            )
+        
+        # Check if user exists in our database
+        user = await user_service.get_user_by_email(email)
+        
+        if not user:
+            # Create new user for Google OAuth registration
+            logger.info(f"Creating new user from Google OAuth: {email}")
+            user = await user_service.create_user(
+                email=email,
+                name=name,
+                keycloak_id=keycloak_user_id
+            )
+            
+            # Backup user data in Redis
+            await redis_service.store_user_backup(user.id, {
+                "email": user.email,
+                "keycloak_id": user.keycloak_id,
+                "name": user.name
+            })
+            
+            await redis_service.store_user_by_email_backup(user.email, {
+                "id": user.id,
+                "keycloak_id": user.keycloak_id,
+                "name": user.name
+            })
+            
+        else:
+            # Update existing user's keycloak_id if needed (for account linking)
+            if user.keycloak_id != keycloak_user_id:
+                logger.info(f"Updating keycloak_id for existing user: {email}")
+                user.keycloak_id = keycloak_user_id
+                await user_service.update_user(user)
+        
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User account is inactive"
+            )
+        
+        # Store tokens in Redis with proper expiration (same as regular login)
+        await redis_service.store_refresh_token(
+            keycloak_user_id, 
+            refresh_token, 
+            settings.refresh_token_expire_minutes * 60  # 30 minutes
+        )
+        
+        await redis_service.store_access_token(
+            keycloak_user_id, 
+            access_token, 
+            settings.access_token_expire_minutes * 60  # 5 minutes
+        )
+        
+        logger.info(f"Google OAuth tokens stored in Redis for user: {keycloak_user_id}")
+        
+        # Set HttpOnly cookies (same as regular login)
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=settings.cookie_secure,
+            samesite=settings.cookie_samesite,
+            max_age=settings.refresh_token_expire_minutes * 60,  # 30 minutes
+            path="/auth/refresh"
+        )
+        
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,
+            secure=settings.cookie_secure,
+            samesite=settings.cookie_samesite,
+            max_age=settings.access_token_expire_minutes * 60,  # 5 minutes
+            path="/"
+        )
+        
+        logger.info(f"Google OAuth login successful for user: {email}")
+        
+        # Return user data (same format as regular login)
+        return AuthResponse(
+            user=user, 
+            message="Google login successful"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Google OAuth callback error")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Google OAuth authentication failed"
+        )

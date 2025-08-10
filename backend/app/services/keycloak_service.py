@@ -383,6 +383,61 @@ class KeycloakService:
         except Exception as e:
             logger.error(f"Error validating refresh token: {str(e)}")
             return {"success": False, "error": str(e)}
+
+    async def exchange_code_for_tokens(self, auth_code: str) -> Dict[str, Any]:
+        """
+        Exchange authorization code for access and refresh tokens.
+        Used for OAuth flows (Google, etc.) where frontend receives the code.
+        """
+        try:
+            url = f"{self.keycloak_url}/realms/{self.realm}/protocol/openid-connect/token"
+            
+            # Frontend callback URL - this should match what was used in the OAuth flow
+            frontend_redirect_uri = f"{settings.frontend_url}/auth/google/callback"
+            
+            data = {
+                "grant_type": "authorization_code",
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "code": auth_code,
+                "redirect_uri": frontend_redirect_uri
+            }
+            
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.post(url, data=data)
+                
+                if response.status_code == 200:
+                    tokens = response.json()
+                    logger.info("Successfully exchanged authorization code for tokens")
+                    return {
+                        "success": True,
+                        "access_token": tokens["access_token"],
+                        "refresh_token": tokens["refresh_token"],
+                        "expires_in": tokens.get("expires_in", 300),
+                        "token_type": tokens.get("token_type", "Bearer")
+                    }
+                else:
+                    error_text = response.text
+                    logger.error(f"Token exchange failed with status {response.status_code}: {error_text}")
+                    
+                    # Try to parse error details
+                    try:
+                        error_data = response.json()
+                        error_description = error_data.get("error_description", error_data.get("error", "Unknown error"))
+                    except:
+                        error_description = error_text
+                    
+                    return {
+                        "success": False,
+                        "error": f"Token exchange failed: {error_description}"
+                    }
+                    
+        except httpx.TimeoutException:
+            logger.error("Token exchange timeout")
+            return {"success": False, "error": "Token exchange timeout"}
+        except Exception as e:
+            logger.error(f"Error during token exchange: {str(e)}")
+            return {"success": False, "error": str(e)}
     
 
 keycloak_service = KeycloakService()

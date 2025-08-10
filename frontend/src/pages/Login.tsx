@@ -19,6 +19,7 @@ import FacebookIcon from '@mui/icons-material/Facebook';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import { LoginCredentials } from '../types';
+import { generateGoogleOAuthUrl } from '../config/oauth';
 
 const Login: React.FC = () => {
   const [credentials, setCredentials] = useState<LoginCredentials>({
@@ -64,6 +65,11 @@ const Login: React.FC = () => {
 
   const handleTogglePasswordVisibility = () => {
     setShowPassword((show) => !show);
+  };
+
+  const handleGoogleLogin = () => {
+    // Redirect to Keycloak Google OAuth flow
+    window.location.href = generateGoogleOAuthUrl();
   };
 
   return (
@@ -116,6 +122,7 @@ const Login: React.FC = () => {
               fullWidth
               variant="outlined"
               startIcon={<GoogleColorIcon />}
+              onClick={handleGoogleLogin}
               sx={{ 
                 mb: 2, 
                 py: 1.2,
