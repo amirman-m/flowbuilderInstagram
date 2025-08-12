@@ -39,6 +39,9 @@ import {
 import { NodeType, NodeCategory } from '../../types/nodes';
 import { nodeService } from '../../services/nodeService';
 import { NODE_REGISTRY } from '../../config/nodeRegistry';
+import { CategorySidebar } from './CategorySidebar';
+import { NodeList } from './NodeList';
+import { NodeInfoDialog } from './NodeInfoDialog';
 
 interface ModernNodeLibraryProps {
   onNodeDragStart: (event: React.DragEvent, nodeType: NodeType) => void;
@@ -172,88 +175,12 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
   return (
     <Box className="modern-node-library" sx={{ height: '100%', display: 'flex', backgroundColor: '#2a2a2a' }}>
       {/* Vertical Category Navigation (Area 1) */}
-      <Box 
-        className="category-sidebar"
-        sx={{ 
-          width: 80, 
-          backgroundColor: '#1e1e1e', 
-          borderRight: '1px solid #404040',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          py: 2
-        }}
-      >
-        {/* Toolbox Title */}
-        <Typography 
-          variant="caption" 
-          sx={{ 
-            color: '#9ca3af', 
-            mb: 3, 
-            fontSize: '0.7rem',
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px'
-          }}
-        >
-          Toolbox
-        </Typography>
-
-        {/* Category Icons */}
-        <Stack spacing={1} sx={{ width: '100%', alignItems: 'center' }}>
-          {CATEGORIES.map((category) => {
-            const isActive = selectedCategory === category.id;
-            const Icon = category.icon;
-            const nodeCount = getCategoryNodeCount(category.id);
-            return (
-              <Tooltip key={category.id} title={`${category.name} (${nodeCount})`} placement="right">
-                <IconButton
-                  onClick={() => handleCategorySelect(category.id)}
-                  sx={{
-                    width: 48,
-                    height: 48,
-                    backgroundColor: isActive ? category.color : 'transparent',
-                    color: isActive ? '#ffffff' : '#9ca3af',
-                    border: isActive ? 'none' : '1px solid #404040',
-                    borderRadius: 2,
-                    transition: 'all 0.2s ease-in-out',
-                    position: 'relative',
-                    '&:hover': {
-                      backgroundColor: isActive ? category.color : '#404040',
-                      color: '#ffffff',
-                      transform: 'translateY(-2px)',
-                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
-                    }
-                  }}
-                >
-                  <Icon sx={{ fontSize: 20 }} />
-                  {nodeCount > 0 && (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        top: -4,
-                        right: -4,
-                        backgroundColor: category.color,
-                        color: 'white',
-                        borderRadius: '50%',
-                        width: 16,
-                        height: 16,
-                        fontSize: '0.6rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 600
-                      }}
-                    >
-                      {nodeCount}
-                    </Box>
-                  )}
-                </IconButton>
-              </Tooltip>
-            );
-          })}
-        </Stack>
-      </Box>
+      <CategorySidebar
+        categories={CATEGORIES}
+        selectedCategory={selectedCategory}
+        onCategorySelect={handleCategorySelect}
+        getCategoryNodeCount={getCategoryNodeCount}
+      />
 
       {/* Main Content Area (Area 2 & 3) */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -346,124 +273,16 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
               </Typography>
             </Box>
           ) : (
-            /* Subcategories and Nodes */
-            <Box sx={{ p: 1 }}>
-              {Object.entries(filteredAndGroupedNodes).map(([subcategory, nodes]) => (
-                <Box key={subcategory} sx={{ mb: 1 }}>
-                  {/* Subcategory Header */}
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      p: 1.5,
-                      cursor: 'pointer',
-                      borderRadius: 1,
-                      backgroundColor: '#1e1e1e',
-                      border: '1px solid #404040',
-                      mb: 1,
-                      '&:hover': {
-                        backgroundColor: '#252525',
-                        borderColor: '#525252'
-                      }
-                    }}
-                    onClick={() => handleSubcategoryToggle(subcategory)}
-                  >
-                    <Typography variant="subtitle2" sx={{ flexGrow: 1, fontWeight: 600, color: '#f1f5f9' }}>
-                      {subcategory}
-                    </Typography>
-                    <Chip
-                      label={nodes.length}
-                      size="small"
-                      sx={{ 
-                        mr: 1, 
-                        minWidth: 24, 
-                        height: 20,
-                        backgroundColor: CATEGORIES.find(c => c.id === selectedCategory)?.color,
-                        color: 'white',
-                        fontSize: '0.7rem'
-                      }}
-                    />
-                    {expandedSubcategories.has(subcategory) ? 
-                      <ExpandLess sx={{ color: '#9ca3af' }} /> : 
-                      <ExpandMore sx={{ color: '#9ca3af' }} />
-                    }
-                  </Box>
-
-                  {/* Node List */}
-                  <Collapse in={expandedSubcategories.has(subcategory)}>
-                    <Box sx={{ pl: 1 }}>
-                      {nodes.map((node) => (
-                        <Paper
-                          key={node.id}
-                          draggable
-                          onDragStart={(event) => onNodeDragStart(event, node)}
-                          sx={{
-                            p: 1.5,
-                            mb: 1,
-                            cursor: 'grab',
-                            backgroundColor: '#1e1e1e',
-                            border: '1px solid #404040',
-                            borderRadius: 1,
-                            transition: 'all 0.2s ease-in-out',
-                            '&:hover': {
-                              backgroundColor: '#252525',
-                              borderColor: '#525252',
-                              transform: 'translateX(4px)',
-                              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
-                            },
-                            '&:active': {
-                              cursor: 'grabbing',
-                              transform: 'scale(0.98) translateX(4px)'
-                            }
-                          }}
-                        >
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                            <Box
-                              sx={{
-                                width: 32,
-                                height: 32,
-                                borderRadius: 1,
-                                backgroundColor: `${CATEGORIES.find(c => c.id === selectedCategory)?.color}20`,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: CATEGORIES.find(c => c.id === selectedCategory)?.color
-                              }}
-                            >
-                              <CodeIcon sx={{ fontSize: 16 }} />
-                            </Box>
-                            <Box sx={{ flexGrow: 1 }}>
-                              <Typography variant="body2" sx={{ fontWeight: 600, color: '#f1f5f9', mb: 0.5 }}>
-                                {node.name}
-                              </Typography>
-                              <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.7rem' }}>
-                                {node.description.length > 50 ? `${node.description.substring(0, 50)}...` : node.description}
-                              </Typography>
-                            </Box>
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleNodeInfoClick(node);
-                              }}
-                              sx={{
-                                color: '#9ca3af',
-                                '&:hover': {
-                                  color: '#f1f5f9',
-                                  backgroundColor: '#404040'
-                                }
-                              }}
-                            >
-                              <InfoIcon sx={{ fontSize: 16 }} />
-                            </IconButton>
-                          </Box>
-                        </Paper>
-                      ))}
-                    </Box>
-                  </Collapse>
-                </Box>
-              ))}
-
+            <>
+              <NodeList
+                filteredAndGroupedNodes={filteredAndGroupedNodes}
+                selectedCategory={selectedCategory}
+                expandedSubcategories={expandedSubcategories}
+                onSubcategoryToggle={handleSubcategoryToggle}
+                onNodeDragStart={onNodeDragStart}
+                onNodeInfoClick={handleNodeInfoClick}
+                categories={CATEGORIES}
+              />
               {Object.keys(filteredAndGroupedNodes).length === 0 && (
                 <Box sx={{ p: 4, textAlign: 'center', color: '#9ca3af' }}>
                   <Typography variant="body2">
@@ -471,97 +290,18 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
                   </Typography>
                 </Box>
               )}
-            </Box>
+            </>
           )}
         </Box>
       </Box>
 
       {/* Node Info Dialog */}
-      <Dialog
+      <NodeInfoDialog
         open={infoDialogOpen}
         onClose={() => setInfoDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: {
-            backgroundColor: '#1e1e1e',
-            border: '1px solid #404040',
-            borderRadius: 2
-          }
-        }}
-      >
-        <DialogTitle sx={{ color: '#f1f5f9', borderBottom: '1px solid #404040' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Box
-              sx={{
-                width: 40,
-                height: 40,
-                borderRadius: 1,
-                backgroundColor: selectedNodeForInfo ? `${CATEGORIES.find(c => c.id === selectedNodeForInfo.category)?.color}20` : '#404040',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: selectedNodeForInfo ? CATEGORIES.find(c => c.id === selectedNodeForInfo.category)?.color : '#9ca3af'
-              }}
-            >
-              <CodeIcon />
-            </Box>
-            <Box>
-              <Typography variant="h6" sx={{ color: '#f1f5f9' }}>
-                {selectedNodeForInfo?.name}
-              </Typography>
-              <Typography variant="caption" sx={{ color: '#9ca3af' }}>
-                {selectedNodeForInfo?.category} • {selectedNodeForInfo?.subcategory}
-              </Typography>
-            </Box>
-          </Box>
-        </DialogTitle>
-        <DialogContent sx={{ color: '#f1f5f9' }}>
-          <Typography variant="body2" sx={{ mb: 2, color: '#d1d5db' }}>
-            {selectedNodeForInfo?.description}
-          </Typography>
-          
-          {selectedNodeForInfo?.ports.inputs && selectedNodeForInfo.ports.inputs.length > 0 && (
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="subtitle2" sx={{ mb: 1, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 1 }}>
-                <InputIcon sx={{ fontSize: 16 }} /> Inputs
-              </Typography>
-              {selectedNodeForInfo.ports.inputs.map((input, index) => (
-                <Chip
-                  key={index}
-                  label={`${input.name}: ${input.dataType}`}
-                  size="small"
-                  sx={{ mr: 1, mb: 1, backgroundColor: '#404040', color: '#f1f5f9' }}
-                />
-              ))}
-            </Box>
-          )}
-          
-          {selectedNodeForInfo?.ports.outputs && selectedNodeForInfo.ports.outputs.length > 0 && (
-            <Box>
-              <Typography variant="subtitle2" sx={{ mb: 1, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 1 }}>
-                <OutputIcon sx={{ fontSize: 16 }} /> Outputs
-              </Typography>
-              {selectedNodeForInfo.ports.outputs.map((output, index) => (
-                <Chip
-                  key={index}
-                  label={`${output.name}: ${output.dataType}`}
-                  size="small"
-                  sx={{ mr: 1, mb: 1, backgroundColor: '#404040', color: '#f1f5f9' }}
-                />
-              ))}
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ borderTop: '1px solid #404040' }}>
-          <Button 
-            onClick={() => setInfoDialogOpen(false)}
-            sx={{ color: '#9ca3af' }}
-          >
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
+        node={selectedNodeForInfo}
+        categories={CATEGORIES}
+      />
     </Box>
   );
 };
