@@ -53,6 +53,7 @@ import { NODE_REGISTRY } from '../config/nodeRegistry';
 import { useConnectionValidation } from '../hooks/useConnectionValidation';
 import { useSnackbar } from '../components/SnackbarProvider';
 import '../styles/connectionValidation.css';
+import '../styles/flowBuilder.css';
 
 // Define nodeTypes using our NodeComponentFactory for all node types
 const nodeTypes = {
