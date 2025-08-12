@@ -42,6 +42,7 @@ import { NODE_REGISTRY } from '../../config/nodeRegistry';
 import { CategorySidebar } from './CategorySidebar';
 import { NodeList } from './NodeList';
 import { NodeInfoDialog } from './NodeInfoDialog';
+import styles from './NodeLibrary.module.css';
 
 interface ModernNodeLibraryProps {
   onNodeDragStart: (event: React.DragEvent, nodeType: NodeType) => void;
@@ -173,7 +174,7 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
   }, []);
 
   return (
-    <Box className="modern-node-library" sx={{ height: '100%', display: 'flex', backgroundColor: '#2a2a2a' }}>
+    <Box className={styles.modernNodeLibrary}>
       {/* Vertical Category Navigation (Area 1) */}
       <CategorySidebar
         categories={CATEGORIES}
@@ -185,8 +186,8 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
       {/* Main Content Area (Area 2 & 3) */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         {/* Header with Search */}
-        <Box sx={{ p: 2, borderBottom: '1px solid #404040', backgroundColor: '#2a2a2a' }}>
-          <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 600, color: '#f1f5f9' }}>
+        <Box className={styles.header}>
+          <Typography variant="h6" className={styles.title}>
             {selectedCategory ? CATEGORIES.find(c => c.id === selectedCategory)?.name : 'Select Category'}
           </Typography>
           
@@ -197,75 +198,30 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
             placeholder="Search nodes..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            className={styles.searchField}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <SearchIcon sx={{ color: '#9ca3af', fontSize: 20 }} />
+                  <SearchIcon className={styles.searchIcon} />
                 </InputAdornment>
               ),
               endAdornment: searchQuery && (
                 <InputAdornment position="end">
                   <IconButton size="small" onClick={handleSearchClear}>
-                    <ClearIcon sx={{ fontSize: 16, color: '#9ca3af' }} />
+                    <ClearIcon className={styles.clearIcon} />
                   </IconButton>
                 </InputAdornment>
               ),
-            }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                backgroundColor: '#1e1e1e',
-                border: '1px solid #404040',
-                borderRadius: 2,
-                color: '#f1f5f9',
-                '&:hover': {
-                  backgroundColor: '#252525',
-                  borderColor: '#525252',
-                },
-                '&.Mui-focused': {
-                  backgroundColor: '#1e1e1e',
-                  borderColor: '#3b82f6',
-                  boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.1)'
-                },
-                '& fieldset': {
-                  border: 'none'
-                }
-              },
-              '& .MuiInputBase-input::placeholder': {
-                color: '#6b7280'
-              }
             }}
           />
         </Box>
 
         {/* Scrollable Content Area (Area 2) */}
-        <Box 
-          sx={{ 
-            flexGrow: 1, 
-            overflow: 'auto', 
-            backgroundColor: '#2a2a2a',
-            '&::-webkit-scrollbar': {
-              width: '6px',
-            },
-            '&::-webkit-scrollbar-track': {
-              background: '#1e1e1e',
-            },
-            '&::-webkit-scrollbar-thumb': {
-              background: '#525252',
-              borderRadius: '3px',
-            },
-            '&::-webkit-scrollbar-thumb:hover': {
-              background: '#6b7280',
-            }
-          }}
-        >
+        <Box className={styles.contentArea}>
           {!selectedCategory ? (
             /* Welcome Message */
-            <Box sx={{ 
-              p: 4, 
-              textAlign: 'center',
-              color: '#9ca3af'
-            }}>
-              <Typography variant="h6" sx={{ mb: 1, color: '#d1d5db' }}>
+            <Box className={styles.welcomeMessage}>
+              <Typography variant="h6" className={styles.welcomeTitle}>
                 Select a Category
               </Typography>
               <Typography variant="body2">
@@ -283,13 +239,6 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
                 onNodeInfoClick={handleNodeInfoClick}
                 categories={CATEGORIES}
               />
-              {Object.keys(filteredAndGroupedNodes).length === 0 && (
-                <Box sx={{ p: 4, textAlign: 'center', color: '#9ca3af' }}>
-                  <Typography variant="body2">
-                    {searchQuery ? 'No nodes found matching your search.' : 'No nodes available in this category.'}
-                  </Typography>
-                </Box>
-              )}
             </>
           )}
         </Box>
