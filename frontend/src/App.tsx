@@ -9,6 +9,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import NodeLibrary from './pages/NodeLibrary';
 import FlowBuilder from './pages/FlowBuilder';
+import { SnackbarProvider } from './components/SnackbarProvider';
 
 const theme = createTheme({
   palette: {
@@ -87,50 +88,52 @@ const App: React.FC = () => {
   const { isAuthenticated } = useAuthStore();
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Router>
-        {/* Header removed as requested */}
-        <Routes>
-          <Route
-            path="/login"
-            element={
-              isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />
-            }
-          />
-          <Route
-            path="/register"
-            element={
-              isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />
-            }
-          />
-          <Route
-            path="/dashboard"
-            element={
-              isAuthenticated ? <Dashboard /> : <Navigate to="/login" replace />
-            }
-          />
-          <Route
-            path="/nodes"
-            element={
-              isAuthenticated ? <NodeLibrary /> : <Navigate to="/login" replace />
-            }
-          />
-          <Route
-            path="/flow/:flowId"
-            element={
-              isAuthenticated ? <FlowBuilder /> : <Navigate to="/login" replace />
-            }
-          />
-          <Route
-            path="/"
-            element={
-              <Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />
-            }
-          />
-        </Routes>
-      </Router>
-    </ThemeProvider>
+    <SnackbarProvider>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Router>
+          {/* Header removed as requested */}
+          <Routes>
+            <Route
+              path="/login"
+              element={
+                isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />
+              }
+            />
+            <Route
+              path="/register"
+              element={
+                isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />
+              }
+            />
+            <Route
+              path="/dashboard"
+              element={
+                isAuthenticated ? <Dashboard /> : <Navigate to="/login" replace />
+              }
+            />
+            <Route
+              path="/nodes"
+              element={
+                isAuthenticated ? <NodeLibrary /> : <Navigate to="/login" replace />
+              }
+            />
+            <Route
+              path="/flow/:flowId"
+              element={
+                isAuthenticated ? <FlowBuilder /> : <Navigate to="/login" replace />
+              }
+            />
+            <Route
+              path="/"
+              element={
+                <Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />
+              }
+            />
+          </Routes>
+        </Router>
+      </ThemeProvider>
+    </SnackbarProvider>
   );
 };
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { flowsAPI } from '../services/api';
 import { Flow } from '../types';
+import { useSnackbar } from '../components/SnackbarProvider';
 
 export interface UseFlowsReturn {
   flows: Flow[];
@@ -18,6 +19,7 @@ export interface UseFlowsReturn {
  * Custom hook for managing flow state and operations
  */
 export const useFlows = (): UseFlowsReturn => {
+  const { showSnackbar } = useSnackbar();
   const [flows, setFlows] = useState<Flow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
@@ -30,7 +32,12 @@ export const useFlows = (): UseFlowsReturn => {
       const flowsData = await flowsAPI.getFlows();
       setFlows(flowsData);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load flows');
+      const errorMsg = err.response?.data?.detail || 'Failed to load flows';
+      setError(errorMsg);
+      showSnackbar({
+        message: errorMsg,
+        severity: 'error',
+      });
     } finally {
       setLoading(false);
     }
@@ -46,8 +53,17 @@ export const useFlows = (): UseFlowsReturn => {
       setFlows(prev => [...prev, newFlow]);
       // Navigate directly to FlowBuilder page
       navigate(`/flow/${newFlow.id}`);
+      showSnackbar({
+        message: 'Flow created successfully!',
+        severity: 'success',
+      });
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to create flow');
+      const errorMsg = err.response?.data?.detail || 'Failed to create flow';
+      setError(errorMsg);
+      showSnackbar({
+        message: errorMsg,
+        severity: 'error',
+      });
       throw err; // Re-throw to allow component to handle dialog state
     }
   };
@@ -56,8 +72,17 @@ export const useFlows = (): UseFlowsReturn => {
     try {
       await flowsAPI.deleteFlow(flowId);
       setFlows(prev => prev.filter(flow => flow.id !== flowId));
+      showSnackbar({
+        message: 'Flow deleted successfully!',
+        severity: 'success',
+      });
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to delete flow');
+      const errorMsg = err.response?.data?.detail || 'Failed to delete flow';
+      setError(errorMsg);
+      showSnackbar({
+        message: errorMsg,
+        severity: 'error',
+      });
       throw err;
     }
   };

@@ -73,13 +73,26 @@ const FlowList: React.FC<FlowListProps> = ({
             sx={{
               height: '100%',
               borderRadius: 3,
-              background: '#1e1e2d',
-              border: `1px solid rgba(255, 255, 255, 0.04)`,
-              transition: 'all 0.3s ease',
+              background: 'rgba(30, 30, 45, 0.6)',
+              backdropFilter: 'blur(12px)',
+              border: `1px solid rgba(255, 255, 255, 0.08)`,
+              transition: 'all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
+              position: 'relative',
+              overflow: 'hidden',
               '&:hover': {
-                transform: 'translateY(-4px)',
-                boxShadow: '0 8px 16px rgba(0,0,0,0.3)',
-                border: `1px solid rgba(123, 104, 238, 0.3)`,
+                transform: 'translateY(-6px)',
+                boxShadow: '0 12px 30px rgba(0, 0, 0, 0.4)',
+                border: `1px solid rgba(123, 104, 238, 0.4)`,
+                '&::before': {
+                  content: '""',
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: '2px',
+                  background: 'linear-gradient(90deg, #7b68ee, #4cc9f0)',
+                }
               }
             }}
           >
@@ -88,8 +101,8 @@ const FlowList: React.FC<FlowListProps> = ({
               sx={{ 
                 height: 4, 
                 background: flow.status === 'active'
-                  ? theme.palette.success.main
-                  : theme.palette.warning.main
+                  ? `linear-gradient(90deg, ${theme.palette.success.main}, ${alpha(theme.palette.success.main, 0.7)})`
+                  : `linear-gradient(90deg, ${theme.palette.warning.main}, ${alpha(theme.palette.warning.main, 0.7)})`,
                }} 
             />
             

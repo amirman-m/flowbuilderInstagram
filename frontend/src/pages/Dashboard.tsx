@@ -2,22 +2,16 @@ import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
-  Alert,
-  Button,
-  alpha,
   useTheme,
 } from '@mui/material';
 
 import { useAuthStore } from '../store/authStore';
+import { useSnackbar } from '../components/SnackbarProvider';
 import { useFlows } from '../hooks/useFlows';
 import { useDashboardSummary } from '../hooks/useDashboardSummary';
+import { DEFAULT_FLOWS_MAX, DEFAULT_API_CALLS, DEFAULT_STORAGE } from '../constants';
 import Sidebar from '../components/dashboard/Sidebar';
-import FlowList from '../components/dashboard/FlowList';
-import TutorialList from '../components/dashboard/TutorialList';
-import ExampleFlowList from '../components/dashboard/ExampleFlowList';
-import CreateFlowDialog from '../components/dashboard/CreateFlowDialog';
-import TabPanel from '../components/dashboard/TabPanel';
-import DashboardHeader from '../components/dashboard/DashboardHeader';
+import DashboardContent from '../components/dashboard/DashboardContent';
 
 const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);
@@ -27,21 +21,36 @@ const Dashboard: React.FC = () => {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const theme = useTheme();
+  
+  // Snackbar hook
+  const { showSnackbar } = useSnackbar();
 
   // Flow management hook
   const { 
     flows, 
     loading, 
     error, 
-    loadFlows, 
+    loadFlows: loadFlowsBase, 
     createFlow, 
     deleteFlow, 
     toggleFlow, 
+    clearError,
   } = useFlows();
+
+  const handleLoadFlows = useCallback(async () => {
+    await loadFlowsBase();
+    if (error) {
+      showSnackbar({
+        message: error,
+        severity: 'error',
+      });
+      clearError();
+    }
+  }, [loadFlowsBase, error, showSnackbar, clearError]);
 
   // Dashboard summary from backend
   const { data: summary } = useDashboardSummary();
-  const flowsMax = summary?.flowsMax ?? 50;
+  const flowsMax = summary?.flowsMax ?? DEFAULT_FLOWS_MAX;
   const createDisabled = flows.length >= flowsMax;
 
   // Event handlers
@@ -51,11 +60,25 @@ const Dashboard: React.FC = () => {
 
   const handleCreateFlow = useCallback(() => {
     if (createDisabled) {
-      // Could show a snackbar here to inform the user they reached the limit
+      showSnackbar({
+        message: 'Flow limit reached. Upgrade your plan to create more flows.',
+        severity: 'warning',
+      });
       return;
     }
     setCreateDialogOpen(true);
-  }, [createDisabled]);
+  }, [createDisabled, showSnackbar]);
+
+  const loadFlows = useCallback(async () => {
+    await loadFlowsBase();
+    if (error) {
+      showSnackbar({
+        message: error,
+        severity: 'error',
+      });
+      clearError();
+    }
+  }, [loadFlowsBase, error, showSnackbar, clearError]);
 
   const handleCancelCreateFlow = useCallback(() => {
     setCreateDialogOpen(false);
@@ -65,11 +88,18 @@ const Dashboard: React.FC = () => {
     try {
       await createFlow(name, description);
       setCreateDialogOpen(false);
-    } catch (e) {
+      showSnackbar({
+        message: 'Flow created successfully',
+        severity: 'success',
+      });
+    } catch (e: any) {
       console.error(e);
-      // Optionally show snackbar/alert here
+      showSnackbar({
+        message: `Failed to create flow: ${e?.message || 'Unknown error'}`,
+        severity: 'error',
+      });
     }
-  }, [createFlow]);
+  }, [createFlow, showSnackbar]);
 
   const handleEditFlow = useCallback((flowId: number) => {
     // Route defined in App.tsx: <Route path="/flow/:flowId" element={<FlowBuilder />} />
@@ -85,14 +115,39 @@ const Dashboard: React.FC = () => {
     }
   }, [logout, navigate]);
 
+  const handleUseExample = useCallback((example: { name: string; description: string }) => {
+    // Logic to create a flow from template
+    createFlow(example.name, example.description);
+  }, [createFlow]);
+
+  const handleStartTutorial = useCallback((tutorial: { title: string; description: string; duration: string; level: string }) => {
+    // For now, we'll just show a snackbar since tutorial functionality isn't implemented
+    showSnackbar({
+      message: `Tutorial "${tutorial.title}" would start here. Feature coming soon!`,
+      severity: 'info',
+    });
+  }, [showSnackbar]);
+
   return (
     <Box
       sx={{
         minHeight: '100vh',
         background: theme.palette.mode === 'light' 
           ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-          : 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)',
+          : 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
         display: 'flex',
+        position: 'relative',
+        overflow: 'hidden',
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'radial-gradient(circle at 10% 20%, rgba(123, 104, 238, 0.1) 0%, transparent 20%), radial-gradient(circle at 90% 80%, rgba(76, 201, 240, 0.1) 0%, transparent 20%)',
+          zIndex: 0,
+        }
       }}
     >
       {/* Sidebar */}
@@ -103,74 +158,29 @@ const Dashboard: React.FC = () => {
         planName={summary?.planName}
         analytics={{
           flowsMax,
-          apiCalls: { current: summary?.apiCalls ?? 0, max: summary?.apiCallsMax ?? 10000 },
-          storage: { usedGb: summary?.storageUsedGb ?? 0, maxGb: summary?.storageMaxGb ?? 5 },
+          apiCalls: { current: summary?.apiCalls ?? DEFAULT_API_CALLS.current, max: summary?.apiCallsMax ?? DEFAULT_API_CALLS.max },
+          storage: { usedGb: summary?.storageUsedGb ?? DEFAULT_STORAGE.usedGb, maxGb: summary?.storageMaxGb ?? DEFAULT_STORAGE.maxGb },
         }}
       />
 
       {/* Main Content */}
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <Box sx={{ flex: 1, p: 3, overflow: 'auto' }}>
-          {/* Error Alert */}
-          {error && (
-            <Alert 
-              severity="error" 
-              sx={{ 
-                mb: 3, 
-                borderRadius: 2,
-                bgcolor: alpha(theme.palette.error.main, 0.1),
-                border: `1px solid ${alpha(theme.palette.error.main, 0.2)}`,
-                color: 'white',
-              }}
-              action={
-                <Button 
-                  color="inherit" 
-                  size="small" 
-                  onClick={loadFlows}
-                  sx={{ color: theme.palette.common.white }}
-                >
-                  Retry
-                </Button>
-              }
-            >
-              {error}
-            </Alert>
-          )}
-
-          {/* Tabs Navigation */}
-          <DashboardHeader
-            activeTab={activeTab}
-            onTabChange={handleTabChange}
-            loading={loading}
-            onRefresh={loadFlows}
-            onCreateFlow={handleCreateFlow}
-            createDisabled={createDisabled}
-          />
-
-          {/* Tab Content */}
-          <TabPanel value={activeTab} index={0}>
-            <FlowList 
-              flows={flows}
-              loading={loading}
-              onEdit={handleEditFlow}
-              onDelete={deleteFlow}
-              onToggle={toggleFlow}
-            />
-            <ExampleFlowList />
-          </TabPanel>
-
-          <TabPanel value={activeTab} index={1}>
-            <TutorialList />
-          </TabPanel>
-        </Box>
-      </Box>
-
-      {/* Create Flow Dialog */}
-      <CreateFlowDialog
-        open={createDialogOpen}
-        onClose={handleCancelCreateFlow}
-        onConfirm={handleConfirmCreateFlow}
-        flowCount={flows.length}
+      <DashboardContent
+        activeTab={activeTab}
+        flows={flows}
+        loading={loading}
+        error={error}
+        loadFlows={loadFlows}
+        handleTabChange={handleTabChange}
+        handleCreateFlow={handleCreateFlow}
+        createDisabled={createDisabled}
+        handleEditFlow={handleEditFlow}
+        deleteFlow={deleteFlow}
+        toggleFlow={toggleFlow}
+        handleUseExample={handleUseExample}
+        handleStartTutorial={handleStartTutorial}
+        createDialogOpen={createDialogOpen}
+        handleCancelCreateFlow={handleCancelCreateFlow}
+        handleConfirmCreateFlow={handleConfirmCreateFlow}
       />
     </Box>
   );

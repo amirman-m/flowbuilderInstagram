@@ -17,6 +17,7 @@ import {
   Paper,
   LinearProgress
 } from '@mui/material';
+import { useSnackbar } from '../SnackbarProvider';
 import { 
   PlayArrow as PlayIcon, 
   CheckCircle as CheckIcon,
@@ -53,6 +54,7 @@ export const FlowExecutionDialog: React.FC<FlowExecutionDialogProps> = ({
   triggerNodeType,
   onExecute
 }) => {
+  const { showSnackbar } = useSnackbar();
   const [inputText, setInputText] = useState('');
   const [executing, setExecuting] = useState(false);
   const [executionResult, setExecutionResult] = useState<ExecutionResult | null>(null);
@@ -88,12 +90,22 @@ export const FlowExecutionDialog: React.FC<FlowExecutionDialogProps> = ({
     const hasVoiceInput = audioBlob;
     
     if (triggerNodeType === 'voice_input' && !hasVoiceInput) {
-      setError('Please record a voice message before executing.');
+      const errorMsg = 'Please record a voice message before executing.';
+      showSnackbar({
+        message: errorMsg,
+        severity: 'error',
+      });
+      setError(errorMsg);
       return;
     }
     
     if (triggerNodeType === 'chat_input' && !hasTextInput) {
-      setError('Please enter a text message before executing.');
+      const errorMsg = 'Please enter a text message before executing.';
+      showSnackbar({
+        message: errorMsg,
+        severity: 'error',
+      });
+      setError(errorMsg);
       return;
     }
 
@@ -129,9 +141,18 @@ export const FlowExecutionDialog: React.FC<FlowExecutionDialogProps> = ({
       setInputText('');
       handleDeleteRecording();
       
+      showSnackbar({
+        message: 'Flow executed successfully!',
+        severity: 'success',
+      });
     } catch (err: any) {
       console.error('Flow execution failed:', err);
-      setError(err.response?.data?.detail || err.message || 'Flow execution failed');
+      const errorMsg = err.response?.data?.detail || err.message || 'Flow execution failed';
+      showSnackbar({
+        message: `Flow execution failed: ${errorMsg}`,
+        severity: 'error',
+      });
+      setError(errorMsg);
     } finally {
       setExecuting(false);
     }

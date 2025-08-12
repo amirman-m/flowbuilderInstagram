@@ -56,18 +56,30 @@ const TutorialList: React.FC<TutorialListProps> = ({ onStartTutorial }) => {
           <Card
             sx={{
               borderRadius: 3,
-              background: 'rgba(255, 255, 255, 0.1)',
-              backdropFilter: 'blur(10px)',
-              border: `1px solid ${alpha('#fff', 0.1)}`,
-              transition: 'all 0.3s ease',
+              background: 'rgba(255, 255, 255, 0.08)',
+              backdropFilter: 'blur(16px)',
+              border: `1px solid ${alpha('#fff', 0.12)}`,
+              transition: 'all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)',
               cursor: 'pointer',
               height: '100%',
               display: 'flex',
               flexDirection: 'column',
+              boxShadow: '0 6px 24px rgba(0, 0, 0, 0.3)',
+              position: 'relative',
+              overflow: 'hidden',
               '&:hover': {
-                transform: 'translateY(-4px)',
-                boxShadow: '0 15px 30px rgba(0,0,0,0.2)',
-                border: `1px solid ${alpha('#fff', 0.2)}`,
+                transform: 'translateY(-8px)',
+                boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)',
+                border: `1px solid ${alpha('#fff', 0.25)}`,
+                '&::before': {
+                  content: '""',
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: '3px',
+                  background: 'linear-gradient(90deg, #7b68ee, #4cc9f0)',
+                }
               }
             }}
           >

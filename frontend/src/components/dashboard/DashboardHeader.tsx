@@ -26,10 +26,13 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
     <Paper
       elevation={0}
       sx={{
-        background: 'rgba(255, 255, 255, 0.03)',
-        borderRadius: 2,
+        background: 'rgba(255, 255, 255, 0.05)',
+        backdropFilter: 'blur(12px)',
+        borderRadius: 3,
         mb: 3,
         p: 1,
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
+        border: `1px solid ${alpha('#fff', 0.08)}`,
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -43,12 +46,17 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
               textTransform: 'none',
               fontSize: '0.95rem',
               minHeight: 44,
+              transition: 'all 0.3s ease',
               '&.Mui-selected': {
                 color: white,
+                fontWeight: 700,
+              },
+              '&:hover': {
+                color: theme.palette.primary.light,
               }
             },
             '& .MuiTabs-indicator': {
-              background: theme.palette.primary.main,
+              background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
               height: 3,
               borderRadius: 2,
             }
@@ -73,7 +81,12 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
               sx={{ 
                 color: white,
                 bgcolor: alpha(white, 0.12),
-                '&:hover': { bgcolor: alpha(white, 0.2) }
+                backdropFilter: 'blur(6px)',
+                transition: 'all 0.3s ease',
+                '&:hover': { 
+                  bgcolor: alpha(white, 0.2),
+                  transform: 'scale(1.05)',
+                }
               }}
             >
               <RefreshIcon />
@@ -92,12 +105,14 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
                   fontWeight: 600,
                   px: 2.25,
                   py: 1,
-                  backgroundColor: theme.palette.primary.main,
+                  background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
                   color: white,
-                  boxShadow: 'none',
+                  boxShadow: '0 4px 12px rgba(123, 104, 238, 0.3)',
+                  transition: 'all 0.3s ease',
                   '&:hover': {
-                    backgroundColor: theme.palette.primary.dark,
-                    boxShadow: 'none',
+                    background: `linear-gradient(45deg, ${theme.palette.primary.dark}, ${theme.palette.secondary.dark})`,
+                    boxShadow: '0 6px 16px rgba(123, 104, 238, 0.4)',
+                    transform: 'translateY(-2px)',
                   }
                 }}
               >

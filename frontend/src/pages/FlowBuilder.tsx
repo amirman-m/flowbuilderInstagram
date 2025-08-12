@@ -51,6 +51,7 @@ import { NodeInspector } from '../components/inspector';
 import { FlowExecutionDialog } from '../components/dialogs/FlowExecutionDialog';
 import { NODE_REGISTRY } from '../config/nodeRegistry';
 import { useConnectionValidation } from '../hooks/useConnectionValidation';
+import { useSnackbar } from '../components/SnackbarProvider';
 import '../styles/connectionValidation.css';
 
 // Define nodeTypes using our NodeComponentFactory for all node types
@@ -60,6 +61,8 @@ const nodeTypes = {
 
 // Inner FlowBuilder component that uses React Flow hooks
 const FlowBuilderInner: React.FC = () => {
+  const { showSnackbar } = useSnackbar();
+  
   // Local editable name state
   const [isEditingName, setIsEditingName] = useState(false);
   const [flowName, setFlowName] = useState('');
@@ -561,7 +564,12 @@ const FlowBuilderInner: React.FC = () => {
 
   const handleSave = async (callback?: (error?: Error) => void) => {
     if (!flowId) {
-      callback?.(new Error("No flow ID available to save."));
+      const error = new Error("No flow ID available to save.");
+      showSnackbar({
+        message: `Failed to save flow: ${error.message}`,
+        severity: 'error',
+      });
+      callback?.(error);
       return;
     }
 
@@ -594,15 +602,22 @@ const FlowBuilderInner: React.FC = () => {
       });
 
       // Re-fetch graph so canvas reflects latest saved state
-    const refreshedNodes = await flowsAPI.getFlowNodes(parseInt(flowId));
-    const refreshedConns = await flowsAPI.getFlowConnections(parseInt(flowId));
-    setNodes(refreshedNodes.map(mapNodeInstance));
-    setEdges(refreshedConns.map(mapConnection).map(attachEdgeHandlers));
-    
-    // TODO: toast/snackbar for success
-    callback?.(); // Signal success
+      const refreshedNodes = await flowsAPI.getFlowNodes(parseInt(flowId));
+      const refreshedConns = await flowsAPI.getFlowConnections(parseInt(flowId));
+      setNodes(refreshedNodes.map(mapNodeInstance));
+      setEdges(refreshedConns.map(mapConnection).map(attachEdgeHandlers));
+      
+      showSnackbar({
+        message: 'Flow saved successfully',
+        severity: 'success',
+      });
+      callback?.(); // Signal success
     } catch (err: any) {
       console.error('Error saving flow:', err);
+      showSnackbar({
+        message: `Failed to save flow: ${err?.message || 'Unknown error'}`,
+        severity: 'error',
+      });
       callback?.(err); // Signal error
     } finally {
       setSaving(false);

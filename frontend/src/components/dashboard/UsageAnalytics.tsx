@@ -7,6 +7,7 @@ import {
   alpha,
 } from '@mui/material';
 import { Analytics as AnalyticsIcon } from '@mui/icons-material';
+import { DEFAULT_FLOWS_MAX, DEFAULT_API_CALLS, DEFAULT_API_CALLS_CURRENT, DEFAULT_STORAGE, DEFAULT_STORAGE_USED_GB } from '../../constants';
 
 interface UsageAnalyticsProps {
   flowCount?: number;
@@ -35,21 +36,21 @@ const UsageAnalytics: React.FC<UsageAnalyticsProps> = ({ flowCount, analytics })
     {
       label: 'Flows Created',
       current: flowCount ?? analytics?.flowsCreated ?? 0,
-      max: analytics?.flowsMax ?? 50,
+      max: analytics?.flowsMax ?? DEFAULT_FLOWS_MAX,
       color: theme.palette.primary.main,
       gradient: 'linear-gradient(45deg, #667eea, #764ba2)',
     },
     {
       label: 'API Calls',
-      current: analytics?.apiCalls?.current ?? 2400,
-      max: analytics?.apiCalls?.max ?? 10000,
+      current: analytics?.apiCalls?.current ?? DEFAULT_API_CALLS_CURRENT,
+      max: analytics?.apiCalls?.max ?? DEFAULT_API_CALLS.max,
       color: theme.palette.success.main,
       gradient: theme.palette.success.main,
     },
     {
       label: 'Storage',
-      current: analytics?.storage?.usedGb ?? 1.2,
-      max: analytics?.storage?.maxGb ?? 5,
+      current: analytics?.storage?.usedGb ?? DEFAULT_STORAGE_USED_GB,
+      max: analytics?.storage?.maxGb ?? DEFAULT_STORAGE.maxGb,
       color: theme.palette.warning.main,
       gradient: theme.palette.warning.main,
       unit: 'GB',
@@ -71,23 +72,25 @@ const UsageAnalytics: React.FC<UsageAnalyticsProps> = ({ flowCount, analytics })
       <Typography 
         variant="subtitle2" 
         sx={{ 
-          fontWeight: 600, 
-          mb: 2, 
+          fontWeight: 700, 
+          mb: 2.5, 
           display: 'flex', 
-          alignItems: 'center' 
+          alignItems: 'center',
+          color: 'white',
+          fontSize: '1.1rem',
         }}
       >
-        <AnalyticsIcon sx={{ mr: 1, fontSize: 18 }} />
+        <AnalyticsIcon sx={{ mr: 1, fontSize: 20, color: theme.palette.primary.main }} />
         Usage Analytics
       </Typography>
       
       {usageData.map((item, index) => (
-        <Box key={item.label} sx={{ mb: index === usageData.length - 1 ? 0 : 2 }}>
+        <Box key={item.label} sx={{ mb: index === usageData.length - 1 ? 0 : 2.5 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{ color: alpha('#fff', 0.8), fontWeight: 500 }}>
               {item.label}
             </Typography>
-            <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            <Typography variant="caption" sx={{ fontWeight: 700, color: 'white' }}>
               {formatValue(item.current, item.max, item.unit)}
             </Typography>
           </Box>
@@ -95,12 +98,15 @@ const UsageAnalytics: React.FC<UsageAnalyticsProps> = ({ flowCount, analytics })
             variant="determinate" 
             value={item.max > 0 ? Math.min(100, (item.current / item.max) * 100) : 0} 
             sx={{ 
-              height: 6, 
-              borderRadius: 3,
-              bgcolor: alpha(item.color, 0.1),
+              height: 8, 
+              borderRadius: 4,
+              bgcolor: 'rgba(255, 255, 255, 0.08)',
+              backdropFilter: 'blur(4px)',
+              boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.2)',
               '& .MuiLinearProgress-bar': {
                 background: item.gradient,
-                borderRadius: 3,
+                borderRadius: 4,
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
               }
             }} 
           />
