@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { CssBaseline } from '@mui/material';
 import { useAuthStore } from './store/authStore';
-import Header from './components/layout/Header';
+// Header removed as requested
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
@@ -12,12 +12,73 @@ import FlowBuilder from './pages/FlowBuilder';
 
 const theme = createTheme({
   palette: {
-    mode: 'light',
+    mode: 'dark',
+    background: {
+      default: '#0f0f13',
+      paper: '#1a1a25',
+    },
     primary: {
-      main: '#1976d2',
+      main: '#7b68ee',
+      light: '#9d8df2',
+      dark: '#5a4cba',
     },
     secondary: {
-      main: '#dc004e',
+      main: '#4cc9f0',
+      light: '#73d5f3',
+      dark: '#3aa0c1',
+    },
+    success: {
+      main: '#4ade80',
+      light: '#6de599',
+      dark: '#3aad66',
+    },
+    warning: {
+      main: '#fbbf24',
+      light: '#fccc4d',
+      dark: '#c8991d',
+    },
+    error: {
+      main: '#f87171',
+      light: '#f98e8e',
+      dark: '#c65a5a',
+    },
+    text: {
+      primary: '#ffffff',
+      secondary: 'rgba(255, 255, 255, 0.7)',
+      disabled: 'rgba(255, 255, 255, 0.5)',
+    },
+  },
+  typography: {
+    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+    h6: {
+      fontWeight: 600,
+    },
+    subtitle1: {
+      fontWeight: 500,
+    },
+    button: {
+      fontWeight: 600,
+      textTransform: 'none',
+    },
+  },
+  shape: {
+    borderRadius: 12,
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: 8,
+        },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          borderRadius: 12,
+          backgroundImage: 'none',
+        },
+      },
     },
   },
 });
@@ -29,7 +90,7 @@ const App: React.FC = () => {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Router>
-        <Header />
+        {/* Header removed as requested */}
         <Routes>
           <Route
             path="/login"
