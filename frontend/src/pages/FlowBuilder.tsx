@@ -10,18 +10,12 @@ import {
   Toolbar,
   IconButton,
   Tooltip,
-
-  Chip,
-  TextField,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails
+  TextField
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
   Save as SaveIcon,
   PlayArrow as PlayIcon,
-  ExpandMore as ExpandMoreIcon,
   Settings as SettingsIcon
 } from '@mui/icons-material';
 import {
@@ -52,6 +46,7 @@ import { FlowExecutionDialog } from '../components/dialogs/FlowExecutionDialog';
 import { NODE_REGISTRY } from '../config/nodeRegistry';
 import { useConnectionValidation } from '../hooks/useConnectionValidation';
 import { useSnackbar } from '../components/SnackbarProvider';
+import { ModernNodeLibrary } from '../components/NodeLibrary';
 import '../styles/connectionValidation.css';
 import '../styles/flowBuilder.css';
 
@@ -1002,74 +997,6 @@ const FlowBuilderInner: React.FC = () => {
     }
   };
 
-  // Group node types by category and subcategory for sidebar rendering
-  const groupedNodeTypes = useMemo(() => {
-    const groups: Record<NodeCategory, Record<string, NodeType[]>> = {
-      [NodeCategory.TRIGGER]: {},
-      [NodeCategory.PROCESSOR]: {},
-      [NodeCategory.ACTION]: {}
-    };
-
-    availableNodeTypes.forEach(nt => {
-      const sub = nt.subcategory || 'General';
-      if (!groups[nt.category][sub]) {
-        groups[nt.category][sub] = [];
-      }
-      groups[nt.category][sub].push(nt);
-    });
-
-    return groups;
-  }, [availableNodeTypes]);
-
-  // Draggable node item in sidebar
-  const DraggableNodeItem: React.FC<{ nodeType: NodeType }> = ({ nodeType }) => {
-    const onDragStart = (event: React.DragEvent, nodeType: NodeType) => {
-      event.dataTransfer.setData('application/reactflow', nodeType.category);
-      event.dataTransfer.setData('application/json', JSON.stringify({
-        type: 'nodeType',
-        nodeType: nodeType
-      }));
-      event.dataTransfer.effectAllowed = 'move';
-    };
-
-    return (
-      <Paper
-        sx={{
-          p: 2,
-          mb: 1,
-          cursor: 'grab',
-          border: `2px solid ${getCategoryColor(nodeType.category)}40`,
-          '&:hover': {
-            border: `2px solid ${getCategoryColor(nodeType.category)}80`,
-            transform: 'translateY(-1px)',
-          },
-          '&:active': {
-            cursor: 'grabbing'
-          }
-        }}
-        draggable
-        onDragStart={(e) => onDragStart(e, nodeType)}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-          <Chip
-            label={nodeType.category}
-            size="small"
-            sx={{
-              backgroundColor: getCategoryColor(nodeType.category),
-              color: 'white',
-              mr: 1
-            }}
-          />
-        </Box>
-        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-          {nodeType.name}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {nodeType.description}
-        </Typography>
-      </Paper>
-    );
-  };
 
   const handleNameSave = async () => {
     if (!flowId) return;
@@ -1174,52 +1101,26 @@ const FlowBuilderInner: React.FC = () => {
 
       {/* Main Flow Builder Area */}
       <Box sx={{ flexGrow: 1, display: 'flex' }}>
-        {/* Node Library Sidebar */}
+        {/* Modern Node Library Sidebar */}
         <Paper 
           sx={{ 
-            width: 300, 
+            width: 320, 
             borderRadius: 0, 
             borderRight: 1, 
             borderColor: 'divider',
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            backgroundColor: '#fafafa'
           }}
         >
-          <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-            <Typography variant="h6">Node Library</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Drag nodes to the canvas to build your flow
-            </Typography>
-          </Box>
-          
-          <Box sx={{ flexGrow: 1, p: 2, overflow: 'auto' }}>
-            {([NodeCategory.TRIGGER, NodeCategory.PROCESSOR, NodeCategory.ACTION] as NodeCategory[]).map(category => {
-              const subGroups = groupedNodeTypes[category];
-              const hasNodes = Object.keys(subGroups).length > 0;
-              if (!hasNodes) return null;
-              return (
-                <Box key={category} sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
-                    {category.charAt(0) + category.slice(1).toLowerCase()} Nodes
-                  </Typography>
-                  {Object.entries(subGroups).map(([subName, types]) => (
-                    <Accordion key={subName} disableGutters sx={{ mb: 1 }}>
-                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 'medium' }}>
-                          {subName} ({types.length})
-                        </Typography>
-                      </AccordionSummary>
-                      <AccordionDetails sx={{ p: 1 }}>
-                        {types.map(nt => (
-                          <DraggableNodeItem key={nt.id} nodeType={nt} />
-                        ))}
-                      </AccordionDetails>
-                    </Accordion>
-                  ))}
-                </Box>
-              );
-            })}
-          </Box>
+          <ModernNodeLibrary onNodeDragStart={(event, nodeType) => {
+            event.dataTransfer.setData('application/reactflow', nodeType.category);
+            event.dataTransfer.setData('application/json', JSON.stringify({
+              type: 'nodeType',
+              nodeType: nodeType
+            }));
+            event.dataTransfer.effectAllowed = 'move';
+          }} />
         </Paper>
 
         {/* React Flow Canvas */}
