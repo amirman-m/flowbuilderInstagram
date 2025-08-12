@@ -38,6 +38,7 @@ import {
 
 import { NodeType, NodeCategory } from '../../types/nodes';
 import { nodeService } from '../../services/nodeService';
+import { NODE_REGISTRY } from '../../config/nodeRegistry';
 
 interface ModernNodeLibraryProps {
   onNodeDragStart: (event: React.DragEvent, nodeType: NodeType) => void;
@@ -107,7 +108,7 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
       filtered = filtered.filter(node => 
         node.name.toLowerCase().includes(query) ||
         node.description.toLowerCase().includes(query) ||
-        (node.subcategory && node.subcategory.toLowerCase().includes(query))
+        (NODE_REGISTRY[node.id]?.subcategory.toLowerCase().includes(query))
       );
     }
     
@@ -116,9 +117,11 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
       filtered = filtered.filter(node => node.category === selectedCategory);
     }
     
-    // Group by subcategory
+    // Group by subcategory using registry data
     const grouped = filtered.reduce((acc, node) => {
-      const subcategory = node.subcategory || 'General';
+      const registryInfo = NODE_REGISTRY[node.id];
+      const subcategory = registryInfo?.subcategory || 'General';
+      
       if (!acc[subcategory]) {
         acc[subcategory] = [];
       }
