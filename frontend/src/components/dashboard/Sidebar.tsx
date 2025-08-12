@@ -24,9 +24,16 @@ interface SidebarProps {
   user: User | null;
   flowCount: number;
   onLogout: () => void;
+  planName?: string;
+  analytics?: {
+    flowsCreated?: number;
+    flowsMax?: number;
+    apiCalls: { current: number; max: number };
+    storage: { usedGb: number; maxGb: number };
+  };
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ user, flowCount, onLogout }) => {
+const Sidebar: React.FC<SidebarProps> = ({ user, flowCount, onLogout, planName, analytics }) => {
   const theme = useTheme();
 
   return (
@@ -92,14 +99,20 @@ const Sidebar: React.FC<SidebarProps> = ({ user, flowCount, onLogout }) => {
               {user?.name || 'User'}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Premium Plan
+              {planName || 'Premium Plan'}
             </Typography>
           </Box>
         </Box>
       </Box>
 
       {/* Usage Analytics */}
-      <UsageAnalytics flowCount={flowCount} />
+      <UsageAnalytics 
+        flowCount={flowCount} 
+        analytics={analytics ? {
+          ...analytics,
+          flowsCreated: analytics.flowsCreated ?? 0
+        } : undefined} 
+      />
 
       {/* Navigation Menu */}
       <Box sx={{ flex: 1, p: 2 }}>

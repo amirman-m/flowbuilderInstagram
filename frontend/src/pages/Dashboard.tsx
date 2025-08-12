@@ -1,31 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Alert,
-  Tabs,
-  Tab,
-  Paper,
   Button,
-  IconButton,
-  Tooltip,
   alpha,
   useTheme,
 } from '@mui/material';
-import {
-  Add as AddIcon,
-  Refresh as RefreshIcon,
-  School as TutorialIcon,
-  LibraryBooks as LibraryIcon,
-} from '@mui/icons-material';
+
 import { useAuthStore } from '../store/authStore';
 import { useFlows } from '../hooks/useFlows';
+import { useDashboardSummary } from '../hooks/useDashboardSummary';
 import Sidebar from '../components/dashboard/Sidebar';
 import FlowList from '../components/dashboard/FlowList';
 import TutorialList from '../components/dashboard/TutorialList';
 import ExampleFlowList from '../components/dashboard/ExampleFlowList';
 import CreateFlowDialog from '../components/dashboard/CreateFlowDialog';
 import TabPanel from '../components/dashboard/TabPanel';
+import DashboardHeader from '../components/dashboard/DashboardHeader';
 
 const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);
@@ -47,37 +39,51 @@ const Dashboard: React.FC = () => {
     toggleFlow, 
   } = useFlows();
 
+  // Dashboard summary from backend
+  const { data: summary } = useDashboardSummary();
+  const flowsMax = summary?.flowsMax ?? 50;
+  const createDisabled = flows.length >= flowsMax;
+
   // Event handlers
-  const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
+  const handleTabChange = useCallback((_: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
-  };
+  }, []);
 
-  const handleCreateFlow = () => {
+  const handleCreateFlow = useCallback(() => {
+    if (createDisabled) {
+      // Could show a snackbar here to inform the user they reached the limit
+      return;
+    }
     setCreateDialogOpen(true);
-  };
+  }, [createDisabled]);
 
-  const handleCancelCreateFlow = () => {
+  const handleCancelCreateFlow = useCallback(() => {
     setCreateDialogOpen(false);
-  };
+  }, []);
 
-  const handleConfirmCreateFlow = async (name: string, description: string) => {
-    await createFlow(name, description);
-    setCreateDialogOpen(false);
-  };
+  const handleConfirmCreateFlow = useCallback(async (name: string, description: string) => {
+    try {
+      await createFlow(name, description);
+      setCreateDialogOpen(false);
+    } catch (e) {
+      console.error(e);
+      // Optionally show snackbar/alert here
+    }
+  }, [createFlow]);
 
-  const handleEditFlow = (flowId: number) => {
+  const handleEditFlow = useCallback((flowId: number) => {
     // Route defined in App.tsx: <Route path="/flow/:flowId" element={<FlowBuilder />} />
     navigate(`/flow/${flowId}`);
-  };
+  }, [navigate]);
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     try {
       await logout();
       navigate('/login');
     } catch (error) {
       console.error('Logout failed:', error);
     }
-  };
+  }, [logout, navigate]);
 
   return (
     <Box
@@ -93,7 +99,13 @@ const Dashboard: React.FC = () => {
       <Sidebar 
         user={user} 
         flowCount={flows.length} 
-        onLogout={handleLogout} 
+        onLogout={handleLogout}
+        planName={summary?.planName}
+        analytics={{
+          flowsMax,
+          apiCalls: { current: summary?.apiCalls ?? 0, max: summary?.apiCallsMax ?? 10000 },
+          storage: { usedGb: summary?.storageUsedGb ?? 0, maxGb: summary?.storageMaxGb ?? 5 },
+        }}
       />
 
       {/* Main Content */}
@@ -115,7 +127,7 @@ const Dashboard: React.FC = () => {
                   color="inherit" 
                   size="small" 
                   onClick={loadFlows}
-                  sx={{ color: 'white' }}
+                  sx={{ color: theme.palette.common.white }}
                 >
                   Retry
                 </Button>
@@ -126,86 +138,14 @@ const Dashboard: React.FC = () => {
           )}
 
           {/* Tabs Navigation */}
-          <Paper
-            elevation={0}
-            sx={{
-              background: 'rgba(255, 255, 255, 0.03)',
-              borderRadius: 2,
-              mb: 3,
-              p: 1,
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Tabs
-                value={activeTab}
-                onChange={handleTabChange}
-                sx={{
-                  '& .MuiTab-root': {
-                    color: alpha('#fff', 0.75),
-                    fontWeight: 600,
-                    textTransform: 'none',
-                    fontSize: '0.95rem',
-                    minHeight: 44,
-                    '&.Mui-selected': {
-                      color: 'white',
-                    }
-                  },
-                  '& .MuiTabs-indicator': {
-                    background: theme.palette.primary.main,
-                    height: 3,
-                    borderRadius: 2,
-                  }
-                }}
-              >
-                <Tab 
-                  icon={<LibraryIcon />} 
-                  iconPosition="start" 
-                  label="Web Flow Library" 
-                />
-                <Tab 
-                  icon={<TutorialIcon />} 
-                  iconPosition="start" 
-                  label="Tutorials" 
-                />
-              </Tabs>
-              <Box sx={{ display: 'flex', gap: 1.5, pr: 1 }}>
-                <Tooltip title="Refresh flows">
-                  <IconButton 
-                    onClick={loadFlows} 
-                    disabled={loading}
-                    sx={{ 
-                      color: 'white',
-                      bgcolor: alpha('#fff', 0.12),
-                      '&:hover': { bgcolor: alpha('#fff', 0.2) }
-                    }}
-                  >
-                    <RefreshIcon />
-                  </IconButton>
-                </Tooltip>
-                <Button
-                  variant="contained"
-                  startIcon={<AddIcon />}
-                  onClick={handleCreateFlow}
-                  sx={{
-                    borderRadius: 2,
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    px: 2.25,
-                    py: 1,
-                    backgroundColor: theme.palette.primary.main,
-                    color: '#fff',
-                    boxShadow: 'none',
-                    '&:hover': {
-                      backgroundColor: theme.palette.primary.dark,
-                      boxShadow: 'none',
-                    }
-                  }}
-                >
-                  Create Flow
-                </Button>
-              </Box>
-            </Box>
-          </Paper>
+          <DashboardHeader
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            loading={loading}
+            onRefresh={loadFlows}
+            onCreateFlow={handleCreateFlow}
+            createDisabled={createDisabled}
+          />
 
           {/* Tab Content */}
           <TabPanel value={activeTab} index={0}>

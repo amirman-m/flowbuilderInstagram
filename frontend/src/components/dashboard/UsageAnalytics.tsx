@@ -9,31 +9,47 @@ import {
 import { Analytics as AnalyticsIcon } from '@mui/icons-material';
 
 interface UsageAnalyticsProps {
-  flowCount: number;
+  flowCount?: number;
+  analytics?: {
+    flowsCreated?: number;
+    flowsMax?: number;
+    apiCalls: { current: number; max: number };
+    storage: { usedGb: number; maxGb: number };
+  };
 }
 
-const UsageAnalytics: React.FC<UsageAnalyticsProps> = ({ flowCount }) => {
+// Strongly type items used in usageData so `current` and `max` are always numbers
+type UsageItem = {
+  label: string;
+  current: number;
+  max: number;
+  color: string;
+  gradient: string;
+  unit?: string;
+};
+
+const UsageAnalytics: React.FC<UsageAnalyticsProps> = ({ flowCount, analytics }) => {
   const theme = useTheme();
 
-  const usageData = [
+  const usageData: UsageItem[] = [
     {
       label: 'Flows Created',
-      current: flowCount,
-      max: 50,
+      current: flowCount ?? analytics?.flowsCreated ?? 0,
+      max: analytics?.flowsMax ?? 50,
       color: theme.palette.primary.main,
       gradient: 'linear-gradient(45deg, #667eea, #764ba2)',
     },
     {
       label: 'API Calls',
-      current: 2400,
-      max: 10000,
+      current: analytics?.apiCalls?.current ?? 2400,
+      max: analytics?.apiCalls?.max ?? 10000,
       color: theme.palette.success.main,
       gradient: theme.palette.success.main,
     },
     {
       label: 'Storage',
-      current: 1.2,
-      max: 5,
+      current: analytics?.storage?.usedGb ?? 1.2,
+      max: analytics?.storage?.maxGb ?? 5,
       color: theme.palette.warning.main,
       gradient: theme.palette.warning.main,
       unit: 'GB',
@@ -77,7 +93,7 @@ const UsageAnalytics: React.FC<UsageAnalyticsProps> = ({ flowCount }) => {
           </Box>
           <LinearProgress 
             variant="determinate" 
-            value={(item.current / item.max) * 100} 
+            value={item.max > 0 ? Math.min(100, (item.current / item.max) * 100) : 0} 
             sx={{ 
               height: 6, 
               borderRadius: 3,
