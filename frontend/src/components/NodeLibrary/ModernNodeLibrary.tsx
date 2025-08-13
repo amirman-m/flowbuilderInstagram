@@ -4,15 +4,12 @@ import {
   Typography,
   TextField,
   InputAdornment,
-  IconButton
+  IconButton,
+  CircularProgress
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  Clear as ClearIcon,
-  PlayArrow as TriggerIcon,
-  Settings as ProcessorIcon,
-  Send as ActionIcon,
-  AccountCircle as MyModelIcon
+  Clear as ClearIcon
 } from '@mui/icons-material';
 
 import { NodeType, NodeCategory } from '../../types/nodes';
@@ -21,59 +18,52 @@ import { CategorySidebar } from './CategorySidebar';
 import { NodeList } from './NodeList';
 import { NodeInfoDialog } from './NodeInfoDialog';
 import { useFilteredNodes } from './useFilteredNodes';
+import { CATEGORIES } from '../../config/categories';
 import styles from './NodeLibrary.module.css';
 
 interface ModernNodeLibraryProps {
   onNodeDragStart: (event: React.DragEvent, nodeType: NodeType) => void;
 }
 
-// Category definitions with colors and icons
-const CATEGORIES = [
-  {
-    id: 'trigger' as NodeCategory,
-    name: 'Trigger',
-    color: '#10b981',
-    icon: TriggerIcon
-  },
-  {
-    id: 'processor' as NodeCategory,
-    name: 'Processor', 
-    color: '#3b82f6',
-    icon: ProcessorIcon
-  },
-  {
-    id: 'action' as NodeCategory,
-    name: 'Action',
-    color: '#f59e0b',
-    icon: ActionIcon
-  },
-  {
-    id: 'my_model' as NodeCategory,
-    name: 'My Model',
-    color: '#8b5cf6',
-    icon: MyModelIcon
-  }
-];
-
 export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDragStart }) => {
   const [selectedCategory, setSelectedCategory] = useState<NodeCategory | null>(null);
   const [expandedSubcategories, setExpandedSubcategories] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [availableNodeTypes, setAvailableNodeTypes] = useState<NodeType[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [selectedNodeForInfo, setSelectedNodeForInfo] = useState<NodeType | null>(null);
   const [infoDialogOpen, setInfoDialogOpen] = useState(false);
+
+  // Custom debounce function
+  const debounce = <T extends (...args: any[]) => any>(func: T, wait: number) => {
+    let timeout: ReturnType<typeof setTimeout>;
+    return (...args: Parameters<T>) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func(...args), wait);
+    };
+  };
+
+  // Debounced search function
+  const debouncedSetSearchQuery = useCallback(
+    debounce((value: string) => setDebouncedSearchQuery(value), 300),
+    []
+  );
 
   // Load available node types
   useEffect(() => {
     const loadNodeTypes = async () => {
       try {
+        setLoading(true);
         setError(null);
         const nodeTypes = await nodeService.types.getNodeTypes();
         setAvailableNodeTypes(nodeTypes);
       } catch (error) {
         console.error('Failed to load node types:', error);
         setError('Failed to load nodes. Please try again later.');
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -81,7 +71,7 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
   }, []);
 
   // Filter and group nodes by category and subcategory
-  const filteredAndGroupedNodes = useFilteredNodes(availableNodeTypes, searchQuery, selectedCategory);
+  const filteredAndGroupedNodes = useFilteredNodes(availableNodeTypes, debouncedSearchQuery, selectedCategory);
 
   // Get node count for a category
   const getCategoryNodeCount = useCallback((categoryId: NodeCategory) => {
@@ -118,6 +108,7 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
   // Handle search clear
   const handleSearchClear = useCallback(() => {
     setSearchQuery('');
+    setDebouncedSearchQuery('');
   }, []);
 
   return (
@@ -141,33 +132,44 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
           {/* Search Bar */}
           <TextField
             fullWidth
-            size="small"
             placeholder="Search nodes..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className={styles.searchField}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              debouncedSetSearchQuery(e.target.value);
+            }}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <SearchIcon className={styles.searchIcon} />
+                  <SearchIcon />
                 </InputAdornment>
               ),
-              endAdornment: searchQuery && (
+              endAdornment: searchQuery ? (
                 <InputAdornment position="end">
-                  <IconButton size="small" onClick={handleSearchClear}>
-                    <ClearIcon className={styles.clearIcon} />
+                  <IconButton
+                    size="small"
+                    onClick={handleSearchClear}
+                  >
+                    <ClearIcon />
                   </IconButton>
                 </InputAdornment>
-              ),
+              ) : null,
             }}
+            className={styles.searchInput}
           />
         </Box>
 
         {/* Scrollable Content Area (Area 2) */}
         <Box className={styles.contentArea}>
-          {error ? (
+          {loading ? (
+            /* Loading State */
+            <Box className={styles.emptyState}>
+              <CircularProgress size={24} className={styles.loadingSpinner} />
+              <Typography variant="body2">Loading nodes...</Typography>
+            </Box>
+          ) : error ? (
             /* Error Message */
-            <Box sx={{ p: 4, textAlign: 'center', color: '#ef4444' }}>
+            <Box className={styles.emptyState}>
               <Typography variant="body2">{error}</Typography>
             </Box>
           ) : !selectedCategory ? (

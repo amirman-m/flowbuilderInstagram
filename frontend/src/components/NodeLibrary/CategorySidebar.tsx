@@ -1,13 +1,7 @@
 import React from 'react';
 import { Box, Stack, Typography, Tooltip, IconButton } from '@mui/material';
 import { NodeCategory } from '../../types/nodes';
-
-type CategoryItem = {
-  id: NodeCategory;
-  name: string;
-  color: string;
-  icon: React.ElementType;
-};
+import { CategoryItem } from '../../config/categories';
 
 interface CategorySidebarProps {
   categories: CategoryItem[];

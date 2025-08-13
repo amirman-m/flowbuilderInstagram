@@ -2,13 +2,8 @@ import React from 'react';
 import { Box, Typography, Chip, Collapse, Paper, IconButton, Tooltip } from '@mui/material';
 import { Info as InfoIcon, ExpandLess, ExpandMore, Code as CodeIcon } from '@mui/icons-material';
 import { NodeCategory, NodeType } from '../../types/nodes';
-
-export type CategoryItem = {
-  id: NodeCategory;
-  name: string;
-  color: string;
-  icon: React.ElementType;
-};
+import { CategoryItem } from '../../config/categories';
+import styles from './NodeLibrary.module.css';
 
 interface NodeListProps {
   filteredAndGroupedNodes: Record<string, NodeType[]>;
@@ -33,39 +28,26 @@ export const NodeList: React.FC<NodeListProps> = ({
     categories.find((c) => c.id === categoryId)?.color || '#9ca3af';
 
   return (
-    <Box sx={{ p: 1 }}>
+    <Box className={styles.nodeListContainer}>
       {Object.entries(filteredAndGroupedNodes).map(([subcategory, nodes]) => (
-        <Box key={subcategory} sx={{ mb: 1 }}>
+        <Box key={subcategory} className={styles.subcategoryContainer}>
           {/* Subcategory Header */}
           <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              p: 1.5,
-              cursor: 'pointer',
-              borderRadius: 1,
-              backgroundColor: '#1e1e1e',
-              border: '1px solid #404040',
-              mb: 1,
-              '&:hover': {
-                backgroundColor: '#252525',
-                borderColor: '#525252',
-              },
-            }}
+            className={styles.subcategoryHeader}
             onClick={() => onSubcategoryToggle(subcategory)}
           >
-            <Typography variant="subtitle2" sx={{ flexGrow: 1, fontWeight: 600, color: '#f1f5f9' }}>
+            <Typography variant="subtitle2" className={styles.subcategoryTitle}>
               {subcategory}
             </Typography>
             <Chip
               label={nodes.length}
               size="small"
-              sx={{ mr: 1, minWidth: 24, height: 20, backgroundColor: '#404040', color: '#f1f5f9' }}
+              className={styles.subcategoryChip}
             />
             {expandedSubcategories.has(subcategory) ? (
-              <ExpandLess sx={{ color: '#9ca3af' }} />
+              <ExpandLess className={styles.expandIcon} />
             ) : (
-              <ExpandMore sx={{ color: '#9ca3af' }} />
+              <ExpandMore className={styles.expandIcon} />
             )}
           </Box>
 
@@ -77,52 +59,26 @@ export const NodeList: React.FC<NodeListProps> = ({
                   key={node.id}
                   draggable
                   onDragStart={(event) => onNodeDragStart(event, node)}
-                  sx={{
-                    p: 1.5,
-                    mb: 1,
-                    cursor: 'grab',
-                    backgroundColor: '#1e1e1e',
-                    border: '1px solid #404040',
-                    borderRadius: 1,
-                    transition: 'all 0.2s ease-in-out',
-                    '&:hover': {
-                      backgroundColor: '#252525',
-                      borderColor: '#525252',
-                      transform: 'translateX(4px)',
-                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
-                    },
-                    '&:active': {
-                      cursor: 'grabbing',
-                      transform: 'scale(0.98) translateX(4px)',
-                    },
-                  }}
+                  className={styles.nodePaper}
                 >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Box className={styles.nodeContent}>
                     <Box
-                      sx={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 1,
-                        backgroundColor: `${getCategoryColor(selectedCategory as NodeCategory)}20`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: getCategoryColor(selectedCategory as NodeCategory),
-                      }}
+                      className={styles.nodeIconWrapper}
+                      style={{ backgroundColor: `${getCategoryColor(selectedCategory as NodeCategory)}20` }}
                     >
-                      <CodeIcon />
+                      <CodeIcon className={styles.nodeIcon} style={{ color: getCategoryColor(selectedCategory as NodeCategory) }} />
                     </Box>
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="subtitle2" sx={{ color: '#f1f5f9' }}>
+                    <Box className={styles.nodeDetails}>
+                      <Typography variant="subtitle2" className={styles.nodeName}>
                         {node.name}
                       </Typography>
-                      <Typography variant="caption" sx={{ color: '#9ca3af' }}>
+                      <Typography variant="caption" className={styles.nodeCategory}>
                         {node.category}
                       </Typography>
                     </Box>
                     <Tooltip title="Node details">
                       <IconButton size="small" onClick={() => onNodeInfoClick(node)}>
-                        <InfoIcon sx={{ fontSize: 18, color: '#9ca3af' }} />
+                        <InfoIcon className={styles.infoIcon} />
                       </IconButton>
                     </Tooltip>
                   </Box>
@@ -134,7 +90,7 @@ export const NodeList: React.FC<NodeListProps> = ({
       ))}
 
       {Object.keys(filteredAndGroupedNodes).length === 0 && (
-        <Box sx={{ p: 4, textAlign: 'center', color: '#9ca3af' }}>
+        <Box className={styles.emptyState}>
           <Typography variant="body2">
             No nodes available in this category.
           </Typography>

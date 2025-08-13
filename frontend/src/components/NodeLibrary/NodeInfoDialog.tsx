@@ -10,14 +10,9 @@ import {
   Chip,
 } from '@mui/material';
 import { Code as CodeIcon, Input as InputIcon, Output as OutputIcon } from '@mui/icons-material';
-import { NodeType, NodeCategory } from '../../types/nodes';
-
-export type CategoryItem = {
-  id: NodeCategory;
-  name: string;
-  color: string;
-  icon: React.ElementType;
-};
+import { NodeType } from '../../types/nodes';
+import { CategoryItem } from '../../config/categories';
+import styles from './NodeLibrary.module.css';
 
 interface NodeInfoDialogProps {
   open: boolean;
@@ -35,85 +30,65 @@ export const NodeInfoDialog: React.FC<NodeInfoDialogProps> = ({ open, onClose, n
       onClose={onClose}
       maxWidth="sm"
       fullWidth
-      PaperProps={{
-        sx: {
-          backgroundColor: '#1e1e1e',
-          border: '1px solid #404040',
-          borderRadius: 2,
-        },
-      }}
+      PaperProps={{ className: styles.dialogPaper }}
     >
-      <DialogTitle sx={{ color: '#f1f5f9', borderBottom: '1px solid #404040' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+      <DialogTitle className={styles.dialogTitle}>
+        <Box className={styles.dialogTitleContent}>
           <Box
-            sx={{
-              width: 40,
-              height: 40,
-              borderRadius: 1,
-              backgroundColor: `${categoryColor}20`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: categoryColor,
-            }}
+            className={styles.dialogIconWrapper}
+            style={{ backgroundColor: `${categoryColor}20`, color: categoryColor }}
           >
             <CodeIcon />
           </Box>
           <Box>
-            <Typography variant="h6" sx={{ color: '#f1f5f9' }}>
+            <Typography variant="h6" className={styles.dialogNodeName}>
               {node?.name}
             </Typography>
-            <Typography variant="caption" sx={{ color: '#9ca3af' }}>
+            <Typography variant="caption" className={styles.dialogNodeCategory}>
               {node?.category}
             </Typography>
           </Box>
         </Box>
       </DialogTitle>
-      <DialogContent sx={{ color: '#f1f5f9' }}>
-        <Typography variant="body2" sx={{ mb: 2, color: '#d1d5db' }}>
+      <DialogContent className={styles.dialogContent}>
+        <Typography variant="body2" className={styles.dialogContentText}>
           {node?.description}
         </Typography>
 
         {node?.ports.inputs && node.ports.inputs.length > 0 && (
-          <Box sx={{ mb: 2 }}>
-            <Typography
-              variant="subtitle2"
-              sx={{ mb: 1, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 1 }}
-            >
-              <InputIcon sx={{ fontSize: 16 }} /> Inputs
+          <Box className={styles.dialogSection}>
+            <Typography variant="subtitle2" className={styles.dialogSectionTitle}>
+              <InputIcon /> Inputs
             </Typography>
             {node.ports.inputs.map((input, index) => (
               <Chip
                 key={index}
                 label={`${input.name}: ${input.dataType}`}
                 size="small"
-                sx={{ mr: 1, mb: 1, backgroundColor: '#404040', color: '#f1f5f9' }}
+                className={styles.dialogChip}
               />
             ))}
           </Box>
         )}
 
         {node?.ports.outputs && node.ports.outputs.length > 0 && (
-          <Box>
-            <Typography
-              variant="subtitle2"
-              sx={{ mb: 1, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 1 }}
-            >
-              <OutputIcon sx={{ fontSize: 16 }} /> Outputs
+          <Box className={styles.dialogSection}>
+            <Typography variant="subtitle2" className={styles.dialogSectionTitle}>
+              <OutputIcon /> Outputs
             </Typography>
             {node.ports.outputs.map((output, index) => (
               <Chip
                 key={index}
                 label={`${output.name}: ${output.dataType}`}
                 size="small"
-                sx={{ mr: 1, mb: 1, backgroundColor: '#404040', color: '#f1f5f9' }}
+                className={styles.dialogChip}
               />
             ))}
           </Box>
         )}
       </DialogContent>
-      <DialogActions sx={{ borderTop: '1px solid #404040' }}>
-        <Button onClick={onClose} sx={{ color: '#9ca3af' }}>
+      <DialogActions className={styles.dialogActions}>
+        <Button onClick={onClose} className={styles.dialogCloseButton}>
           Close
         </Button>
       </DialogActions>
