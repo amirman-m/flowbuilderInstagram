@@ -1,47 +1,26 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
   TextField,
   InputAdornment,
-  IconButton,
-  Tooltip,
-  Paper,
-  Chip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  Divider,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Collapse,
-  Stack
+  IconButton
 } from '@mui/material';
 import {
   Search as SearchIcon,
   Clear as ClearIcon,
-  Info as InfoIcon,
   PlayArrow as TriggerIcon,
   Settings as ProcessorIcon,
   Send as ActionIcon,
-  AccountCircle as MyModelIcon,
-  ExpandLess,
-  ExpandMore,
-  Code as CodeIcon,
-  Input as InputIcon,
-  Output as OutputIcon
+  AccountCircle as MyModelIcon
 } from '@mui/icons-material';
 
 import { NodeType, NodeCategory } from '../../types/nodes';
 import { nodeService } from '../../services/nodeService';
-import { NODE_REGISTRY } from '../../config/nodeRegistry';
 import { CategorySidebar } from './CategorySidebar';
 import { NodeList } from './NodeList';
 import { NodeInfoDialog } from './NodeInfoDialog';
+import { useFilteredNodes } from './useFilteredNodes';
 import styles from './NodeLibrary.module.css';
 
 interface ModernNodeLibraryProps {
@@ -81,7 +60,7 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
   const [expandedSubcategories, setExpandedSubcategories] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [availableNodeTypes, setAvailableNodeTypes] = useState<NodeType[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedNodeForInfo, setSelectedNodeForInfo] = useState<NodeType | null>(null);
   const [infoDialogOpen, setInfoDialogOpen] = useState(false);
 
@@ -89,13 +68,12 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
   useEffect(() => {
     const loadNodeTypes = async () => {
       try {
-        setLoading(true);
+        setError(null);
         const nodeTypes = await nodeService.types.getNodeTypes();
         setAvailableNodeTypes(nodeTypes);
       } catch (error) {
         console.error('Failed to load node types:', error);
-      } finally {
-        setLoading(false);
+        setError('Failed to load nodes. Please try again later.');
       }
     };
 
@@ -103,38 +81,7 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
   }, []);
 
   // Filter and group nodes by category and subcategory
-  const filteredAndGroupedNodes = useMemo(() => {
-    let filtered = availableNodeTypes;
-    
-    // Apply search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(node => 
-        node.name.toLowerCase().includes(query) ||
-        node.description.toLowerCase().includes(query) ||
-        (NODE_REGISTRY[node.id]?.subcategory.toLowerCase().includes(query))
-      );
-    }
-    
-    // Apply category filter
-    if (selectedCategory) {
-      filtered = filtered.filter(node => node.category === selectedCategory);
-    }
-    
-    // Group by subcategory using registry data
-    const grouped = filtered.reduce((acc, node) => {
-      const registryInfo = NODE_REGISTRY[node.id];
-      const subcategory = registryInfo?.subcategory || 'General';
-      
-      if (!acc[subcategory]) {
-        acc[subcategory] = [];
-      }
-      acc[subcategory].push(node);
-      return acc;
-    }, {} as Record<string, NodeType[]>);
-    
-    return grouped;
-  }, [availableNodeTypes, searchQuery, selectedCategory]);
+  const filteredAndGroupedNodes = useFilteredNodes(availableNodeTypes, searchQuery, selectedCategory);
 
   // Get node count for a category
   const getCategoryNodeCount = useCallback((categoryId: NodeCategory) => {
@@ -218,7 +165,12 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
 
         {/* Scrollable Content Area (Area 2) */}
         <Box className={styles.contentArea}>
-          {!selectedCategory ? (
+          {error ? (
+            /* Error Message */
+            <Box sx={{ p: 4, textAlign: 'center', color: '#ef4444' }}>
+              <Typography variant="body2">{error}</Typography>
+            </Box>
+          ) : !selectedCategory ? (
             /* Welcome Message */
             <Box className={styles.welcomeMessage}>
               <Typography variant="h6" className={styles.welcomeTitle}>
