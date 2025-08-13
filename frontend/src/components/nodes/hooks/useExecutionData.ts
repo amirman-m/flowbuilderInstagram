@@ -3,8 +3,63 @@ import { useMemo } from 'react';
 import { NodeDataWithHandlers } from '../registry';
 
 /**
- * Custom hook to extract and format execution data from node data
- * This provides a modular way for all node components to access fresh execution results
+ * Custom React hook to extract and format execution data from node data.
+ * 
+ * This hook provides a modular way for all node components to access fresh execution results
+ * from flow execution or webhook triggers. It prioritizes fresh execution data over cached
+ * instance data and provides utility functions for common data access patterns.
+ * 
+ * The hook handles different types of node outputs:
+ * - message_data: For input nodes (ChatInput, TelegramInput)
+ * - ai_response: For AI processing nodes (OpenAI, DeepSeek)
+ * - raw: For other node types with custom output formats
+ * 
+ * @hook
+ * @example
+ * ```tsx
+ * import { useExecutionData } from './hooks/useExecutionData';
+ * 
+ * function MyNodeComponent({ data }: NodeComponentProps) {
+ *   const {
+ *     hasFreshResults,
+ *     status,
+ *     displayData,
+ *     getOutputValue,
+ *     isSuccess,
+ *     isError
+ *   } = useExecutionData(data);
+ * 
+ *   if (isSuccess && displayData.type === 'message_data') {
+ *     return (
+ *       <div>
+ *         <p>Input: {displayData.inputText}</p>
+ *         <p>Chat ID: {displayData.chatId}</p>
+ *         <p>Status: {status}</p>
+ *       </div>
+ *     );
+ *   }
+ * 
+ *   return <div>No execution data available</div>;
+ * }
+ * ```
+ * 
+ * @param data - The node data object containing instance data and execution results
+ * @returns Object containing execution status, outputs, and utility functions
+ * @returns returns.hasFreshResults - Boolean indicating if fresh execution results are available
+ * @returns returns.status - Current execution status ('idle' | 'success' | 'error' | 'running')
+ * @returns returns.executionTime - Time taken for execution in milliseconds
+ * @returns returns.lastExecuted - Timestamp of last execution
+ * @returns returns.outputs - Raw output data from node execution
+ * @returns returns.getOutputValue - Function to get specific output value by port ID
+ * @returns returns.displayData - Formatted display data with type-specific structure
+ * @returns returns.instance - Original node instance data
+ * @returns returns.instanceData - Node instance data object
+ * @returns returns.isExecuted - Boolean indicating if node has been executed
+ * @returns returns.isSuccess - Boolean indicating if last execution was successful
+ * @returns returns.isError - Boolean indicating if last execution had an error
+ * 
+ * @since 1.0.0
+ * @author Social Media Flow Builder Team
  */
 export const useExecutionData = (data: NodeDataWithHandlers) => {
   return useMemo(() => {

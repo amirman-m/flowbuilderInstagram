@@ -1,25 +1,25 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   Box,
   Typography,
   TextField,
   InputAdornment,
-  IconButton,
-  CircularProgress
+  CircularProgress,
+  Alert,
+  Button,
+  IconButton
 } from '@mui/material';
-import {
-  Search as SearchIcon,
-  Clear as ClearIcon
-} from '@mui/icons-material';
-
-import { NodeType, NodeCategory } from '../../types/nodes';
+import { Search as SearchIcon, Clear as ClearIcon } from '@mui/icons-material';
+import { NodeCategory, NodeType } from '../../types/nodes';
 import { nodeService } from '../../services/nodeService';
+import { useFilteredNodes } from './useFilteredNodes';
+import { useSnackbar } from '../SnackbarProvider';
+import { errorService } from '../../services/errorService';
 import { CategorySidebar } from './CategorySidebar';
 import { NodeList } from './NodeList';
 import { NodeInfoDialog } from './NodeInfoDialog';
-import { useFilteredNodes } from './useFilteredNodes';
 import { CATEGORIES } from '../../config/categories';
-import styles from './NodeLibrary.module.css';
+import styles from './ModernNodeLibrary.module.css';
 
 interface ModernNodeLibraryProps {
   onNodeDragStart: (event: React.DragEvent, nodeType: NodeType) => void;
@@ -32,6 +32,8 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [availableNodeTypes, setAvailableNodeTypes] = useState<NodeType[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const { showSnackbar } = useSnackbar();
   const [loading, setLoading] = useState(true);
   const [selectedNodeForInfo, setSelectedNodeForInfo] = useState<NodeType | null>(null);
   const [infoDialogOpen, setInfoDialogOpen] = useState(false);
@@ -51,24 +53,66 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
     []
   );
 
-  // Load available node types
-  useEffect(() => {
-    const loadNodeTypes = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const nodeTypes = await nodeService.types.getNodeTypes();
-        setAvailableNodeTypes(nodeTypes);
-      } catch (error) {
-        console.error('Failed to load node types:', error);
-        setError('Failed to load nodes. Please try again later.');
-      } finally {
-        setLoading(false);
+  // Load available node types with enhanced error handling and retry logic
+  const loadNodeTypes = useCallback(async (isRetry: boolean = false) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Use retry logic from error service
+      const nodeTypes = await errorService.withRetry(
+        () => nodeService.types.getNodeTypes(),
+        3, // max retries
+        1000, // initial delay
+        { component: 'ModernNodeLibrary', action: 'loadNodeTypes', isRetry }
+      );
+      
+      setAvailableNodeTypes(nodeTypes);
+      setRetryCount(0);
+      
+      // Show success message on retry
+      if (isRetry) {
+        showSnackbar({
+          message: 'Node types loaded successfully!',
+          severity: 'success'
+        });
       }
-    };
+      
+    } catch (error) {
+      const originalError = error as Error;
+      
+      // Create structured error
+      const appError = errorService.createAPIError(
+        `Failed to load node types: ${originalError.message}`,
+        originalError,
+        {
+          component: 'ModernNodeLibrary',
+          action: 'loadNodeTypes',
+          retryCount,
+          nodeTypesCount: availableNodeTypes.length
+        }
+      );
+      
+      // Log error to centralized service
+      errorService.logError(appError);
+      
+      // Set user-friendly error message
+      const userMessage = errorService.getUserFriendlyMessage(appError);
+      setError(userMessage);
+      setRetryCount(prev => prev + 1);
+      
+      // Show snackbar notification
+      showSnackbar(errorService.toSnackbarOptions(appError));
+      
+    } finally {
+      setLoading(false);
+    }
+  }, [showSnackbar, retryCount, availableNodeTypes.length]);
 
+  // Load node types on component mount
+  useEffect(() => {
     loadNodeTypes();
-  }, []);
+  }, [loadNodeTypes]);
 
   // Filter and group nodes by category and subcategory
   const filteredAndGroupedNodes = useFilteredNodes(availableNodeTypes, debouncedSearchQuery, selectedCategory);
@@ -148,7 +192,10 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
                 <InputAdornment position="end">
                   <IconButton
                     size="small"
-                    onClick={handleSearchClear}
+                    onClick={() => {
+                      setSearchQuery('');
+                      setDebouncedSearchQuery('');
+                    }}
                   >
                     <ClearIcon />
                   </IconButton>
@@ -159,18 +206,43 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
           />
         </Box>
 
-        {/* Scrollable Content Area (Area 2) */}
-        <Box className={styles.contentArea}>
-          {loading ? (
-            /* Loading State */
-            <Box className={styles.emptyState}>
-              <CircularProgress size={24} className={styles.loadingSpinner} />
-              <Typography variant="body2">Loading nodes...</Typography>
+        {/* Error Alert */}
+        {error && (
+          <Alert 
+            severity="error" 
+            className={styles.errorAlert}
+            action={
+              <Button 
+                color="inherit" 
+                size="small" 
+                onClick={() => loadNodeTypes(true)}
+                disabled={loading}
+              >
+                {loading ? 'Retrying...' : `Retry${retryCount > 0 ? ` (${retryCount})` : ''}`}
+              </Button>
+            }
+          >
+            <Box>
+              <Typography variant="body2" component="div">
+                {error}
+              </Typography>
+              {retryCount > 0 && (
+                <Typography variant="caption" color="text.secondary">
+                  Retry attempt: {retryCount}
+                </Typography>
+              )}
             </Box>
-          ) : error ? (
-            /* Error Message */
-            <Box className={styles.emptyState}>
-              <Typography variant="body2">{error}</Typography>
+          </Alert>
+        )}
+
+        {/* Content Area */}
+        <Box className={styles.content}>
+          {loading ? (
+            <Box className={styles.loadingContainer}>
+              <CircularProgress size={40} />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                Loading node types...
+              </Typography>
             </Box>
           ) : !selectedCategory ? (
             /* Welcome Message */
@@ -183,26 +255,24 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
               </Typography>
             </Box>
           ) : (
-            <>
-              <NodeList
-                filteredAndGroupedNodes={filteredAndGroupedNodes}
-                selectedCategory={selectedCategory}
-                expandedSubcategories={expandedSubcategories}
-                onSubcategoryToggle={handleSubcategoryToggle}
-                onNodeDragStart={onNodeDragStart}
-                onNodeInfoClick={handleNodeInfoClick}
-                categories={CATEGORIES}
-              />
-            </>
+            <NodeList
+              filteredAndGroupedNodes={filteredAndGroupedNodes}
+              selectedCategory={selectedCategory}
+              expandedSubcategories={expandedSubcategories}
+              onSubcategoryToggle={handleSubcategoryToggle}
+              onNodeDragStart={onNodeDragStart}
+              onNodeInfoClick={handleNodeInfoClick}
+              categories={CATEGORIES}
+            />
           )}
         </Box>
       </Box>
 
       {/* Node Info Dialog */}
       <NodeInfoDialog
+        node={selectedNodeForInfo}
         open={infoDialogOpen}
         onClose={() => setInfoDialogOpen(false)}
-        node={selectedNodeForInfo}
         categories={CATEGORIES}
       />
     </Box>
