@@ -9,10 +9,12 @@ import {
   Button,
   IconButton
 } from '@mui/material';
-import { Search as SearchIcon, Clear as ClearIcon } from '@mui/icons-material';
+// Tree-shaking optimized icon imports
+import { UI_ICONS } from '../../config/nodeIcons';
 import { NodeCategory, NodeType } from '../../types/nodes';
 import { nodeService } from '../../services/nodeService';
 import { useFilteredNodes } from './useFilteredNodes';
+import { useLazyNodeComponents } from './useLazyNodeComponents';
 import { useSnackbar } from '../SnackbarProvider';
 import { errorService } from '../../services/errorService';
 import { CategorySidebar } from './CategorySidebar';
@@ -20,6 +22,7 @@ import { NodeList } from './NodeList';
 import { NodeInfoDialog } from './NodeInfoDialog';
 import { CATEGORIES } from '../../config/categories';
 import styles from './ModernNodeLibrary.module.css';
+import { createNodeCount } from './types';
 
 interface ModernNodeLibraryProps {
   onNodeDragStart: (event: React.DragEvent, nodeType: NodeType) => void;
@@ -37,6 +40,18 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
   const [loading, setLoading] = useState(true);
   const [selectedNodeForInfo, setSelectedNodeForInfo] = useState<NodeType | null>(null);
   const [infoDialogOpen, setInfoDialogOpen] = useState(false);
+  
+  // Initialize lazy loading system for bundle optimization
+  const { smartPreload, bundleInfo } = useLazyNodeComponents();
+  
+  // Log bundle optimization info for debugging (development only)
+  useEffect(() => {
+    // Use window check for development environment detection
+    const isDevelopment = !window.location.hostname.includes('production');
+    if (isDevelopment) {
+      console.debug('Node Library Bundle Optimization:', bundleInfo);
+    }
+  }, [bundleInfo]);
 
   // Custom debounce function
   const debounce = <T extends (...args: any[]) => any>(func: T, wait: number) => {
@@ -119,18 +134,17 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
 
   // Get node count for a category
   const getCategoryNodeCount = useCallback((categoryId: NodeCategory) => {
-    return availableNodeTypes.filter(node => node.category === categoryId).length;
+    return createNodeCount(availableNodeTypes.filter(node => node.category === categoryId).length);
   }, [availableNodeTypes]);
 
-  // Handle category selection
+  // Handle category selection with smart preloading
   const handleCategorySelect = useCallback((categoryId: NodeCategory) => {
-    if (selectedCategory === categoryId) {
-      setSelectedCategory(null);
-      setExpandedSubcategories(new Set());
-    } else {
-      setSelectedCategory(categoryId);
-    }
-  }, [selectedCategory]);
+    setSelectedCategory(categoryId);
+    setExpandedSubcategories(new Set());
+    
+    // Smart preload components for selected category and related categories
+    smartPreload(categoryId, availableNodeTypes);
+  }, [smartPreload, availableNodeTypes]);
 
   // Handle subcategory toggle
   const handleSubcategoryToggle = useCallback((subcategory: string) => {
@@ -149,11 +163,7 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
     setInfoDialogOpen(true);
   }, []);
 
-  // Handle search clear
-  const handleSearchClear = useCallback(() => {
-    setSearchQuery('');
-    setDebouncedSearchQuery('');
-  }, []);
+
 
   return (
     <Box className={styles.modernNodeLibrary}>
@@ -185,7 +195,7 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <SearchIcon />
+                  <UI_ICONS.Search />
                 </InputAdornment>
               ),
               endAdornment: searchQuery ? (
@@ -197,7 +207,7 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
                       setDebouncedSearchQuery('');
                     }}
                   >
-                    <ClearIcon />
+                    <UI_ICONS.Clear />
                   </IconButton>
                 </InputAdornment>
               ) : null,

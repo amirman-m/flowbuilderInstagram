@@ -2,19 +2,35 @@ import React from 'react';
 import { Box, Stack, Typography, Tooltip, IconButton } from '@mui/material';
 import { NodeCategory } from '../../types/nodes';
 import { CategoryItem } from '../../config/categories';
+import { 
+  validateCategorySidebarProps, 
+  safeCallback, 
+  validateNodeCount,
+  devValidateProps 
+} from './validation';
+import { NodeCount } from './types';
 
 /**
  * Props interface for CategorySidebar component with comprehensive validation
+ * Enhanced with strict type safety and edge case handling
  */
 interface CategorySidebarProps {
   /** Array of category items to display. Must not be null/undefined. */
-  categories: CategoryItem[];
+  categories: readonly CategoryItem[];
   /** Currently selected category ID, null if none selected */
   selectedCategory: NodeCategory | null;
   /** Callback function when a category is selected. Must be provided. */
   onCategorySelect: (categoryId: NodeCategory) => void;
   /** Function to get node count for a category. Must return a non-negative number. */
-  getCategoryNodeCount: (categoryId: NodeCategory) => number;
+  getCategoryNodeCount: (categoryId: NodeCategory) => NodeCount;
+  /** Optional accessibility label for the sidebar */
+  ariaLabel?: string;
+  /** Optional test ID for testing */
+  testId?: string;
+  /** Optional maximum categories to display */
+  maxCategories?: number;
+  /** Optional loading state */
+  isLoading?: boolean;
 }
 
 /**
@@ -65,33 +81,49 @@ interface CategorySidebarProps {
 export const CategorySidebar: React.FC<CategorySidebarProps> = ({
   categories = [],
   selectedCategory = null,
-  onCategorySelect = () => {
-    console.warn('CategorySidebar: onCategorySelect callback not provided');
-  },
-  getCategoryNodeCount = () => {
-    console.warn('CategorySidebar: getCategoryNodeCount function not provided');
-    return 0;
-  },
+  onCategorySelect,
+  getCategoryNodeCount,
+  ariaLabel = 'Node categories',
+  testId = 'category-sidebar',
+  maxCategories = 20,
+  isLoading = false,
 }) => {
-  // Validate categories prop
+  // Development-only prop validation
+  devValidateProps({ categories, selectedCategory, onCategorySelect, getCategoryNodeCount }, validateCategorySidebarProps, 'CategorySidebar');
+  
+  // Create safe callbacks with error handling
+  const safeCategorySelect = safeCallback(onCategorySelect, 'onCategorySelect', 'CategorySidebar');
+  const safeGetNodeCount = safeCallback(getCategoryNodeCount, 'getCategoryNodeCount', 'CategorySidebar');
+  // Runtime validation with graceful error handling
   if (!Array.isArray(categories)) {
     console.error('CategorySidebar: categories prop must be an array');
-    return null;
+    return (
+      <Box sx={{ p: 2, color: 'error.main' }}>
+        <Typography variant="caption">Invalid categories data</Typography>
+      </Box>
+    );
   }
 
-  // Validate callback functions
-  if (typeof onCategorySelect !== 'function') {
-    console.error('CategorySidebar: onCategorySelect must be a function');
-    return null;
+  if (categories.length === 0 && !isLoading) {
+    return (
+      <Box sx={{ p: 2, color: 'text.secondary' }}>
+        <Typography variant="caption">No categories available</Typography>
+      </Box>
+    );
   }
-
-  if (typeof getCategoryNodeCount !== 'function') {
-    console.error('CategorySidebar: getCategoryNodeCount must be a function');
-    return null;
+  
+  // Apply maximum categories limit
+  const displayCategories = categories.slice(0, maxCategories);
+  
+  if (categories.length > maxCategories) {
+    console.warn(`CategorySidebar: Displaying ${maxCategories} of ${categories.length} categories`);
   }
   return (
     <Box
       className="category-sidebar"
+      aria-label={ariaLabel}
+      data-testid={testId}
+      role="navigation"
       sx={{
         width: 80,
         borderRight: '1px solid #404040',
@@ -108,7 +140,14 @@ export const CategorySidebar: React.FC<CategorySidebarProps> = ({
       </Typography>
 
       <Stack spacing={1} sx={{ width: '100%', alignItems: 'center' }}>
-        {categories.map((category) => {
+        {isLoading ? (
+          <Box sx={{ p: 2 }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              Loading categories...
+            </Typography>
+          </Box>
+        ) : (
+          displayCategories.map((category) => {
           // Validate individual category structure
           if (!category || typeof category !== 'object') {
             console.warn('CategorySidebar: Invalid category object:', category);
@@ -122,29 +161,15 @@ export const CategorySidebar: React.FC<CategorySidebarProps> = ({
 
           const isActive = selectedCategory === category.id;
           const Icon = category.icon;
-          let nodeCount = 0;
-          
-          try {
-            nodeCount = getCategoryNodeCount(category.id);
-            // Ensure nodeCount is a valid non-negative number
-            if (typeof nodeCount !== 'number' || nodeCount < 0 || !Number.isFinite(nodeCount)) {
-              console.warn(`CategorySidebar: Invalid node count for category ${category.id}:`, nodeCount);
-              nodeCount = 0;
-            }
-          } catch (error) {
-            console.error(`CategorySidebar: Error getting node count for category ${category.id}:`, error);
-            nodeCount = 0;
-          }
+          // Get validated node count with error handling
+          const nodeCount = validateNodeCount(
+            safeGetNodeCount(category.id), 
+            `CategorySidebar for category ${category.id}`
+          );
           return (
             <Tooltip key={category.id} title={`${category.name} (${nodeCount})`} placement="right">
               <IconButton
-                onClick={() => {
-                  try {
-                    onCategorySelect(category.id);
-                  } catch (error) {
-                    console.error('CategorySidebar: Error in onCategorySelect callback:', error);
-                  }
-                }}
+                onClick={() => safeCategorySelect(category.id)}
                 sx={{
                   width: 48,
                   height: 48,
@@ -187,7 +212,8 @@ export const CategorySidebar: React.FC<CategorySidebarProps> = ({
               </IconButton>
             </Tooltip>
           );
-        })}
+          })
+        )}
       </Stack>
     </Box>
   );
