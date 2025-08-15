@@ -20,7 +20,7 @@ import {
 } from '@mui/icons-material';
 
 import { NodeComponentProps, NodeDataWithHandlers } from './registry';
-import { NodeConfiguration, getNodeConfiguration } from '../../config/nodeConfiguration';
+import { NodeConfiguration, getNodeConfiguration, getCategoryColor, getCategoryGradient } from '../../config/nodeConfiguration';
 import { createNodeStyles, createHandleStyles, createStatusIndicatorStyles, NODE_THEME } from '../../styles/nodeTheme';
 import { NodeExecutionStatus, NodeCategory } from '../../types/nodes';
 import { useExecutionData } from './hooks/useExecutionData';
@@ -249,127 +249,144 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
     if (customHeader) return customHeader;
     
     const IconComponent = safeConfig.icon;
-    
+    const gradient = getCategoryGradient(safeConfig.category);
+
     return (
       <Box sx={{ 
         display: 'flex', 
         alignItems: 'center', 
-        mb: 1,
-        minHeight: 24
+        justifyContent: 'space-between',
+        p: 2,
+        pb: 1.5,
       }}>
-        {/* Node Icon */}
-        {IconComponent && (
-          <Box sx={{ 
-            color: 'var(--node-icon-color)', 
-            mr: 1,
-            display: 'flex',
-            alignItems: 'center'
-          }}>
-            <IconComponent fontSize="small" />
+        {/* Icon and Title */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          {IconComponent && (
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              width: 32, 
+              height: 32,
+              borderRadius: '12px',
+              background: `linear-gradient(135deg, ${gradient.primary}, ${gradient.secondary})`,
+              color: 'white',
+              boxShadow: `0 4px 12px ${gradient.primary}30`
+            }}>
+              <IconComponent sx={{ fontSize: 18 }} />
+            </Box>
+          )}
+          <Box>
+            <Typography 
+              variant="subtitle1" 
+              sx={{ 
+                fontWeight: 600,
+                color: '#0f172a',
+                fontSize: '0.95rem',
+                lineHeight: 1.2
+              }}
+            >
+              {instance?.label || safeConfig.name}
+            </Typography>
+            <Typography 
+              variant="caption" 
+              sx={{ 
+                color: '#64748b',
+                fontSize: '0.75rem',
+                textTransform: 'lowercase'
+              }}
+            >
+              {safeConfig.category}
+            </Typography>
           </Box>
-        )}
-        
-        {/* Node Title */}
-        <Typography 
-          variant="subtitle2" 
-          sx={{ 
-            flexGrow: 1, 
-            fontWeight: 600,
-            color: 'var(--node-text-color)',
-            fontSize: '13px',
-            lineHeight: 1.2
-          }}
-        >
-          {instance?.label || safeConfig.name}
-        </Typography>
+        </Box>
         
         {/* Action Buttons */}
-        <Box sx={{ display: 'flex', gap: 0.5, ml: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {/* Status Icon */}
+          {renderStatusIcon()}
+          
           {/* Settings Button */}
-          {safeConfig.features.hasSettings && (
-            <Tooltip title="Settings">
-              <IconButton 
-                size="small" 
-                onClick={handleSettings}
-                sx={{ 
-                  width: 20, 
-                  height: 20,
-                  color: 'var(--node-icon-color)',
-                  '&:hover': {
-                    backgroundColor: 'var(--node-color)',
-                    color: 'white'
-                  }
-                }}
-              >
-                <SettingsIcon fontSize="inherit" />
-              </IconButton>
-            </Tooltip>
+          {safeConfig.features.hasSettings && onSettings && (
+            <IconButton
+              size="small"
+              onClick={handleSettings}
+              sx={{
+                width: 28,
+                height: 28,
+                borderRadius: '8px',
+                color: '#64748b',
+                backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                backdropFilter: 'blur(8px)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                '&:hover': {
+                  backgroundColor: `${gradient.primary}10`,
+                  color: gradient.primary,
+                  transform: 'scale(1.05)'
+                },
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <SettingsIcon sx={{ fontSize: 14 }} />
+            </IconButton>
           )}
           
           {/* Execute Button */}
-          {safeConfig.features.hasExecution && (
-            <Tooltip title="Execute">
-              <IconButton 
-                size="small" 
-                onClick={handleExecute}
-                disabled={isExecuting}
-                sx={{ 
-                  width: 20, 
-                  height: 20,
-                  color: 'var(--node-icon-color)',
-                  '&:hover': {
-                    backgroundColor: 'var(--node-color)',
-                    color: 'white'
-                  }
-                }}
-              >
-                {isExecuting ? (
-                  <CircularProgress size={12} />
-                ) : (
-                  <ExecuteIcon fontSize="inherit" />
-                )}
-              </IconButton>
-            </Tooltip>
+          {safeConfig.features.hasExecution && onExecute && (
+            <IconButton
+              size="small"
+              onClick={handleExecute}
+              disabled={isExecuting}
+              sx={{
+                width: 28,
+                height: 28,
+                borderRadius: '8px',
+                color: 'white',
+                background: `linear-gradient(135deg, ${gradient.primary}, ${gradient.secondary})`,
+                boxShadow: `0 2px 8px ${gradient.primary}30`,
+                '&:hover': {
+                  transform: 'scale(1.05)',
+                  boxShadow: `0 4px 12px ${gradient.primary}40`
+                },
+                '&.Mui-disabled': {
+                  background: 'linear-gradient(135deg, #94a3b8, #64748b)',
+                  color: 'white',
+                  opacity: 0.6
+                },
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <ExecuteIcon sx={{ fontSize: 14 }} />
+            </IconButton>
           )}
           
           {/* Delete Button */}
-          <Tooltip title="Delete">
-            <IconButton 
-              size="small" 
-              onClick={handleDelete}
-              sx={{ 
-                width: 20, 
-                height: 20,
+          <IconButton
+            size="small"
+            onClick={handleDelete}
+            sx={{
+              width: 28,
+              height: 28,
+              borderRadius: '8px',
+              color: '#64748b',
+              backgroundColor: 'rgba(255, 255, 255, 0.8)',
+              backdropFilter: 'blur(8px)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              '&:hover': {
+                backgroundColor: '#fef2f2',
                 color: '#ef4444',
-                '&:hover': {
-                  backgroundColor: '#ef4444',
-                  color: 'white'
-                }
-              }}
-            >
-              <DeleteIcon fontSize="inherit" />
-            </IconButton>
-          </Tooltip>
+                transform: 'scale(1.05)'
+              },
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <DeleteIcon sx={{ fontSize: 14 }} />
+          </IconButton>
         </Box>
       </Box>
     );
   };
   
-  // Render category chip
-  const renderCategoryChip = () => (
-    <Chip
-      label={safeConfig.category}
-      size="small"
-      sx={{
-        backgroundColor: 'rgba(var(--node-color-rgb), 0.1)',
-        color: 'var(--node-color)',
-        fontSize: '10px',
-        height: 18,
-        fontWeight: 500,
-        border: '1px solid rgba(var(--node-color-rgb), 0.2)'
-      }}
-    />
-  );
   
   // Render default content
   const renderDefaultContent = () => {
@@ -452,12 +469,37 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
     );
   };
   
+  const gradient = getCategoryGradient(safeConfig.category);
+
   return (
     <Paper
-      sx={nodeStyles}
+      elevation={0}
+      sx={{
+        position: 'relative',
+        width: 300,
+        height: 180,
+        minWidth: 300,
+        minHeight: 180,
+        maxWidth: 300,
+        maxHeight: 180,
+        borderRadius: '20px',
+        background: selected 
+          ? `linear-gradient(135deg, ${gradient.primary}15 0%, ${gradient.accent} 100%)`
+          : 'rgba(255, 255, 255, 0.95)',
+        backdropFilter: 'blur(10px)',
+        border: selected 
+          ? `2px solid ${gradient.primary}` 
+          : `1px solid ${gradient.primary}20`,
+        cursor: 'pointer',
+        userSelect: 'none',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        boxShadow: isHovered 
+          ? `0 20px 40px ${gradient.primary}20, 0 8px 16px rgba(0, 0, 0, 0.1)`
+          : `0 8px 24px ${gradient.primary}10, 0 2px 8px rgba(0, 0, 0, 0.05)`,
+        transform: isHovered ? 'translateY(-4px)' : 'translateY(0px)',
+      }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      elevation={selected ? 4 : 1}
     >
       {/* Status Indicator */}
       {renderStatusIcon()}
@@ -466,21 +508,27 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
       {renderInputHandles()}
       
       {/* Node Content */}
-      <Box sx={{ position: 'relative', zIndex: 1 }}>
+      <Box sx={{ 
+        position: 'relative', 
+        zIndex: 1, 
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        padding: '12px'
+      }}>
         {/* Header */}
         {renderHeader()}
         
-        {/* Category Chip */}
-        {renderCategoryChip()}
         
         {/* Custom Content */}
         {customContent}
         
         {/* Default Content */}
-        {renderDefaultContent()}
-        
-        {/* Children */}
-        {children}
+        <Box sx={{ flex: 1, overflow: 'hidden' }}>
+          {renderDefaultContent()}
+          {children}
+        </Box>
         
         {/* Custom Footer */}
         {customFooter}

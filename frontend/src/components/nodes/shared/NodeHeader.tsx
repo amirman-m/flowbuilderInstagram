@@ -58,8 +58,6 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '8px 12px',
-        borderBottom: '1px solid',
-        borderBottomColor: isSelected ? config.color : 'divider',
         backgroundColor: isExecuting ? 'action.hover' : 'transparent',
         cursor: onHeaderClick ? 'pointer' : 'default',
         transition: 'all 0.2s ease-in-out',

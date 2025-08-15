@@ -38,12 +38,41 @@ export interface NodeStyles {
   fontWeight: string | number;
 }
 
-// Category color mapping (centralized from categories.ts)
+// Modern color palette for node categories
 export const CATEGORY_COLORS: Record<NodeCategory, string> = {
-  [NodeCategory.TRIGGER]: '#10b981',    // Green
-  [NodeCategory.PROCESSOR]: '#3b82f6',  // Blue  
-  [NodeCategory.ACTION]: '#f59e0b',     // Orange
-  [NodeCategory.MY_MODEL]: '#8b5cf6',   // Purple
+  [NodeCategory.TRIGGER]: '#10B981', // Modern emerald green
+  [NodeCategory.PROCESSOR]: '#3B82F6', // Modern blue  
+  [NodeCategory.ACTION]: '#F59E0B', // Modern amber
+};
+
+// Get gradient colors for modern node backgrounds
+export const getCategoryGradient = (category: NodeCategory): { primary: string; secondary: string; accent: string } => {
+  switch (category) {
+    case NodeCategory.TRIGGER:
+      return {
+        primary: '#10B981',
+        secondary: '#059669', 
+        accent: '#D1FAE5'
+      };
+    case NodeCategory.PROCESSOR:
+      return {
+        primary: '#3B82F6',
+        secondary: '#2563EB',
+        accent: '#DBEAFE'
+      };
+    case NodeCategory.ACTION:
+      return {
+        primary: '#F59E0B',
+        secondary: '#D97706',
+        accent: '#FEF3C7'
+      };
+    default:
+      return {
+        primary: '#6B7280',
+        secondary: '#4B5563',
+        accent: '#F3F4F6'
+      };
+  }
 };
 
 // Import the single source of truth for frontend node metadata

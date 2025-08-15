@@ -23,6 +23,13 @@ def get_chat_input_node_type() -> NodeType:
                     description="Contains session ID, input text, and input type",
                     data_type=[NodeDataType.STRING],
                     required=True
+                ) , NodePort(
+                    id="session_id",
+                    name="session_id",
+                    label="Session ID",
+                    description="Contains session ID, input text, and input type",
+                    data_type=[NodeDataType.STRING],
+                    required=True
                 )
             ]
         ),
