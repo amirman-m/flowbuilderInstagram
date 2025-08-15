@@ -211,13 +211,10 @@ export function useConnectionValidation(
   /**
    * Validation function for React Flow's isValidConnection prop
    */
-  const isValidConnection = useCallback((connectionOrEdge: Connection | Edge): boolean => {
+  const isValidConnection = useCallback((connection: Connection): boolean => {
     if (!preventInvalidConnections) {
       return true; // Allow all connections if prevention is disabled
     }
-    
-    // Handle both Connection and Edge types
-    const connection = connectionOrEdge as Connection;
     
     return isConnectionValid(connection);
   }, [isConnectionValid, preventInvalidConnections]);

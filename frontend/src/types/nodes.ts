@@ -151,14 +151,20 @@ export interface NodeExecutionResult {
   /** Error message if execution failed */
   error?: string;
   
-  /** Execution start time */
-  startedAt: Date;
+  /** Execution start time (can be Date object or ISO string) */
+  startedAt: Date | string;
   
   /** Execution completion time */
-  completedAt?: Date;
+  completedAt?: Date | string;
   
   /** Additional metadata about execution */
   metadata?: Record<string, any>;
+  
+  /** Legacy success flag used in some components */
+  success?: boolean;
+  
+  /** Timestamp string used in some components */
+  timestamp?: string;
 }
 
 /**
@@ -169,10 +175,12 @@ export interface NodeInstance {
   /** Unique identifier for this node instance */
   id: string;
   /** Reference to the node type this instance is based on */
-  typeId: string;
+  typeId?: string;
+  /** Alternative reference to node type (used in some components) */
+  type?: string;
   
   /** Human-readable label for this instance */
-  label: string;
+  label?: string;
   
   /** Position on the flow canvas */
   position: {
@@ -196,13 +204,16 @@ export interface NodeInstance {
     
     /** Custom styling overrides */
     style?: Record<string, any>;
+    
+    /** Output values produced by this node (used in some components) */
+    outputs?: Record<string, any>;
   };
   
   /** Timestamp when this instance was created */
-  createdAt: Date;
+  createdAt?: Date;
   
   /** Timestamp when this instance was last modified */
-  updatedAt: Date;
+  updatedAt?: Date;
 }
 
 // ============================================================================

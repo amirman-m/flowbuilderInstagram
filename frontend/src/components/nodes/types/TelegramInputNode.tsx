@@ -148,7 +148,8 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
             // Update node with execution results
             const lastExecution = {
               timestamp: new Date().toISOString(),
-              status: 'success' as const,
+              status: NodeExecutionStatus.SUCCESS,
+              startedAt: new Date().toISOString(),
               outputs: {
                 input_text: messageData.text,
                 chat_id: messageData.chat_id,

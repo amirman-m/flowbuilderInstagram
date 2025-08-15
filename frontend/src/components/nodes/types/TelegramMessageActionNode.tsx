@@ -48,7 +48,7 @@ export const TelegramMessageActionNode: React.FC<NodeComponentProps> = (props) =
   const executionData = useExecutionData(nodeData);
   
   // Get current settings from instance
-  const currentSettings = instance?.settings || {};
+  const currentSettings = instance?.data?.settings || {};
   
   // Initialize settings from instance data
   useEffect(() => {
@@ -156,15 +156,18 @@ export const TelegramMessageActionNode: React.FC<NodeComponentProps> = (props) =
   const handleSettingsSave = useCallback(() => {
     if (nodeData.onNodeUpdate) {
       nodeData.onNodeUpdate(id, {
-        settings: {
-          ...currentSettings,
-          access_token: localAccessToken,
-          chat_id: localChatId
+        data: {
+          settings: {
+            ...currentSettings,
+            access_token: localAccessToken,
+            chat_id: localChatId
+          },
+          inputs: instance?.data?.inputs || {}
         }
       });
     }
     setSettingsOpen(false);
-  }, [nodeData, id, currentSettings, localAccessToken, localChatId]);
+  }, [nodeData, id, currentSettings, localAccessToken, localChatId, instance?.data?.inputs]);
   
   const handleSettingsCancel = useCallback(() => {
     setLocalAccessToken(currentSettings.access_token || '');

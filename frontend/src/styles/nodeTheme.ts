@@ -1,6 +1,6 @@
 // Centralized node theming system
 import { NodeCategory, NodeExecutionStatus } from '../types/nodes';
-import { NodeConfiguration, CATEGORY_COLORS } from '../config/nodeConfiguration';
+import { NodeConfiguration } from '../config/nodeConfiguration';
 import { CSSObject } from '@mui/material/styles';
 
 // Node state types
@@ -61,6 +61,43 @@ const BASE_NODE_STYLES: NodeStyles = {
   transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
 };
 
+// Modern color palette for node categories
+export const CATEGORY_COLORS: Record<NodeCategory, string> = {
+  [NodeCategory.TRIGGER]: '#10B981', // Modern emerald green
+  [NodeCategory.PROCESSOR]: '#3B82F6', // Modern blue  
+  [NodeCategory.ACTION]: '#F59E0B', // Modern amber
+};
+
+// Get gradient colors for modern node backgrounds
+export const getCategoryGradient = (category: NodeCategory): { primary: string; secondary: string; accent: string } => {
+  switch (category) {
+    case NodeCategory.TRIGGER:
+      return {
+        primary: '#10B981',
+        secondary: '#059669', 
+        accent: '#D1FAE5'
+      };
+    case NodeCategory.PROCESSOR:
+      return {
+        primary: '#3B82F6',
+        secondary: '#2563EB',
+        accent: '#DBEAFE'
+      };
+    case NodeCategory.ACTION:
+      return {
+        primary: '#F59E0B',
+        secondary: '#D97706',
+        accent: '#FEF3C7'
+      };
+    default:
+      return {
+        primary: '#6B7280',
+        secondary: '#4B5563',
+        accent: '#F3F4F6'
+      };
+  }
+};
+
 // Category-specific variants
 const CATEGORY_VARIANTS: Record<NodeCategory, CategoryVariant> = {
   [NodeCategory.TRIGGER]: {
@@ -83,13 +120,6 @@ const CATEGORY_VARIANTS: Record<NodeCategory, CategoryVariant> = {
     gradientTo: '#d97706',
     iconColor: '#92400e',
     textColor: '#78350f'
-  },
-  [NodeCategory.MY_MODEL]: {
-    accentColor: CATEGORY_COLORS[NodeCategory.MY_MODEL],
-    gradientFrom: '#8b5cf6',
-    gradientTo: '#7c3aed',
-    iconColor: '#5b21b6',
-    textColor: '#4c1d95'
   }
 };
 
@@ -291,13 +321,17 @@ const hexToRgb = (hex: string): string => {
 
 // Theme utilities for components
 export const getThemeColor = (category: NodeCategory): string => {
-  return CATEGORY_COLORS[category];
+  return CATEGORY_COLORS[category] || '#6B7280';
 };
 
 export const getVariant = (category: NodeCategory): CategoryVariant => {
   return NODE_THEME.variants[category];
 };
 
+// Consolidated color utility functions
+export const getCategoryColor = (category: NodeCategory): string => {
+  return CATEGORY_COLORS[category] || '#6B7280';
+};
+
 // Export for backward compatibility
 export const baseNodeStyles = BASE_NODE_STYLES;
-export const getCategoryColor = getThemeColor;

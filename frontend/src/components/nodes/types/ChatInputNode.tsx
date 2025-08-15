@@ -82,7 +82,8 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
         const lastExecution = {
           timestamp: new Date().toISOString(),
           status: result.status || NodeExecutionStatus.SUCCESS,
-          outputs: result.outputs || {}
+          outputs: result.outputs || {},
+          startedAt: new Date().toISOString()
         };
         
         onNodeUpdate(id, {

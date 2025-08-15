@@ -1,6 +1,7 @@
 // Unified node configuration system - Single source of truth for all node metadata
 import { NodeCategory } from '../types/nodes';
 import { NODE_ICONS, NodeIconComponent } from './nodeIcons';
+import { CATEGORY_COLORS } from '../styles/nodeTheme';
 
 // Enhanced configuration interface
 export interface NodeConfiguration {
@@ -38,42 +39,7 @@ export interface NodeStyles {
   fontWeight: string | number;
 }
 
-// Modern color palette for node categories
-export const CATEGORY_COLORS: Record<NodeCategory, string> = {
-  [NodeCategory.TRIGGER]: '#10B981', // Modern emerald green
-  [NodeCategory.PROCESSOR]: '#3B82F6', // Modern blue  
-  [NodeCategory.ACTION]: '#F59E0B', // Modern amber
-};
-
-// Get gradient colors for modern node backgrounds
-export const getCategoryGradient = (category: NodeCategory): { primary: string; secondary: string; accent: string } => {
-  switch (category) {
-    case NodeCategory.TRIGGER:
-      return {
-        primary: '#10B981',
-        secondary: '#059669', 
-        accent: '#D1FAE5'
-      };
-    case NodeCategory.PROCESSOR:
-      return {
-        primary: '#3B82F6',
-        secondary: '#2563EB',
-        accent: '#DBEAFE'
-      };
-    case NodeCategory.ACTION:
-      return {
-        primary: '#F59E0B',
-        secondary: '#D97706',
-        accent: '#FEF3C7'
-      };
-    default:
-      return {
-        primary: '#6B7280',
-        secondary: '#4B5563',
-        accent: '#F3F4F6'
-      };
-  }
-};
+// Color utilities are now imported from nodeTheme.ts
 
 // Import the single source of truth for frontend node metadata
 import { NODE_REGISTRY } from './nodeRegistry';
@@ -208,9 +174,7 @@ export const getNodesBySubcategory = (subcategory: string): NodeConfiguration[] 
   return getAllNodeConfigurations().filter(config => config.subcategory === subcategory);
 };
 
-export const getCategoryColor = (category: NodeCategory): string => {
-  return CATEGORY_COLORS[category] || '#757575';
-};
+// getCategoryColor is now imported from nodeTheme.ts
 
 export const getNodeIcon = (nodeTypeId: string): NodeIconComponent => {
   const config = getNodeConfiguration(nodeTypeId);

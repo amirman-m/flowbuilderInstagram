@@ -20,6 +20,7 @@ import {
   ExpandLess as ExpandLessIcon
 } from '@mui/icons-material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
+import { NodeExecutionStatus } from '../../../types/nodes';
 import { BaseNode } from '../core/BaseNode';
 import { nodeService } from '../../../services/nodeService';
 import { useNodeConfiguration, useExecutionData } from '../hooks';
@@ -55,7 +56,7 @@ export const OpenAIChatNode: React.FC<NodeComponentProps> = (props) => {
   const executionData = useExecutionData(nodeData);
   
   // Get current settings from instance
-  const currentSettings = instance?.settings || {};
+  const currentSettings = instance?.data?.settings || {};
   const { model = '', system_prompt = '', temperature = 0.7, max_tokens = 1000, stop = '\n\n' } = currentSettings;
   
 
@@ -218,9 +219,12 @@ export const OpenAIChatNode: React.FC<NodeComponentProps> = (props) => {
         // Update the node's execution result
         if (nodeData.onExecutionComplete) {
           nodeData.onExecutionComplete(id, {
+            status: NodeExecutionStatus.SUCCESS,
+            outputs: output,
             success: true,
-            output: output,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            startedAt: new Date().toISOString(),
+            completedAt: new Date().toISOString()
           });
         }
       } else {
@@ -229,9 +233,13 @@ export const OpenAIChatNode: React.FC<NodeComponentProps> = (props) => {
         
         if (nodeData.onExecutionComplete) {
           nodeData.onExecutionComplete(id, {
+            status: NodeExecutionStatus.ERROR,
+            outputs: {},
             success: false,
             error: errorMsg,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            startedAt: new Date().toISOString(),
+            completedAt: new Date().toISOString()
           });
         }
       }
@@ -241,9 +249,13 @@ export const OpenAIChatNode: React.FC<NodeComponentProps> = (props) => {
       
       if (nodeData.onExecutionComplete) {
         nodeData.onExecutionComplete(id, {
+          status: NodeExecutionStatus.ERROR,
+          outputs: {},
           success: false,
           error: errorMsg,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          startedAt: new Date().toISOString(),
+          completedAt: new Date().toISOString()
         });
       }
     } finally {
@@ -257,23 +269,26 @@ export const OpenAIChatNode: React.FC<NodeComponentProps> = (props) => {
 
   const handleSettingsClose = () => {
     setSettingsOpen(false);
-    setExpandedPrompt(false);
-  };
-
-  const handleSettingsSave = () => {
-    if (nodeData.onNodeUpdate) {
-      nodeData.onNodeUpdate(id, {
-        settings: localSettings
-      });
-    }
-    setSettingsOpen(false);
   };
 
   const handleLocalSettingChange = (key: string, value: any) => {
-    setLocalSettings((prev: any) => ({
-      ...prev,
-      [key]: value
-    }));
+    setLocalSettings((prevSettings: Record<string, any>) => ({ ...prevSettings, [key]: value }));
+  };
+
+  const handleSettingsSave = () => {
+    // Update node settings
+    if (nodeData.onNodeUpdate && id) {
+      nodeData.onNodeUpdate(id, {
+        data: {
+          ...instance?.data,
+          settings: {
+            ...currentSettings,
+            ...localSettings
+          }
+        }
+      });
+    }
+    setSettingsOpen(false);
   };
 
   // Initialize local settings when dialog opens

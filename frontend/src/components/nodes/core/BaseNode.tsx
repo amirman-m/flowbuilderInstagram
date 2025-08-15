@@ -20,8 +20,8 @@ import {
 } from '@mui/icons-material';
 
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
-import { NodeConfiguration, getNodeConfiguration, getCategoryGradient } from '../../../config/nodeConfiguration';
-import { createHandleStyles, createStatusIndicatorStyles } from '../../../styles/nodeTheme';
+import { NodeConfiguration, getNodeConfiguration } from '../../../config/nodeConfiguration';
+import { createHandleStyles, createStatusIndicatorStyles, getCategoryGradient } from '../../../styles/nodeTheme';
 import { NODE_ICONS } from '../../../config/nodeIcons';
 import { NodeExecutionStatus, NodeCategory } from '../../../types/nodes';
 import { useExecutionData } from '../hooks/useExecutionData';

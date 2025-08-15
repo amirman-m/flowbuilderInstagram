@@ -29,7 +29,7 @@ export const InstagramTriggerNode: React.FC<NodeComponentProps> = (props) => {
   const executionData = useExecutionData(nodeData);
   
   // Get current settings from instance
-  const currentSettings = instance?.settings || {};
+  const currentSettings = instance?.data?.settings || {};
   const { username = '', hashtags = '', check_interval = 300 } = currentSettings;
 
   // Initialize local settings when dialog opens
@@ -56,7 +56,10 @@ export const InstagramTriggerNode: React.FC<NodeComponentProps> = (props) => {
   const handleSettingsSave = () => {
     if (nodeData.onNodeUpdate) {
       nodeData.onNodeUpdate(id, {
-        settings: localSettings
+        data: {
+          settings: localSettings,
+          inputs: instance?.data?.inputs || {}
+        }
       });
     }
     setSettingsOpen(false);

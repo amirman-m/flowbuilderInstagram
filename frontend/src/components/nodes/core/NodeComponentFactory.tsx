@@ -1,10 +1,10 @@
 // Enhanced NodeComponentFactory with smart routing and configuration injection
 import React, { useMemo } from 'react';
 import { NodeProps } from '@xyflow/react';
-import { getNodeComponent, DefaultNode } from '../registry';
+import { getNodeComponent, DefaultNode, NodeData, NodeComponentProps } from '../registry';
 import { getSafeNodeConfiguration, isConfigurationReady } from '../../../config/nodeConfiguration';
 import { BaseNode } from './BaseNode';
-import { FlowNode } from '../../../types/nodes';
+import { FlowNode, NodeCategory, NodeType, NodeInstance } from '../../../types/nodes';
 import { useNodeConfiguration } from '../hooks/useNodeConfiguration';
 
 /**
@@ -29,7 +29,7 @@ export const NodeComponentFactory: React.FC<NodeProps> = (props) => {
   const { data, id } = props;
   
   // Extract node type information
-  const nodeData = data as FlowNode['data'];
+  const nodeData = data as unknown as FlowNode['data'];
   const nodeTypeId = nodeData?.nodeType?.id;
   
   // Get node configuration using the hook system
@@ -62,43 +62,47 @@ export const NodeComponentFactory: React.FC<NodeProps> = (props) => {
   // Enhanced error handling
   if (!data || !nodeData) {
     console.warn(`NodeComponentFactory[${id}]: Invalid node data`, data);
-    return <DefaultNode {...props} />;
+    return <DefaultNode data={createDefaultNodeData()} selected={false} id={id} />;
   }
   
   if (!nodeTypeId) {
     console.warn(`NodeComponentFactory[${id}]: Missing nodeTypeId`, nodeData);
-    return <DefaultNode {...props} />;
+    return <DefaultNode data={createDefaultNodeData()} selected={false} id={id} />;
   }
   
   // Handle configuration loading states
   if (!isConfigurationReady() || configLoading) {
+    const loadingNodeConfig = {
+      id: nodeTypeId,
+      name: 'Loading...',
+      description: 'Node configuration loading',
+      category: nodeData.nodeType?.category || NodeCategory.PROCESSOR,
+      subcategory: 'System',
+      componentName: 'LoadingNode',
+      icon: () => null,
+      color: '#9CA3AF',
+      features: {
+        hasSettings: false,
+        hasExecution: false,
+        hasCustomUI: false,
+        hasStatusIndicator: false
+      },
+      ports: { maxInputs: 0, maxOutputs: 0, requiredInputs: [], requiredOutputs: [] }
+    };
+    
     return (
       <BaseNode 
-        {...props}
-        nodeConfig={{
-          id: nodeTypeId,
-          name: 'Loading...',
-          description: 'Node configuration loading',
-          category: nodeData.nodeType?.category || 'processor' as any,
-          subcategory: 'System',
-          componentName: 'LoadingNode',
-          icon: () => null,
-          color: '#9CA3AF',
-          features: {
-            hasSettings: false,
-            hasExecution: false,
-            hasCustomUI: false,
-            hasStatusIndicator: false
-          },
-          ports: { maxInputs: 0, maxOutputs: 0, requiredInputs: [], requiredOutputs: [] }
-        }}
+        data={createNodeData(nodeData)}
+        selected={props.selected || false}
+        id={id}
+        nodeConfig={loadingNodeConfig}
       />
     );
   }
   
   if (configError) {
     console.error(`NodeComponentFactory[${id}]: Configuration error for ${nodeTypeId}:`, configError);
-    return <DefaultNode {...props} />;
+    return <DefaultNode data={createNodeData(nodeData)} selected={props.selected || false} id={id} />;
   }
   
   // Smart routing based on determined strategy
@@ -108,8 +112,14 @@ export const NodeComponentFactory: React.FC<NodeProps> = (props) => {
       console.log(`NodeComponentFactory[${id}]: Rendering custom component for ${nodeTypeId}`);
       
       // Inject configuration into custom component props
+      const nodeComponentProps: NodeComponentProps = {
+        data: createNodeData(nodeData),
+        selected: props.selected || false,
+        id: id
+      };
+      
       const enhancedProps = {
-        ...props,
+        ...nodeComponentProps,
         nodeConfig,
         // Additional context for custom components
         renderingContext: {
@@ -127,7 +137,9 @@ export const NodeComponentFactory: React.FC<NodeProps> = (props) => {
       
       return (
         <BaseNode
-          {...props}
+          data={createNodeData(nodeData)}
+          selected={props.selected || false}
+          id={id}
           nodeConfig={nodeConfig}
         />
       );
@@ -136,7 +148,58 @@ export const NodeComponentFactory: React.FC<NodeProps> = (props) => {
     case RenderingStrategy.FALLBACK_DEFAULT:
     default: {
       console.warn(`NodeComponentFactory[${id}]: Falling back to DefaultNode for ${nodeTypeId}`);
-      return <DefaultNode {...props} />;
+      return <DefaultNode data={createNodeData(nodeData)} selected={props.selected || false} id={id} />;
     }
   }
 };
+
+// Helper function to create properly typed NodeData from flow data
+function createNodeData(flowData: any): NodeData {
+  return {
+    nodeType: flowData?.nodeType || createDefaultNodeType('unknown'),
+    instance: flowData?.instance || createDefaultNodeInstance(),
+    flowId: flowData?.flowId,
+    selected: flowData?.selected,
+    executing: flowData?.executing,
+    errors: flowData?.errors,
+    executionResult: flowData?.executionResult,
+    onNodeDelete: flowData?.onNodeDelete,
+    onNodeUpdate: flowData?.onNodeUpdate,
+    onExecute: flowData?.onExecute,
+    onExecutionComplete: flowData?.onExecutionComplete
+  };
+}
+
+// Create default node data for error states
+function createDefaultNodeData(): NodeData {
+  return {
+    nodeType: createDefaultNodeType('unknown'),
+    instance: createDefaultNodeInstance()
+  };
+}
+
+// Create a default node type for error states
+function createDefaultNodeType(id: string): NodeType {
+  return {
+    id: id,
+    name: 'Unknown Node',
+    description: 'Node type information unavailable',
+    category: NodeCategory.PROCESSOR,
+    version: '0.0.0',
+    ports: { inputs: [], outputs: [] },
+    settingsSchema: { type: 'object', properties: {} }
+  };
+}
+
+// Create a default node instance for error states
+function createDefaultNodeInstance(): NodeInstance {
+  return {
+    id: 'unknown',
+    type: 'unknown',
+    position: { x: 0, y: 0 },
+    data: {
+      settings: {},
+      inputs: {}
+    }
+  };
+}

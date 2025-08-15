@@ -58,7 +58,7 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
   const executionData = useExecutionData(nodeData);
   
   // Get current settings from instance
-  const currentSettings = instance?.settings || {};
+  const currentSettings = instance?.data?.settings || {};
   const { model = '', system_prompt = '', temperature = 0.7, max_tokens = 1000 } = currentSettings;
 
   // Initialize local settings when dialog opens
@@ -115,9 +115,12 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
   };
 
   const handleSettingsSave = () => {
-    if (nodeData.onNodeUpdate) {
+    if (nodeData.onNodeUpdate && id) {
       nodeData.onNodeUpdate(id, {
-        settings: localSettings
+        data: {
+          ...instance?.data,
+          settings: localSettings
+        }
       });
     }
     setSettingsOpen(false);

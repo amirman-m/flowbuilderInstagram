@@ -1,6 +1,7 @@
 // Hook for accessing node configuration data
 import { useMemo } from 'react';
-import { NodeConfiguration, getNodeConfiguration, getCategoryColor, getNodeIcon } from '../../../config/nodeConfiguration';
+import { NodeConfiguration, getNodeConfiguration, getNodeIcon } from '../../../config/nodeConfiguration';
+import { getCategoryColor } from '../../../styles/nodeTheme';
 import { NodeCategory } from '../../../types/nodes';
 import { NodeDataWithHandlers } from '../registry';
 

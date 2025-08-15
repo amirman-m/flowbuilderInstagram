@@ -14,6 +14,7 @@ import {
   CheckCircle as CheckCircleIcon 
 } from '@mui/icons-material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
+import { NodeExecutionStatus } from '../../../types/nodes';
 import { BaseNode } from '../core/BaseNode';
 import { useNodeConfiguration, useExecutionData } from '../hooks';
 import { nodeService } from '../../../services/nodeService';
@@ -41,7 +42,7 @@ export const VoiceInputNode: React.FC<NodeComponentProps> = (props) => {
   const executionData = useExecutionData(nodeData);
   
   // Get current settings from instance
-  const currentSettings = instance?.settings || {};
+  const currentSettings = instance?.data?.settings || {};
   const { quality = 'high', format = 'webm' } = currentSettings;
   
   const handleExecute = () => {
@@ -240,8 +241,9 @@ export const VoiceInputNode: React.FC<NodeComponentProps> = (props) => {
       if (onNodeUpdate && result) {
         const lastExecution = {
           timestamp: new Date().toISOString(),
-          status: result.status || 'success',
-          outputs: result.outputs || {}
+          status: result.status || NodeExecutionStatus.SUCCESS,
+          outputs: result.outputs || {},
+          startedAt: new Date().toISOString()
         };
         
         onNodeUpdate(id, {
