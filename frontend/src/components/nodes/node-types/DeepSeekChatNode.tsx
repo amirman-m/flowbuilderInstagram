@@ -1,21 +1,29 @@
 // src/components/nodes/node-types/DeepSeekChatNode.tsx
 import React, { useState, useEffect } from 'react';
-import { Handle, Position, useReactFlow } from '@xyflow/react';
+import { useParams } from 'react-router-dom';
 import {
-  Box, Paper, Typography, IconButton, Tooltip, Zoom, CircularProgress, Alert
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  TextField,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Typography,
+  Box
 } from '@mui/material';
-import { 
-  Delete as DeleteIcon,
-  PlayArrow as ExecuteIcon,
-  Warning as WarningIcon,
-  CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon
+import {
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon
 } from '@mui/icons-material';
+import { IconButton } from '@mui/material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
-import { baseNodeStyles, getCategoryColor } from '../styles';
-import { NodeCategory } from '../../../types/nodes';
-import { useExecutionData } from '../hooks/useExecutionData';
-import { API_BASE_URL } from "../../../services/api" // Import API_BASE_URL
+import { BaseNode } from '../BaseNode';
+import { nodeService } from '../../../services/nodeService';
+import { useNodeConfiguration, useExecutionData } from '../hooks';
 
 // DeepSeek Logo SVG Component
 const DeepSeekLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
@@ -32,364 +40,239 @@ const DeepSeekLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
   </svg>
 );
 
-export const DeepSeekChatNode: React.FC<NodeComponentProps> = ({ data, selected, id }) => {
+export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
+  const { data, id } = props;
   const [settingsValidationState, setSettingsValidationState] = useState<'error' | 'success' | 'none'>('none');
   const [isExecuting, setIsExecuting] = useState(false);
-  const [executionResult, setExecutionResult] = useState<string | null>(null);
-  const [executionError, setExecutionError] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [localSettings, setLocalSettings] = useState<any>({});
+  const [expandedPrompt, setExpandedPrompt] = useState(false);
   
-  // Access React Flow instance to get nodes and edges
-  const { getNodes, getEdges } = useReactFlow();
+  const { flowId } = useParams<{ flowId: string }>();
   
   const nodeData = data as NodeDataWithHandlers;
   const { nodeType, instance } = nodeData;
-  const categoryColor = getCategoryColor(NodeCategory.PROCESSOR);
   
-  // Use execution data hook to get fresh execution results
+  // Use our new modular hooks
+  const nodeConfig = useNodeConfiguration(nodeType?.id || 'deepseek_chat');
   const executionData = useExecutionData(nodeData);
   
   // Get current settings from instance
-  const currentSettings = instance?.data?.settings || {};
-  
-  // Type guard for instance.data
-  const instanceData = instance?.data || {};
-  
-  // Debug logging to understand data flow
-  console.log('🔍 DeepSeek Node - Current Settings:', JSON.stringify(currentSettings, null, 2));
-  console.log('🔍 DeepSeek Node - Instance Data:', JSON.stringify(instance?.data, null, 2));
-  console.log('🔍 DeepSeek Node - Full Instance:', {
-    id: instance?.id,
-    label: instance?.label,
-    hasSettings: !!instance?.settings,
-    settingsKeys: instance?.settings ? Object.keys(instance.settings) : []
-  });
+  const currentSettings = instance?.settings || {};
+  const { model = '', system_prompt = '', temperature = 0.7, max_tokens = 1000 } = currentSettings;
 
-  // Validate settings on mount and when settings change
+  // Initialize local settings when dialog opens
   useEffect(() => {
-    const validateSettings = () => {
-      const hasModel = currentSettings.model && currentSettings.model.trim() !== '';
-      const hasSystemPrompt = currentSettings.system_prompt && currentSettings.system_prompt.trim() !== '';
-      
-      console.log('✅ DeepSeek Node - Validation Check:', {
-        hasModel,
-        hasSystemPrompt,
-        result: hasModel && hasSystemPrompt ? 'success' : 'error'
-      });
-      
-      if (hasModel && hasSystemPrompt) {
-        setSettingsValidationState('success');
-      } else {
-        setSettingsValidationState('error');
-      }
-    };
-    
-    validateSettings();
-  }, [currentSettings]);
-  
-  // Check if node is ready for execution
-  const isReadyForExecution = settingsValidationState === 'success';
-  
-  // Handle node deletion
-  const handleDelete = (event: React.MouseEvent) => {
-    event.stopPropagation();
-    if (nodeData.onNodeDelete) {
-      nodeData.onNodeDelete(id);
+    if (settingsOpen) {
+      setLocalSettings(currentSettings);
     }
-  };
-  
-  // Function to collect input data from connected nodes
-  const collectInputsFromConnectedNodes = async (): Promise<Record<string, any>> => {
-    const nodes = getNodes();
-    const edges = getEdges();
-    const inputs: Record<string, any> = {};
-    
-    // Find all edges that connect to this node's input ports
-    const incomingEdges = edges.filter(edge => edge.target === id);
-    
-    for (const edge of incomingEdges) {
-      // Find the source node
-      const sourceNode = nodes.find(node => node.id === edge.source);
-      if (!sourceNode) continue;
-      
-      // Find the source node's data
-      const sourceNodeData = sourceNode.data || {};
-      const sourceNodeInstance = sourceNodeData?.instance as { data?: { lastExecution?: { outputs?: Record<string, any> } } } | undefined;
-      
-      if (!sourceNodeInstance?.data?.lastExecution?.outputs) {
-        console.warn(`Source node ${sourceNode.id} has no execution outputs`);
-        continue;
-      }
-      
-      // Get the output from the source node's last execution
-      const sourceOutput = sourceNodeInstance.data.lastExecution.outputs[edge.sourceHandle || ''];
-      if (sourceOutput !== undefined) {
-        // Map the output to this node's input port
-        inputs[edge.targetHandle || ''] = sourceOutput;
-      }
-    }
-    
-    console.log('📥 DeepSeek Node - Collected Inputs:', inputs);
-    return inputs;
-  };
-  
-  // Handle node execution
-  const handleExecute = async (event: React.MouseEvent) => {
-    event.stopPropagation();
-    
-    // Clear previous results
-    setExecutionResult(null);
-    setExecutionError(null);
-    
-    // Validate settings
-    if (settingsValidationState !== 'success') {
-      setExecutionError('Node is not properly configured. Please check settings.');
+  }, [settingsOpen, currentSettings]);
+
+  // Validation effect
+  useEffect(() => {
+    const hasRequiredSettings = model && system_prompt && temperature && max_tokens;
+    setSettingsValidationState(hasRequiredSettings ? 'success' : 'error');
+  }, [model, system_prompt, temperature, max_tokens]);
+
+
+
+  const handleExecute = async () => {
+    if (!model || !system_prompt) {
+      alert('Please configure the model and system prompt first.');
       return;
     }
-    
+
     setIsExecuting(true);
-    
+
     try {
-      // Collect inputs from connected nodes
-      const inputs = await collectInputsFromConnectedNodes();
-      
-      // Prepare execution context
-      const executionContext = {
-        nodeId: id,
-        nodeTypeId: nodeType.id,
-        inputs,
-        settings: currentSettings
-      };
-      
-      console.log('🚀 DeepSeek Node - Executing with context:', executionContext);
-      
-      // Use API_BASE_URL instead of hardcoded URL
-      const response = await fetch(`${API_BASE_URL}/nodes/execute/${executionContext.nodeTypeId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include', // Include cookies for session authentication
-        body: JSON.stringify(executionContext),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to execute node');
+      const result = await nodeService.execution.executeNode(
+        parseInt(flowId || '1'),
+        id,
+        currentSettings
+      );
+
+      if (result && result.outputs) {
+        // Execution completed successfully
+        // The useExecutionData hook will automatically pick up the fresh results
+      } else {
+        alert('Execution failed');
       }
-      
-      const result = await response.json();
-      console.log('✅ DeepSeek Node - Execution Result:', result);
-      
-      // Update the node instance with execution results
-      if (nodeData.onNodeUpdate) {
-        nodeData.onNodeUpdate(id, {
-          data: {
-            ...instanceData,
-            inputs,
-            lastExecution: {
-              status: 'success',
-              timestamp: new Date().toISOString(),
-              inputs,
-              outputs: result.outputs,
-              logs: result.logs
-            }
-          }
-        });
-      }
-      
-      // Show success message
-      setExecutionResult(result.logs?.[0] || 'Node executed successfully');
-      
     } catch (error) {
-      console.error('❌ DeepSeek Node - Execution Error:', error);
-      
-      // Update node with error status
-      if (nodeData.onNodeUpdate) {
-        nodeData.onNodeUpdate(id, {
-          data: {
-            ...instanceData,
-            lastExecution: {
-              status: 'error',
-              timestamp: new Date().toISOString(),
-              error: error instanceof Error ? error.message : String(error)
-            }
-          }
-        });
-      }
-      
-      // Show error message
-      setExecutionError(error instanceof Error ? error.message : String(error) || 'An unknown error occurred');
-      
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`Execution error: ${errorMsg}`);
     } finally {
       setIsExecuting(false);
     }
   };
-  
-  // Get the current border color based on validation state
-  const getBorderColor = () => {
-    if (settingsValidationState === 'error') return '#f44336';
-    if (settingsValidationState === 'success') return '#4caf50';
-    return categoryColor;
-  };
-  
-  const getBackgroundColor = () => {
-    if (settingsValidationState === 'error') return '#fff2f2';
-    if (settingsValidationState === 'success') return '#f2fff2';
-    return 'white';
-  };
-  
-  return (
-    <>
-      <Paper
-        sx={{
-          ...baseNodeStyles,
-          borderColor: selected ? getBorderColor() : `${getBorderColor()}80`,
-          borderWidth: selected ? 3 : 2,
-          backgroundColor: selected ? `${categoryColor}10` : getBackgroundColor(),
-          animation: settingsValidationState === 'error' ? 'pulse 2s infinite' : 'none',
-          '@keyframes pulse': {
-            '0%': {
-              boxShadow: '0 0 0 0 rgba(244, 67, 54, 0.4)'
-            },
-            '70%': {
-              boxShadow: '0 0 0 10px rgba(244, 67, 54, 0)'
-            },
-            '100%': {
-              boxShadow: '0 0 0 0 rgba(244, 67, 54, 0)'
-            }
-          }
-        }}
-      >
-        {/* Input Handles */}
-        {nodeType.ports.inputs.map((port: any, index: number) => (
-          <Handle
-            key={port.id}
-            type="target"
-            position={Position.Left}
-            id={port.id}
-            style={{
-              top: `${20 + (index * 20)}px`,
-              backgroundColor: port.required ? categoryColor : '#999'
-            }}
-          />
-        ))}
-        
-        {/* Validation Status Indicator - Only show warning when settings missing */}
-        {settingsValidationState === 'error' && (
-          <Box sx={{ position: 'absolute', top: -8, right: -8, zIndex: 10 }}>
-            <Zoom in={true}>
-              <Tooltip title="Configure in Property Panel">
-                <WarningIcon sx={{ color: '#f44336', fontSize: 20 }} />
-              </Tooltip>
-            </Zoom>
-          </Box>
-        )}
 
-        {/* Node Header */}
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-          <Box sx={{ color: categoryColor, mr: 1 }}>
-            <DeepSeekLogo size={20} />
-          </Box>
-          <Typography variant="subtitle2" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
-            {instance.label || "DeepSeek Chat"}
-          </Typography>
-          {/* Execution button - only appears when settings are configured */}
-          {isReadyForExecution && (
-            <Tooltip title={isExecuting ? "Executing..." : "Execute Node"}>
-              <IconButton 
-                size="small" 
-                onClick={handleExecute} 
-                sx={{ ml: 0.5 }}
-                disabled={isExecuting}
-              >
-                {isExecuting ? (
-                  <CircularProgress size={16} />
-                ) : (
-                  <ExecuteIcon fontSize="small" color="primary" />
-                )}
-              </IconButton>
-            </Tooltip>
-          )}
-          <IconButton size="small" onClick={handleDelete} sx={{ ml: 0.5 }}>
-            <DeleteIcon fontSize="small" color="error" />
-          </IconButton>
-        </Box>
+  const handleSettingsClick = () => {
+    setSettingsOpen(true);
+  };
 
-        {/* Node Category */}
-        <Typography
-          variant="caption"
-          sx={{
-            backgroundColor: `${categoryColor}20`,
-            color: categoryColor,
-            fontSize: '0.7rem',
-            px: 1,
-            py: 0.25,
-            borderRadius: 1,
-            display: 'inline-block'
+  const handleSettingsClose = () => {
+    setSettingsOpen(false);
+    setExpandedPrompt(false);
+  };
+
+  const handleSettingsSave = () => {
+    if (nodeData.onNodeUpdate) {
+      nodeData.onNodeUpdate(id, {
+        settings: localSettings
+      });
+    }
+    setSettingsOpen(false);
+  };
+
+  const handleLocalSettingChange = (key: string, value: any) => {
+    setLocalSettings((prev: any) => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  // Custom content for DeepSeek node
+  const renderCustomContent = () => (
+    <Box sx={{ mt: 1 }}>
+      <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>
+        Model: {model || 'Not configured'}
+      </Typography>
+      <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>
+        Temperature: {temperature}
+      </Typography>
+      {system_prompt && (
+        <Typography 
+          variant="caption" 
+          sx={{ 
+            color: '#666', 
+            display: 'block',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: '150px'
           }}
         >
-          {NodeCategory.PROCESSOR}
+          Prompt: {system_prompt}
         </Typography>
-        
-        {/* Output Handles */}
-        {nodeType.ports.outputs.map((port: any, index: number) => (
-          <Handle
-            key={port.id}
-            type="source"
-            position={Position.Right}
-            id={port.id}
-            style={{
-              top: `${20 + (index * 20)}px`,
-              backgroundColor: categoryColor
-            }}
-          />
-        ))}
-        
-        {/* Execution Results Display - Modular approach */}
-        {executionData.hasFreshResults && executionData.displayData.type === 'ai_response' && (
-          <Box sx={{ mt: 1, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
-            <Typography variant="caption" sx={{ fontWeight: 'bold', color: categoryColor }}>
-              AI Response:
+      )}
+
+      {/* Execution Results Display */}
+      {executionData.hasFreshResults && (
+        <Box sx={{ mt: 1, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+          <Typography variant="caption" sx={{ color: '#666', fontWeight: 600 }}>
+            Latest Execution:
+          </Typography>
+          {executionData.displayData && (
+            <Typography 
+              variant="caption" 
+              sx={{ 
+                display: 'block',
+                mt: 0.5,
+                color: '#333',
+                fontSize: '0.75rem',
+                lineHeight: 1.3,
+                maxHeight: '60px',
+                overflow: 'hidden',
+                wordBreak: 'break-word'
+              }}
+            >
+              {typeof executionData.displayData === 'object' && executionData.displayData.aiResponse
+                ? executionData.displayData.aiResponse.substring(0, 100) + (executionData.displayData.aiResponse.length > 100 ? '...' : '')
+                : 'Execution completed'
+              }
             </Typography>
-            <Typography variant="body2" sx={{ mt: 0.5, wordBreak: 'break-word' }}>
-              {executionData.displayData.aiResponse}
+          )}
+          {executionData.lastExecuted && (
+            <Typography variant="caption" sx={{ color: '#999', fontSize: '0.7rem' }}>
+              {new Date(executionData.lastExecuted).toLocaleTimeString()}
             </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary', mt: 0.5, display: 'block' }}>
-              Input: "{executionData.displayData.inputText}" • {new Date(executionData.displayData.timestamp).toLocaleTimeString()}
-            </Typography>
-            {executionData.displayData.metadata && (
-              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                Model: {executionData.displayData.metadata.model} • Tokens: {executionData.displayData.metadata.total_tokens}
-              </Typography>
-            )}
+          )}
+        </Box>
+      )}
+    </Box>
+  );
+
+  return (
+    <>
+      <BaseNode
+        {...props}
+        nodeConfig={nodeConfig}
+        validationState={settingsValidationState}
+        isExecuting={isExecuting}
+        onExecute={handleExecute}
+        onSettingsClick={handleSettingsClick}
+        customContent={renderCustomContent()}
+        icon={<DeepSeekLogo />}
+      />
+
+      {/* Settings Dialog */}
+      <Dialog open={settingsOpen} onClose={handleSettingsClose} maxWidth="md" fullWidth>
+        <DialogTitle>DeepSeek Chat Settings</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+            <FormControl fullWidth>
+              <InputLabel>Model</InputLabel>
+              <Select
+                value={localSettings.model || ''}
+                label="Model"
+                onChange={(e) => handleLocalSettingChange('model', e.target.value)}
+              >
+                <MenuItem value="deepseek-chat">deepseek-chat</MenuItem>
+                <MenuItem value="deepseek-coder">deepseek-coder</MenuItem>
+              </Select>
+            </FormControl>
+
+            <TextField
+              label="System Prompt"
+              multiline
+              rows={expandedPrompt ? 8 : 4}
+              value={localSettings.system_prompt || ''}
+              onChange={(e) => handleLocalSettingChange('system_prompt', e.target.value)}
+              placeholder="Enter system prompt for the AI assistant..."
+              InputProps={
+                expandedPrompt ? {
+                  endAdornment: (
+                    <IconButton onClick={() => setExpandedPrompt(false)}>
+                      <ExpandLessIcon />
+                    </IconButton>
+                  )
+                } : {
+                  endAdornment: (
+                    <IconButton onClick={() => setExpandedPrompt(true)}>
+                      <ExpandMoreIcon />
+                    </IconButton>
+                  )
+                }
+              }
+            />
+
+            <TextField
+              label="Temperature"
+              type="number"
+              value={localSettings.temperature || 0.7}
+              onChange={(e) => handleLocalSettingChange('temperature', parseFloat(e.target.value))}
+              inputProps={{ min: 0, max: 2, step: 0.1 }}
+            />
+
+            <TextField
+              label="Max Tokens"
+              type="number"
+              value={localSettings.max_tokens || 1000}
+              onChange={(e) => handleLocalSettingChange('max_tokens', parseInt(e.target.value))}
+              inputProps={{ min: 1, max: 4000 }}
+            />
           </Box>
-        )}
-        
-        {/* Success/Error indicators */}
-        {executionData.hasFreshResults && executionData.isSuccess && (
-          <Alert 
-            severity="success" 
-            icon={<CheckCircleIcon />}
-            sx={{ mt: 1, fontSize: '0.75rem' }}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleSettingsClose}>Cancel</Button>
+          <Button 
+            onClick={handleSettingsSave} 
+            variant="contained"
+            disabled={!localSettings.model || !localSettings.system_prompt}
           >
-            <Typography variant="caption">
-              DeepSeek response generated successfully
-            </Typography>
-          </Alert>
-        )}
-        
-        {executionData.hasFreshResults && executionData.isError && (
-          <Alert 
-            severity="error" 
-            icon={<ErrorIcon />}
-            sx={{ mt: 1, fontSize: '0.75rem' }}
-          >
-            <Typography variant="caption">
-              Execution failed
-            </Typography>
-          </Alert>
-        )}
-      </Paper>
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

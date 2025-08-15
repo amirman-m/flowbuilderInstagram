@@ -1,21 +1,28 @@
 // src/components/nodes/node-types/OpenAIChatNode.tsx
 import React, { useState, useEffect } from 'react';
-import { Handle, Position, useReactFlow } from '@xyflow/react';
+import { useReactFlow } from '@xyflow/react';
 import {
-  Box, Paper, Typography, IconButton, Tooltip, Zoom, CircularProgress, Alert
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  TextField,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Typography,
+  Box
 } from '@mui/material';
-import { 
-  Delete as DeleteIcon,
-  PlayArrow as ExecuteIcon,
-  Warning as WarningIcon,
-  CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon
+import {
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon
 } from '@mui/icons-material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
-import { baseNodeStyles, getCategoryColor } from '../styles';
-import { NodeCategory } from '../../../types/nodes';
-import { useExecutionData } from '../hooks/useExecutionData';
-import { API_BASE_URL } from "../../../services/api" // Import API_BASE_URL
+import { BaseNode } from '../BaseNode';
+import { nodeService } from '../../../services/nodeService';
+import { useNodeConfiguration, useExecutionData } from '../hooks';
 
 // OpenAI Logo SVG Component
 const OpenAILogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
@@ -29,34 +36,29 @@ const OpenAILogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
   </svg>
 );
 
-export const OpenAIChatNode: React.FC<NodeComponentProps> = ({ data, selected, id }) => {
+export const OpenAIChatNode: React.FC<NodeComponentProps> = (props) => {
+  const { data, id } = props;
   const [settingsValidationState, setSettingsValidationState] = useState<'error' | 'success' | 'none'>('none');
   const [isExecuting, setIsExecuting] = useState(false);
-  const [executionResult, setExecutionResult] = useState<string | null>(null);
-  const [executionError, setExecutionError] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [localSettings, setLocalSettings] = useState<any>({});
+  const [expandedPrompt, setExpandedPrompt] = useState(false);
   
   // Access React Flow instance to get nodes and edges
   const { getNodes, getEdges } = useReactFlow();
   
   const nodeData = data as NodeDataWithHandlers;
   const { nodeType, instance } = nodeData;
-  const categoryColor = getCategoryColor(NodeCategory.PROCESSOR);
   
-  // Use execution data hook to get fresh execution results
+  // Use our new modular hooks
+  const nodeConfig = useNodeConfiguration(nodeType?.id || 'openai_chat');
   const executionData = useExecutionData(nodeData);
   
-  // Get current settings from instance - FIX: Read from instance.data.settings, not instance.settings
-  const currentSettings = instance?.data?.settings || {};
+  // Get current settings from instance
+  const currentSettings = instance?.settings || {};
+  const { model = '', system_prompt = '', temperature = 0.7, max_tokens = 1000, stop = '\n\n' } = currentSettings;
   
-  // Debug logging to understand data flow
-  console.log('🔍 OpenAI Node - Current Settings:', JSON.stringify(currentSettings, null, 2));
-  console.log('🔍 OpenAI Node - Instance Data:', JSON.stringify(instance?.data, null, 2));
-  console.log('🔍 OpenAI Node - Full Instance:', {
-    id: instance?.id,
-    label: instance?.label,
-    hasSettings: !!instance?.settings,
-    settingsKeys: instance?.settings ? Object.keys(instance.settings) : []
-  });
+
 
   // Validate settings on mount and when settings change
   useEffect(() => {
@@ -187,255 +189,251 @@ export const OpenAIChatNode: React.FC<NodeComponentProps> = ({ data, selected, i
     }
   };
 
-  const handleExecute = async (event: React.MouseEvent) => {
-    event.stopPropagation();
-    
-    if (isExecuting) return; // Prevent multiple executions
-    
+  const handleExecute = async () => {
+    if (!model || !system_prompt) {
+      alert('Please configure the model and system prompt first.');
+      return;
+    }
+
     setIsExecuting(true);
-    setExecutionError(null);
-    setExecutionResult(null);
-    
+
     try {
-      console.log('🚀 Executing OpenAI Chat Node with settings:', currentSettings);
+      const result = await nodeService.execution.executeNode(
+        id,
+        nodeType?.id || 'openai_chat',
+        currentSettings,
+        {
+          flowId: nodeData.flowId || '1',
+          nodes: getNodes(),
+          edges: getEdges()
+        }
+      );
+
+      console.log('OpenAI execution result:', result);
       
-      // Collect input data from connected nodes
-      const collectedInputs = await collectInputsFromConnectedNodes();
-      console.log('🔌 Collected inputs from connected nodes:', collectedInputs);
-      
-      // Prepare execution context
-      const executionContext = {
-        settings: currentSettings,
-        inputs: collectedInputs,
-        nodeId: id
-      };
-      
-      // Call backend API
-      const response = await fetch(`${API_BASE_URL}/nodes/execute/simple-openai-chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include', // Include cookies for session authentication
-        body: JSON.stringify(executionContext)
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const result = await response.json();
-      console.log('✅ Node execution successful:', result);
-      
-      // Handle successful execution - backend returns result.outputs, not result.output
-      let displayResult = 'Execution completed successfully';
-      if (result.outputs) {
-        // Extract AI response from outputs
-        if (result.outputs.ai_response) {
-          // If it's an object with response text, extract it
-          if (typeof result.outputs.ai_response === 'object' && result.outputs.ai_response.response) {
-            displayResult = result.outputs.ai_response.response;
-          } else if (typeof result.outputs.ai_response === 'string') {
-            displayResult = result.outputs.ai_response;
-          } else {
-            displayResult = JSON.stringify(result.outputs.ai_response);
-          }
-        } else {
-          // Fallback: show first available output
-          const firstOutput = Object.values(result.outputs)[0];
-          displayResult = typeof firstOutput === 'string' ? firstOutput : JSON.stringify(firstOutput);
+      if (result && result.outputs) {
+        // Handle successful execution
+        const output = result.outputs.ai_response || result.outputs.output || 'Execution completed successfully';
+        console.log('OpenAI output:', output);
+        
+        // Update the node's execution result
+        if (nodeData.onExecutionComplete) {
+          nodeData.onExecutionComplete(id, {
+            success: true,
+            output: output,
+            timestamp: new Date().toISOString(),
+            executionId: result.executionId
+          });
+        }
+      } else {
+        const errorMsg = result?.error || 'Execution failed';
+        console.error('OpenAI execution failed:', errorMsg);
+        
+        if (nodeData.onExecutionComplete) {
+          nodeData.onExecutionComplete(id, {
+            success: false,
+            error: errorMsg,
+            timestamp: new Date().toISOString()
+          });
         }
       }
-      setExecutionResult(displayResult);
-
-      // Persist execution result to the node instance so the inspector can display it
-      if (nodeData.onNodeUpdate) {
-        nodeData.onNodeUpdate(id, {
-          data: {
-            ...instance.data,
-            inputs: collectedInputs,
-            lastExecution: result as any // Store full execution result
-          }
+    } catch (error) {
+      console.error('OpenAI execution error:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
+      
+      if (nodeData.onExecutionComplete) {
+        nodeData.onExecutionComplete(id, {
+          success: false,
+          error: errorMsg,
+          timestamp: new Date().toISOString()
         });
       }
-      
-    } catch (error: any) {
-      console.error('❌ Node execution failed:', error);
-      setExecutionError(error.message || 'Execution failed');
     } finally {
       setIsExecuting(false);
     }
   };
 
-
-
-  // Get the current border color based on validation state
-  const getBorderColor = () => {
-    if (settingsValidationState === 'error') return '#f44336'; // Red for error
-    // When settings are configured, return to original color (no special success color)
-    return selected ? categoryColor : `${categoryColor}80`; // Default
+  const handleSettingsClick = () => {
+    setSettingsOpen(true);
   };
 
-  const getBackgroundColor = () => {
-    if (settingsValidationState === 'error') return '#ffebee'; // Light red
-    // When settings are configured, return to original background (no special success color)
-    return selected ? `${categoryColor}10` : 'white'; // Default
+  const handleSettingsClose = () => {
+    setSettingsOpen(false);
+    setExpandedPrompt(false);
   };
 
-  // Check if node is ready for execution (has required settings)
-  const isReadyForExecution = settingsValidationState === 'success';
+  const handleSettingsSave = () => {
+    if (nodeData.onNodeUpdate) {
+      nodeData.onNodeUpdate(id, {
+        settings: localSettings
+      });
+    }
+    setSettingsOpen(false);
+  };
+
+  const handleLocalSettingChange = (key: string, value: any) => {
+    setLocalSettings((prev: any) => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  // Initialize local settings when dialog opens
+  useEffect(() => {
+    if (settingsOpen) {
+      setLocalSettings(currentSettings);
+    }
+  }, [settingsOpen, currentSettings]);
+
+  // Validation effect
+  useEffect(() => {
+    const hasRequiredSettings = model && system_prompt;
+    setSettingsValidationState(hasRequiredSettings ? 'success' : 'error');
+  }, [model, system_prompt]);
+
+
+
+  // Custom content for OpenAI node
+  const renderCustomContent = () => (
+    <Box sx={{ mt: 1 }}>
+      <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>
+        Model: {model || 'Not configured'}
+      </Typography>
+      <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>
+        Temperature: {temperature}
+      </Typography>
+      {system_prompt && (
+        <Typography 
+          variant="caption" 
+          sx={{ 
+            color: '#666', 
+            display: 'block',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: '150px'
+          }}
+        >
+          Prompt: {system_prompt}
+        </Typography>
+      )}
+
+      {/* Execution Results Display */}
+      {executionData.hasFreshResults && (
+        <Box sx={{ mt: 1, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+          <Typography variant="caption" sx={{ color: '#666', fontWeight: 600 }}>
+            Latest Execution:
+          </Typography>
+          {executionData.displayData && (
+            <Typography 
+              variant="caption" 
+              sx={{ 
+                display: 'block',
+                mt: 0.5,
+                color: '#333',
+                fontSize: '0.75rem',
+                lineHeight: 1.3,
+                maxHeight: '60px',
+                overflow: 'hidden',
+                wordBreak: 'break-word'
+              }}
+            >
+              {typeof executionData.displayData === 'object' && executionData.displayData.aiResponse
+                ? executionData.displayData.aiResponse.substring(0, 100) + (executionData.displayData.aiResponse.length > 100 ? '...' : '')
+                : 'Execution completed'
+              }
+            </Typography>
+          )}
+          {executionData.lastExecuted && (
+            <Typography variant="caption" sx={{ color: '#999', fontSize: '0.7rem' }}>
+              {new Date(executionData.lastExecuted).toLocaleTimeString()}
+            </Typography>
+          )}
+        </Box>
+      )}
+    </Box>
+  );
 
   return (
     <>
-      <Paper 
-        sx={{
-          ...baseNodeStyles,
-          borderColor: getBorderColor(),
-          borderWidth: selected ? 3 : 2,
-          backgroundColor: getBackgroundColor(),
-          position: 'relative',
-          transition: 'all 0.3s ease-in-out',
-          animation: settingsValidationState === 'error' ? 'pulse 2s infinite' : 'none',
-          '@keyframes pulse': {
-            '0%': { boxShadow: '0 0 0 0 rgba(244, 67, 54, 0.7)' },
-            '70%': { boxShadow: '0 0 0 10px rgba(244, 67, 54, 0)' },
-            '100%': { boxShadow: '0 0 0 0 rgba(244, 67, 54, 0)' }
-          }
-        }}
+      <BaseNode
+        {...props}
+        nodeConfig={nodeConfig}
+        validationState={settingsValidationState}
+        isExecuting={isExecuting}
+        onExecute={handleExecute}
+        onSettingsClick={handleSettingsClick}
+        customContent={renderCustomContent()}
+        icon={<OpenAILogo />}
+      />
 
-      >
-        {/* Input Handles */}
-        {nodeType.ports.inputs.map((port: any, index: number) => (
-          <Handle
-            key={port.id}
-            type="target"
-            position={Position.Left}
-            id={port.id}
-            style={{
-              top: `${20 + (index * 20)}px`,
-              backgroundColor: port.required ? categoryColor : '#999'
-            }}
-          />
-        ))}
-        
-        {/* Validation Status Indicator - Only show warning when settings missing */}
-        {settingsValidationState === 'error' && (
-          <Box sx={{ position: 'absolute', top: -8, right: -8, zIndex: 10 }}>
-            <Zoom in={true}>
-              <Tooltip title="Configure in Property Panel">
-                <WarningIcon sx={{ color: '#f44336', fontSize: 20 }} />
-              </Tooltip>
-            </Zoom>
-          </Box>
-        )}
-
-        {/* Node Header */}
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-          <Box sx={{ color: categoryColor, mr: 1 }}>
-            <OpenAILogo size={20} />
-          </Box>
-          <Typography variant="subtitle2" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
-            {instance.label || "OpenAI Chat"}
-          </Typography>
-          {/* Execution button - only appears when settings are configured */}
-          {isReadyForExecution && (
-            <Tooltip title={isExecuting ? "Executing..." : "Execute Node"}>
-              <IconButton 
-                size="small" 
-                onClick={handleExecute} 
-                sx={{ ml: 0.5 }}
-                disabled={isExecuting}
+      {/* Settings Dialog */}
+      <Dialog open={settingsOpen} onClose={handleSettingsClose} maxWidth="md" fullWidth>
+        <DialogTitle>OpenAI Chat Settings</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+            <FormControl fullWidth>
+              <InputLabel>Model</InputLabel>
+              <Select
+                value={localSettings.model || ''}
+                label="Model"
+                onChange={(e) => handleLocalSettingChange('model', e.target.value)}
               >
-                {isExecuting ? (
-                  <CircularProgress size={16} />
-                ) : (
-                  <ExecuteIcon fontSize="small" color="primary" />
-                )}
-              </IconButton>
-            </Tooltip>
-          )}
-          <IconButton size="small" onClick={handleDelete} sx={{ ml: 0.5 }}>
-            <DeleteIcon fontSize="small" color="error" />
-          </IconButton>
-        </Box>
+                <MenuItem value="gpt-3.5-turbo">gpt-3.5-turbo</MenuItem>
+                <MenuItem value="gpt-4">gpt-4</MenuItem>
+                <MenuItem value="gpt-4-turbo">gpt-4-turbo</MenuItem>
+                <MenuItem value="gpt-4o">gpt-4o</MenuItem>
+              </Select>
+            </FormControl>
 
-        {/* Node Category */}
-        <Typography
-          variant="caption"
-          sx={{
-            backgroundColor: `${categoryColor}20`,
-            color: categoryColor,
-            fontSize: '0.7rem',
-            px: 1,
-            py: 0.25,
-            borderRadius: 1,
-            display: 'inline-block'
-          }}
-        >
-          {NodeCategory.PROCESSOR}
-        </Typography>
-        
-        {/* Output Handles */}
-        {nodeType.ports.outputs.map((port: any, index: number) => (
-          <Handle
-            key={port.id}
-            type="source"
-            position={Position.Right}
-            id={port.id}
-            style={{
-              top: `${20 + (index * 20)}px`,
-              backgroundColor: categoryColor
-            }}
-          />
-        ))}
-        
-        {/* Execution Results Display - Modular approach */}
-        {executionData.hasFreshResults && executionData.displayData.type === 'ai_response' && (
-          <Box sx={{ mt: 1, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
-            <Typography variant="caption" sx={{ fontWeight: 'bold', color: categoryColor }}>
-              OpenAI Response:
-            </Typography>
-            <Typography variant="body2" sx={{ mt: 0.5, wordBreak: 'break-word' }}>
-              {executionData.displayData.aiResponse}
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary', mt: 0.5, display: 'block' }}>
-              Input: "{executionData.displayData.inputText}" • {new Date(executionData.displayData.timestamp).toLocaleTimeString()}
-            </Typography>
-            {executionData.displayData.metadata && (
-              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                Model: {executionData.displayData.metadata.model} • Tokens: {executionData.displayData.metadata.total_tokens}
-              </Typography>
-            )}
+            <TextField
+              label="System Prompt"
+              multiline
+              rows={expandedPrompt ? 8 : 4}
+              value={localSettings.system_prompt || ''}
+              onChange={(e) => handleLocalSettingChange('system_prompt', e.target.value)}
+              placeholder="Enter system prompt for the AI assistant..."
+              InputProps={{
+                endAdornment: (
+                  <Button
+                    size="small"
+                    onClick={() => setExpandedPrompt(!expandedPrompt)}
+                    sx={{ minWidth: 'auto', p: 0.5 }}
+                  >
+                    {expandedPrompt ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                  </Button>
+                )
+              }}
+            />
+
+            <TextField
+              label="Temperature"
+              type="number"
+              value={localSettings.temperature || 0.7}
+              onChange={(e) => handleLocalSettingChange('temperature', parseFloat(e.target.value))}
+              inputProps={{ min: 0, max: 2, step: 0.1 }}
+            />
+
+            <TextField
+              label="Max Tokens"
+              type="number"
+              value={localSettings.max_tokens || 1000}
+              onChange={(e) => handleLocalSettingChange('max_tokens', parseInt(e.target.value))}
+              inputProps={{ min: 1, max: 4000 }}
+            />
           </Box>
-        )}
-        
-        {/* Success/Error indicators */}
-        {executionData.hasFreshResults && executionData.isSuccess && (
-          <Alert 
-            severity="success" 
-            icon={<CheckCircleIcon />}
-            sx={{ mt: 1, fontSize: '0.75rem' }}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleSettingsClose}>Cancel</Button>
+          <Button 
+            onClick={handleSettingsSave} 
+            variant="contained"
+            disabled={!localSettings.model || !localSettings.system_prompt}
           >
-            <Typography variant="caption">
-              OpenAI response generated successfully
-            </Typography>
-          </Alert>
-        )}
-        
-        {executionData.hasFreshResults && executionData.isError && (
-          <Alert 
-            severity="error" 
-            icon={<ErrorIcon />}
-            sx={{ mt: 1, fontSize: '0.75rem' }}
-          >
-            <Typography variant="caption">
-              Execution failed
-            </Typography>
-          </Alert>
-        )}
-      </Paper>
-      
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

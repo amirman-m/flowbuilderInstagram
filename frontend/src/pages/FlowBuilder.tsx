@@ -43,7 +43,7 @@ import { NodeComponentFactory } from '../components/nodes/NodeComponentFactory';
 import { edgeTypes } from '../components/edges/CustomEdge';
 import { NodeInspector } from '../components/inspector';
 import { FlowExecutionDialog } from '../components/dialogs/FlowExecutionDialog';
-import { NODE_REGISTRY } from '../config/nodeRegistry';
+import { loadNodeConfigurations } from '../config/nodeConfiguration';
 import { useConnectionValidation } from '../hooks/useConnectionValidation';
 import { useSnackbar } from '../components/SnackbarProvider';
 import { ModernNodeLibrary } from '../components/NodeLibrary';
@@ -264,217 +264,22 @@ const FlowBuilderInner: React.FC = () => {
   const loadNodeTypes = async () => {
     try {
       // Load node types from the backend
-      const types = await nodeService.types.getNodeTypes(); 
-      if (types && types.length > 0) {
-        console.log('✅ Using backend node types:', types.map(t => t.name));
-        // Temporary subcategory mapping until backend provides it
-      const SUBCATEGORY_MAP: Record<string, string> = {
-        // Legacy or mock IDs
-        openAIChat: 'Chat Models',
-        deepSeekChat: 'Chat Models',
-        // Actual backend IDs
-        'simple-openai-chat': 'Chat Models',
-        'simple-deepseek-chat': 'Chat Models'
-      };
-
-      const enhancedTypes = types.map(t => {
-        const registryEntry = NODE_REGISTRY[t.id];
-        return registryEntry ? { ...t, subcategory: registryEntry.subcategory } : t;
-      });
-
-      setAvailableNodeTypes(enhancedTypes);
-        return; // Exit early - backend data loaded successfully
+      const backendNodeTypes = await nodeService.types.getNodeTypes(); 
+      
+      if (backendNodeTypes && backendNodeTypes.length > 0) {
+        console.log('✅ Loading backend node types:', backendNodeTypes.map(t => t.name));
+        
+        // Load dynamic node configurations from backend data
+        await loadNodeConfigurations(backendNodeTypes);
+        
+        // Set available node types for legacy compatibility
+        setAvailableNodeTypes(backendNodeTypes);
+        
+        console.log('✅ Dynamic node configurations loaded successfully');
+        return;
       } else {
-        // If no node types are returned from the backend, use default mock types for testing
-        console.warn('⚠️ No node types returned from backend, using mock types for testing');
-        
-        // Create properly typed mock nodes
-        const mockTriggerNode: NodeType = {
-          id: 'instagram-comment',
-          name: 'Instagram Comment',
-          description: 'Triggers when a new Instagram comment is received',
-          category: NodeCategory.TRIGGER,
-          version: '1.0.0',
-          icon: 'instagram',
-          color: '#E1306C',
-          ports: {
-            inputs: [],
-            outputs: [
-              {
-                id: 'comment',
-                name: 'comment',
-                label: 'Comment',
-                description: 'The received comment data',
-                dataType: NodeDataType.OBJECT,
-                required: true
-              }
-            ]
-          },
-          settingsSchema: {
-            type: 'object',
-            properties: {
-              accountId: {
-                type: 'string',
-                title: 'Instagram Account ID'
-              },
-              filterHashtags: {
-                type: 'array',
-                title: 'Filter Hashtags',
-                items: {
-                  type: 'string'
-                }
-              }
-            },
-            required: ['accountId']
-          }
-        };
-        
-        const mockProcessorNode: NodeType = {
-          id: 'ai-response',
-          name: 'AI Response Generator',
-          description: 'Generates AI responses based on input text',
-          category: NodeCategory.PROCESSOR,
-          version: '1.0.0',
-          icon: 'smart_toy',
-          color: '#2196F3',
-          ports: {
-            inputs: [
-              {
-                id: 'input',
-                name: 'input',
-                label: 'Input Text',
-                description: 'The text to process',
-                dataType: NodeDataType.STRING,
-                required: true
-              }
-            ],
-            outputs: [
-              {
-                id: 'response',
-                name: 'response',
-                label: 'AI Response',
-                description: 'Generated AI response',
-                dataType: NodeDataType.STRING,
-                required: true
-              }
-            ]
-          },
-          settingsSchema: {
-            type: 'object',
-            properties: {
-              model: {
-                type: 'string',
-                title: 'AI Model',
-                enum: ['gpt-3.5-turbo', 'gpt-4'],
-                default: 'gpt-3.5-turbo'
-              },
-              temperature: {
-                type: 'number',
-                title: 'Temperature',
-                minimum: 0,
-                maximum: 1,
-                default: 0.7
-              },
-              systemPrompt: {
-                type: 'string',
-                title: 'System Prompt',
-                format: 'textarea'
-              }
-            },
-            required: ['model']
-          }
-        };
-        
-        const mockActionNode: NodeType = {
-          id: 'instagram-reply',
-          name: 'Instagram Reply',
-          description: 'Sends a reply to an Instagram comment',
-          category: NodeCategory.ACTION,
-          version: '1.0.0',
-          icon: 'reply',
-          color: '#FF9800',
-          ports: {
-            inputs: [
-              {
-                id: 'comment',
-                name: 'comment',
-                label: 'Comment',
-                description: 'The original comment data',
-                dataType: NodeDataType.OBJECT,
-                required: true
-              },
-              {
-                id: 'replyText',
-                name: 'replyText',
-                label: 'Reply Text',
-                description: 'The text to reply with',
-                dataType: NodeDataType.STRING,
-                required: true
-              }
-            ],
-            outputs: [
-              {
-                id: 'result',
-                name: 'result',
-                label: 'Result',
-                description: 'Result of the reply operation',
-                dataType: NodeDataType.OBJECT,
-                required: true
-              }
-            ]
-          },
-          settingsSchema: {
-            type: 'object',
-            properties: {
-              accountId: {
-                type: 'string',
-                title: 'Instagram Account ID'
-              },
-              addHashtags: {
-                type: 'boolean',
-                title: 'Add Hashtags',
-                default: false
-              },
-              delay: {
-                type: 'number',
-                title: 'Delay (seconds)',
-                minimum: 0,
-                default: 0
-              }
-            },
-            required: ['accountId']
-          }
-        };
-        
-        // Create Chat Input trigger node
-        const chatInputNode: NodeType = {
-          id: 'chat_input',
-          name: 'Chat Input',
-          description: 'Manual text input trigger for chat conversations',
-          category: NodeCategory.TRIGGER,
-          version: '1.0.0',
-          icon: 'message',
-          color: '#4CAF50',
-          ports: {
-            inputs: [], // No inputs for trigger nodes
-            outputs: [
-              {
-                id: 'message_data',
-                name: 'message_data',
-                label: 'Message Data',
-                description: 'Structured message data with session info',
-                dataType: NodeDataType.OBJECT,
-                required: true
-              }
-            ]
-          },
-          settingsSchema: {
-            type: 'object',
-            properties: {} // No settings for this node
-          }
-        };
-        
-        setAvailableNodeTypes([mockTriggerNode, mockProcessorNode, mockActionNode, chatInputNode]);
+        console.warn('⚠️ No node types returned from backend, using empty configuration');
+        setAvailableNodeTypes([]);
       }
     } catch (err) {
       console.error('Failed to load node types:', err);

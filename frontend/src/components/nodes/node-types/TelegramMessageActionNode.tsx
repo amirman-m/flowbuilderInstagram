@@ -1,112 +1,79 @@
-import React, { useState, useEffect } from 'react';
-import { Handle, Position, useReactFlow } from '@xyflow/react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useReactFlow } from '@xyflow/react';
 import {
   Box, 
-  Paper, 
   Typography, 
-  IconButton, 
-  Tooltip, 
-  Zoom, 
-  CircularProgress, 
   Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   Button,
   TextField
 } from '@mui/material';
 import { 
-  Delete as DeleteIcon,
-  PlayArrow as ExecuteIcon,
-  Warning as WarningIcon,
   CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon,
-  Settings as SettingsIcon
+  Error as ErrorIcon
 } from '@mui/icons-material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
-import { baseNodeStyles, getCategoryColor } from '../styles';
-import { NodeCategory } from '../../../types/nodes';
-import { useExecutionData } from '../hooks/useExecutionData';
-import { API_BASE_URL } from '../../../services/api';
+import { BaseNode } from '../BaseNode';
+import { useNodeConfiguration, useExecutionData } from '../hooks';
+import { nodeService } from '../../../services/nodeService';
 import { useParams } from 'react-router-dom';
 
-// Telegram Logo SVG Component (reused from TelegramInputNode)
+// Telegram Logo SVG Component
 const TelegramLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
-  <svg 
-    width={size} 
-    height={size} 
-    viewBox="0 0 256 256" 
-    fill="currentColor"
-    style={{ flexShrink: 0 }}
-  >
-    <path d="M128,0 C57.307,0 0,57.307 0,128 L0,128 C0,198.693 57.307,256 128,256 L128,256 C198.693,256 256,198.693 256,128 L256,128 C256,57.307 198.693,0 128,0 L128,0 Z" fill="#40B3E0" />
-    <path d="M190.2826,73.6308 L167.4206,188.8978 C167.4206,188.8978 164.2236,196.8918 155.4306,193.0548 L102.6726,152.6068 L83.4886,143.3348 L51.1946,132.4628 C51.1946,132.4628 46.2386,130.7048 45.7586,126.8678 C45.2796,123.0308 51.3546,120.9528 51.3546,120.9528 L179.7306,70.5928 C179.7306,70.5928 190.2826,65.9568 190.2826,73.6308" fill="#FFFFFF" />
-    <path d="M98.6178,187.6035 C98.6178,187.6035 97.0778,187.4595 95.1588,181.3835 C93.2408,175.3085 83.4888,143.3345 83.4888,143.3345 L161.0258,94.0945 C161.0258,94.0945 165.5028,91.3765 165.3428,94.0945 C165.3428,94.0945 166.1418,94.5735 163.7438,96.8115 C161.3458,99.0505 102.8328,151.6475 102.8328,151.6475" fill="#D2E5F1" />
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-.38.24-1.07.7-.31.21-.66.32-1.02.32-.7-.01-1.36-.4-1.82-.73-.56-.4-.67-.63-.67-.99-.01-.7.27-.99.67-.99.09 0 .18.01.27.03.27.06.64.25 1.02.5l1.17.77c.42.28.85.42 1.27.42.26 0 .52-.05.78-.16.77-.32 1.37-.94 1.37-1.71 0-.17-.04-.33-.1-.49z"/>
   </svg>
 );
 
-export const TelegramMessageActionNode: React.FC<NodeComponentProps> = ({ data, selected, id }) => {
+export const TelegramMessageActionNode: React.FC<NodeComponentProps> = (props) => {
+  const { data, id } = props;
   const { flowId } = useParams<{ flowId: string }>();
-  const [settingsValidationState, setSettingsValidationState] = useState<'error' | 'success' | 'none'>('none');
+  const [validationState, setValidationState] = useState<'error' | 'success' | 'none'>('none');
   const [isExecuting, setIsExecuting] = useState(false);
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
-  const [accessToken, setAccessToken] = useState('');
-  const [chatId, setChatId] = useState('');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [localAccessToken, setLocalAccessToken] = useState('');
+  const [localChatId, setLocalChatId] = useState('');
   
   // Access React Flow instance to get nodes and edges
   const { getNodes, getEdges } = useReactFlow();
   
   const nodeData = data as NodeDataWithHandlers;
   const { nodeType, instance } = nodeData;
-  const categoryColor = getCategoryColor(NodeCategory.ACTION);
   
-  // Use execution data hook to get fresh execution results
+  // Use our new modular hooks
+  const nodeConfig = useNodeConfiguration(nodeType?.id || 'telegram_message_action');
   const executionData = useExecutionData(nodeData);
   
   // Get current settings from instance
-  const currentSettings = instance?.data?.settings || {};
+  const currentSettings = instance?.settings || {};
   
   // Initialize settings from instance data
   useEffect(() => {
     if (currentSettings.access_token) {
-      setAccessToken(currentSettings.access_token);
+      setLocalAccessToken(currentSettings.access_token);
     }
     if (currentSettings.chat_id) {
-      setChatId(currentSettings.chat_id);
+      setLocalChatId(currentSettings.chat_id);
     }
   }, [currentSettings.access_token, currentSettings.chat_id]);
-  
-  // Settings handlers
-  const updateSettings = (newSettings: any) => {
-    if (nodeData.onNodeUpdate) {
-      nodeData.onNodeUpdate(id, {
-        data: {
-          ...instance.data,
-          settings: { ...currentSettings, ...newSettings }
-        }
-      });
-    }
-  };
   
   // Validate settings whenever they change
   useEffect(() => {
     // For this node, settings are optional as they can be obtained from Telegram Input node
     // Just validate format if provided
-    const token = currentSettings?.access_token || accessToken;
-    const chatIdValue = currentSettings?.chat_id || chatId;
+    const token = currentSettings?.access_token || localAccessToken;
+    const chatIdValue = currentSettings?.chat_id || localChatId;
     
     if ((token && token.length < 10) || (chatIdValue && !/^-?\d+$/.test(chatIdValue))) {
-      setSettingsValidationState('error');
+      setValidationState('error');
     } else {
-      setSettingsValidationState('success');
+      setValidationState('success');
     }
-  }, [currentSettings, accessToken, chatId]);
-  
-  // Handle node deletion
-  const handleDelete = (event: React.MouseEvent) => {
-    event.stopPropagation();
-    if (nodeData.onNodeDelete) {
-      nodeData.onNodeDelete(id);
-    }
-  };
-  
+  }, [currentSettings, localAccessToken, localChatId]);
+
   // Function to collect input data from connected nodes
   const collectInputsFromConnectedNodes = async (): Promise<Record<string, any>> => {
     const nodes = getNodes();
@@ -128,6 +95,9 @@ export const TelegramMessageActionNode: React.FC<NodeComponentProps> = ({ data, 
         // Map the output to the input port
         if (edge.targetHandle) {
           inputs[edge.targetHandle] = outputs[edge.sourceHandle || 'output'] || '';
+        } else {
+          // If no specific target handle, use a default mapping
+          inputs['message'] = outputs[edge.sourceHandle || 'output'] || '';
         }
       }
     }
@@ -136,243 +106,175 @@ export const TelegramMessageActionNode: React.FC<NodeComponentProps> = ({ data, 
   };
   
   // Handle node execution
-  const handleExecute = async (event: React.MouseEvent) => {
-    event.stopPropagation();
-    
-    if (isExecuting) {
-      return;
-    }
+  const handleExecute = useCallback(async () => {
+    if (isExecuting) return;
     
     setIsExecuting(true);
     
     try {
+      console.log('📤 Starting Telegram message send execution for node:', id);
+      
       // Collect inputs from connected nodes
       const inputs = await collectInputsFromConnectedNodes();
+      console.log('📥 Collected inputs:', inputs);
       
-      // Prepare execution request (for flows endpoint)
-      // Include settings directly in inputs to ensure they're processed by the backend
-      const executionRequest = {
-        inputs: {
-          ...inputs,
-          access_token: currentSettings.access_token,
-          chat_id: currentSettings.chat_id
+      // Prepare the execution context
+      const executionContext = {
+        nodeId: id,
+        nodeType: nodeType?.id || 'telegram_message_action',
+        inputs: inputs,
+        settings: {
+          access_token: currentSettings.access_token || localAccessToken,
+          chat_id: currentSettings.chat_id || localChatId,
+          ...currentSettings
         },
-        settings: currentSettings  // Also include settings separately for future compatibility
+        flowId: flowId
       };
       
-      console.log('🚀 Telegram Message Action Node - Executing with request:', executionRequest);
-      console.log('🚀 Including settings:', currentSettings);
-      console.log('🚀 Using flow_id:', flowId, 'node_id:', id);
+      console.log('🚀 Executing Telegram message send with context:', executionContext);
       
-      // Validate flowId before making API call
-      if (!flowId) {
-        throw new Error('No flowId found in URL parameters');
-      }
+      // Execute the node via the modular service
+      const result = await nodeService.execution.executeNode(
+        Number(flowId), // Ensure flowId is a number
+        id, 
+        executionContext.inputs
+      );
+      console.log('✅ Telegram message send execution completed:', result);
       
-      // Make API call to execute the node using the flows endpoint (includes flow_id automatically)
-      const response = await fetch(`${API_BASE_URL}/flows/${flowId}/nodes/${id}/execute`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(executionRequest),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to execute node');
-      }
-      
-      const result = await response.json();
-      console.log('✅ Telegram Message Action Node - Execution Result:', result);
-      
-      // Update the node instance with execution results
-      if (nodeData.onNodeUpdate) {
-        nodeData.onNodeUpdate(id, {
-          data: {
-            ...instance.data,
-            inputs,
-            lastExecution: {
-              status: 'success',
-              timestamp: new Date().toISOString(),
-              inputs,
-              outputs: result.outputs,
-              logs: result.logs,
-              executionTime: result.execution_time
-            }
-          }
-        });
-      }
-      
-    } catch (error) {
-      console.error('❌ Telegram Message Action Node - Execution Error:', error);
-      
-      // Update node with error status
-      if (nodeData.onNodeUpdate) {
-        nodeData.onNodeUpdate(id, {
-          data: {
-            ...instance.data,
-            lastExecution: {
-              status: 'error',
-              timestamp: new Date().toISOString(),
-              error: error instanceof Error ? error.message : String(error)
-            }
-          }
-        });
-      }
-      
+    } catch (error: any) {
+      console.error('❌ Telegram message send execution failed:', error);
     } finally {
       setIsExecuting(false);
     }
-  };
+  }, [id, nodeType, currentSettings, localAccessToken, localChatId, flowId, isExecuting, collectInputsFromConnectedNodes]);
   
-  // Get the current border color based on validation state
-  const getBorderColor = () => {
-    if (settingsValidationState === 'error') {
-      return '#f44336';
+  // Settings handlers
+  const handleSettingsClick = useCallback(() => {
+    setSettingsOpen(true);
+  }, []);
+  
+  const handleSettingsSave = useCallback(() => {
+    if (nodeData.onNodeUpdate) {
+      nodeData.onNodeUpdate(id, {
+        settings: {
+          ...currentSettings,
+          access_token: localAccessToken,
+          chat_id: localChatId
+        }
+      });
     }
-    return selected ? categoryColor : `${categoryColor}80`;
-  };
+    setSettingsOpen(false);
+  }, [nodeData, id, currentSettings, localAccessToken, localChatId]);
   
-  // Get the background color
-  const getBackgroundColor = () => {
-    return selected ? `${categoryColor}10` : 'white';
-  };
+  const handleSettingsCancel = useCallback(() => {
+    setLocalAccessToken(currentSettings.access_token || '');
+    setLocalChatId(currentSettings.chat_id || '');
+    setSettingsOpen(false);
+  }, [currentSettings]);
   
-  // Determine if the node is ready for execution - used for conditional rendering
+  // Custom content for BaseNode
+  const customContent = (
+    <Box>
+      {/* Execution Data Display */}
+      {executionData.hasFreshResults && (
+        <Box sx={{ mt: 1 }}>
+          {executionData.isSuccess ? (
+            <Alert severity="success" sx={{ mb: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CheckCircleIcon fontSize="small" />
+                <Typography variant="body2">
+                  Message sent successfully
+                </Typography>
+              </Box>
+            </Alert>
+          ) : (
+            <Alert severity="error" sx={{ mb: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <ErrorIcon fontSize="small" />
+                <Typography variant="body2">
+                  {executionData.isError ? 'Execution failed' : 'Execution failed'}
+                </Typography>
+              </Box>
+            </Alert>
+          )}
+          
+          {/* Display execution details */}
+          {executionData.displayData && (
+            <Box sx={{ mt: 1, p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
+              <Typography variant="caption" color="text.secondary">
+                Last execution: {new Date(executionData.lastExecuted || '').toLocaleString()}
+              </Typography>
+              {executionData.displayData.inputText && (
+                <Typography variant="body2" sx={{ mt: 0.5 }}>
+                  Message: {executionData.displayData.inputText}
+                </Typography>
+              )}
+            </Box>
+          )}
+        </Box>
+      )}
+    </Box>
+  );
   
   return (
     <>
-      <Paper
-        sx={{
-          ...baseNodeStyles,
-          borderColor: getBorderColor(),
-          borderWidth: selected ? 3 : 2,
-          backgroundColor: getBackgroundColor(),
-        }}
+      <BaseNode
+        {...props}
+        nodeConfig={nodeConfig}
+        onExecute={handleExecute}
+        onSettingsClick={handleSettingsClick}
+        validationState={validationState}
+        isExecuting={isExecuting}
+        icon={<TelegramLogo size={20} />}
+        customContent={customContent}
+      />
+
+      {/* Settings Dialog */}
+      <Dialog
+        open={settingsOpen}
+        onClose={handleSettingsCancel}
+        maxWidth="sm"
+        fullWidth
       >
-        {/* Input Handle */}
-        {nodeType.ports.inputs.map((port: any, index: number) => (
-          <Handle
-            key={port.id}
-            type="target"
-            position={Position.Left}
-            id={port.id}
-            style={{
-              top: `${20 + (index * 20)}px`,
-              background: categoryColor,
-              border: '2px solid white',
-              width: 12,
-              height: 12,
-            }}
-          />
-        ))}
-        
-        {/* Settings button removed */}
-        
-        {/* Warning icon for invalid settings */}
-        {settingsValidationState === 'error' && (
-          <Box sx={{ position: 'absolute', top: 5, right: 35 }}>
-            <Zoom in={true}>
-              <Tooltip title="Invalid settings. Please check your configuration.">
-                <WarningIcon sx={{ color: '#f44336', fontSize: 20 }} />
-              </Tooltip>
-            </Zoom>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <TelegramLogo size={24} />
+            Telegram Message Action Settings
           </Box>
-        )}
-
-        {/* Node Header */}
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-          <Box sx={{ color: categoryColor, mr: 1 }}>
-            <TelegramLogo size={20} />
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 1 }}>
+            <TextField
+              fullWidth
+              label="Bot Access Token"
+              value={localAccessToken}
+              onChange={(e) => setLocalAccessToken(e.target.value)}
+              placeholder="Enter your Telegram bot token"
+              helperText="Optional: Leave empty to use token from Telegram Input node"
+              sx={{ mb: 2 }}
+            />
+            <TextField
+              fullWidth
+              label="Chat ID"
+              value={localChatId}
+              onChange={(e) => setLocalChatId(e.target.value)}
+              placeholder="Enter chat ID (e.g., -1001234567890)"
+              helperText="Optional: Leave empty to use chat ID from Telegram Input node"
+            />
           </Box>
-          <Typography variant="subtitle2" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
-            {instance.label || "Send Telegram Message"}
-          </Typography>
-          {/* Execution button */}
-          <Tooltip title={isExecuting ? "Sending message..." : "Send Message"}>
-            <IconButton 
-              size="small" 
-              onClick={handleExecute} 
-              sx={{ ml: 0.5 }}
-              disabled={isExecuting}
-            >
-              {isExecuting ? (
-                <CircularProgress size={16} />
-              ) : (
-                <ExecuteIcon fontSize="small" color="primary" />
-              )}
-            </IconButton>
-          </Tooltip>
-          <IconButton size="small" onClick={handleDelete} sx={{ ml: 0.5 }}>
-            <DeleteIcon fontSize="small" color="error" />
-          </IconButton>
-        </Box>
-
-        {/* Node Category */}
-        <Typography
-          variant="caption"
-          sx={{
-            backgroundColor: `${categoryColor}20`,
-            color: categoryColor,
-            fontSize: '0.7rem',
-            px: 1,
-            py: 0.25,
-            borderRadius: 1,
-            display: 'inline-block'
-          }}
-        >
-          {NodeCategory.ACTION}
-        </Typography>
-        
-        {/* Execution Results Display */}
-        {executionData.hasFreshResults && (
-          <Box sx={{ mt: 1, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
-            <Typography variant="caption" sx={{ fontWeight: 'bold', color: categoryColor }}>
-              Message Sent:
-            </Typography>
-            {executionData.displayData && (executionData.displayData as any).message_sent && (
-              <Typography variant="body2" sx={{ mt: 0.5, wordBreak: 'break-word' }}>
-                {(executionData.displayData as any).message_sent}
-              </Typography>
-            )}
-            {executionData.displayData && (executionData.displayData as any).chat_id && (
-              <Typography variant="caption" sx={{ color: 'text.secondary', mt: 0.5, display: 'block' }}>
-                Chat ID: {(executionData.displayData as any).chat_id} • {new Date((executionData.displayData as any).timestamp).toLocaleTimeString()}
-              </Typography>
-            )}
-          </Box>
-        )}
-        
-        {/* Success/Error indicators */}
-        {executionData.hasFreshResults && executionData.isSuccess && (
-          <Alert 
-            severity="success" 
-            icon={<CheckCircleIcon />}
-            sx={{ mt: 1, fontSize: '0.75rem' }}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleSettingsCancel}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSettingsSave}
+            variant="contained"
           >
-            <Typography variant="caption">
-              Message sent successfully
-              {executionData.executionTime && ` in ${executionData.executionTime.toFixed(2)}ms`}
-            </Typography>
-          </Alert>
-        )}
-        
-        {executionData.hasFreshResults && executionData.isError && (
-          <Alert 
-            severity="error" 
-            icon={<ErrorIcon />}
-            sx={{ mt: 1, fontSize: '0.75rem' }}
-          >
-            <Typography variant="caption">
-              {(executionData as any).error || "Failed to send message"}
-            </Typography>
-          </Alert>
-        )}
-      </Paper>
-
-      {/* Settings Dialog removed */}
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

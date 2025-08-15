@@ -1,9 +1,8 @@
 // src/components/nodes/node-types/VoiceInputNode.tsx
 import React, { useState, useRef } from 'react';
-import { Handle, Position } from '@xyflow/react';
 import { 
-  Paper, Box, Typography, IconButton, Dialog, 
-  Button, Chip, Alert, LinearProgress
+  Box, Typography, Dialog, 
+  Button, Alert, LinearProgress
 } from '@mui/material';
 import { 
   Mic as MicIcon, 
@@ -14,29 +13,34 @@ import {
   CheckCircle as CheckCircleIcon 
 } from '@mui/icons-material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
-import { baseNodeStyles, getCategoryColor } from '..';
-import { NodeCategory, NodeExecutionStatus } from '../../../types/nodes';
+import { BaseNode } from '../BaseNode';
+import { useNodeConfiguration, useExecutionData } from '../hooks';
 import { nodeService } from '../../../services/nodeService';
 import { useParams } from 'react-router-dom';
-import { useExecutionData } from '../hooks/useExecutionData';
 
-export const VoiceInputNode: React.FC<NodeComponentProps> = ({ data, selected, id }) => {
+export const VoiceInputNode: React.FC<NodeComponentProps> = (props) => {
+  const { data, id } = props;
   const { flowId } = useParams<{ flowId: string }>();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
+  const [validationState] = useState<'error' | 'success' | 'none'>('none');
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   
   const nodeData = data as NodeDataWithHandlers;
   const { nodeType, instance, onNodeUpdate } = nodeData;
-  const categoryColor = getCategoryColor(NodeCategory.TRIGGER);
   
-  // Use execution data hook to get fresh execution results
+  // Use our new modular hooks
+  const nodeConfig = useNodeConfiguration(nodeType?.id || 'voice_input');
   const executionData = useExecutionData(nodeData);
+  
+  // Get current settings from instance
+  const currentSettings = instance?.settings || {};
+  const { quality = 'high', format = 'webm' } = currentSettings;
   
   const handleExecute = () => {
     setDialogOpen(true);
@@ -261,109 +265,74 @@ export const VoiceInputNode: React.FC<NodeComponentProps> = ({ data, selected, i
       onNodeDelete(id);
     }
   };
-  
+
+  // Custom content for Voice Input node
+  const renderCustomContent = () => (
+    <Box sx={{ mt: 1 }}>
+      <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>
+        Quality: {quality}
+      </Typography>
+      <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>
+        Format: {format}
+      </Typography>
+      
+      {/* Execution Results Display */}
+      {executionData.hasFreshResults && executionData.displayData && (
+        <Box sx={{ mt: 1, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+          <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#666' }}>
+            Voice Input:
+          </Typography>
+          <Typography 
+            variant="body2" 
+            sx={{ 
+              mt: 0.5, 
+              wordBreak: 'break-word',
+              fontSize: '0.75rem',
+              lineHeight: 1.3,
+              maxHeight: '60px',
+              overflow: 'hidden'
+            }}
+          >
+            {executionData.displayData.inputText || 'Voice recorded'}
+          </Typography>
+          {executionData.lastExecuted && (
+            <Typography variant="caption" sx={{ color: '#999', fontSize: '0.7rem' }}>
+              {new Date(executionData.lastExecuted).toLocaleTimeString()}
+            </Typography>
+          )}
+          {executionData.displayData.metadata && (
+            <Typography variant="caption" sx={{ color: '#999', display: 'block', fontSize: '0.7rem' }}>
+              Duration: {executionData.displayData.metadata.duration || 'N/A'}s
+            </Typography>
+          )}
+        </Box>
+      )}
+      
+      {/* Success indicator for processed voice input */}
+      {executionData.hasFreshResults && executionData.isSuccess && (
+        <Alert 
+          severity="success" 
+          icon={<CheckCircleIcon />}
+          sx={{ mt: 1, fontSize: '0.75rem' }}
+        >
+          <Typography variant="caption">
+            Voice input processed successfully
+          </Typography>
+        </Alert>
+      )}
+    </Box>
+  );
+
   return (
     <>
-      <Paper 
-        sx={{
-          ...baseNodeStyles,
-          borderColor: selected ? categoryColor : `${categoryColor}80`,
-          borderWidth: selected ? 3 : 2,
-          backgroundColor: selected ? `${categoryColor}10` : 'white'
-        }}
-      >
-        {/* Input Handles */}
-        {nodeType.ports.inputs.map((port: any, index: number) => (
-          <Handle
-            key={port.id}
-            type="target"
-            position={Position.Left}
-            id={port.id}
-            style={{
-              top: `${20 + (index * 20)}px`,
-              backgroundColor: port.required ? categoryColor : '#999'
-            }}
-          />
-        ))}
-        
-        {/* Node Header */}
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-          <Box sx={{ color: categoryColor, mr: 1 }}>
-            <MicIcon />
-          </Box>
-          <Typography variant="subtitle2" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
-            {instance.label || "Voice Input"}
-          </Typography>
-          <IconButton 
-            size="small" 
-            sx={{ ml: 0.5 }}
-            onClick={handleExecute}
-          >
-            <MicIcon fontSize="small" color="primary" />
-          </IconButton>
-          <IconButton 
-            size="small" 
-            sx={{ ml: 0.5 }}
-            onClick={handleDelete}
-          >
-            <DeleteIcon fontSize="small" color="error" />
-          </IconButton>
-        </Box>
-
-        {/* Node Category */}
-        <Chip
-          label={NodeCategory.TRIGGER}
-          size="small"
-          sx={{
-            backgroundColor: `${categoryColor}20`,
-            color: categoryColor,
-            fontSize: '0.7rem',
-            height: '20px'
-          }}
-        />
-        
-        {/* Execution Results Display */}
-        {executionData.hasFreshResults && executionData.displayData.type === 'message_data' && (
-          <Box sx={{ mt: 1, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
-            <Typography variant="caption" sx={{ fontWeight: 'bold', color: categoryColor }}>
-              Latest Voice Input:
-            </Typography>
-            <Typography variant="body2" sx={{ mt: 0.5 }}>
-              Voice recording processed
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary', mt: 0.5, display: 'block' }}>
-              {executionData.displayData.metadata?.file_size} bytes • {new Date(executionData.displayData.timestamp).toLocaleTimeString()}
-            </Typography>
-          </Box>
-        )}
-        
-        {/* Success indicator for fresh execution */}
-        {executionData.hasFreshResults && executionData.isSuccess && (
-          <Alert 
-            severity="success" 
-            icon={<CheckCircleIcon />}
-            sx={{ mt: 1, fontSize: '0.75rem' }}
-          >
-            <Typography variant="caption">
-              Voice input processed successfully
-            </Typography>
-          </Alert>
-        )}
-        
-        {/* Output Handles */}
-        {nodeType.ports.outputs.map((port: any, index: number) => (
-          <Handle
-            key={port.id}
-            type="source"
-            position={Position.Right}
-            id={port.id}
-            style={{
-              top: `${20 + (index * 20)}px`,
-              backgroundColor: categoryColor
-            }}
-          />
-        ))}
-      </Paper>
+      <BaseNode
+        {...props}
+        nodeConfig={nodeConfig}
+        validationState={validationState}
+        onExecute={handleExecute}
+        customContent={renderCustomContent()}
+        icon={<MicIcon />}
+      />
       
       {/* Voice Recording Dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)}>

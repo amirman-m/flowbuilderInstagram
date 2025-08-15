@@ -14,7 +14,7 @@ import { ChatInputNode, VoiceInputNode, OpenAIChatNode, DeepSeekChatNode } from 
 import { TranscriptionNode } from './node-types/TranscriptionNode';
 import { TelegramInputNode } from './node-types/TelegramInputNode';
 import { TelegramMessageActionNode } from './node-types/TelegramMessageActionNode';
-import { baseNodeStyles, getCategoryColor } from './styles';
+import { getCategoryColor } from '../../config/nodeConfiguration';
 
 // Import other node components
 
@@ -98,7 +98,14 @@ export const DefaultNode: React.FC<NodeComponentProps> = ({ data, selected, id }
   return (
     <Paper
       sx={{
-        ...baseNodeStyles,
+        position: 'relative',
+        padding: 2,
+        minWidth: 200,
+        minHeight: 80,
+        border: '2px solid',
+        borderRadius: 2,
+        cursor: 'pointer',
+        userSelect: 'none',
         borderColor: selected ? categoryColor : `${categoryColor}80`,
         borderWidth: selected ? 3 : 2,
         backgroundColor: selected ? `${categoryColor}10` : 'white'

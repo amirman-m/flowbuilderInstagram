@@ -1,125 +1,183 @@
 // src/components/nodes/node-types/InstagramTriggerNode.tsx
-import React, { useState } from 'react';
-import { Handle, Position } from '@xyflow/react';
-import { 
-  Paper, Box, Typography, IconButton, Chip, Dialog, 
-  TextField, Button
+import React, { useState, useEffect } from 'react';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  TextField,
+  Typography,
+  Box
 } from '@mui/material';
-import { Instagram as InstagramIcon, Delete as DeleteIcon, Settings as SettingsIcon } from '@mui/icons-material';
+import { Instagram as InstagramIcon } from '@mui/icons-material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
-import { baseNodeStyles, getCategoryColor } from '../styles';
-import { NodeCategory } from '../../../types/nodes';
+import { BaseNode } from '../BaseNode';
+import { useNodeConfiguration, useExecutionData } from '../hooks';
 
-// Simple example of how to create a new node using your existing architecture
-export const InstagramTriggerNode: React.FC<NodeComponentProps> = ({ data, selected, id }) => {
+export const InstagramTriggerNode: React.FC<NodeComponentProps> = (props) => {
+  const { data, id } = props;
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [username, setUsername] = useState('');
+  const [localSettings, setLocalSettings] = useState<any>({});
+  const [validationState, setValidationState] = useState<'error' | 'success' | 'none'>('none');
   
   const nodeData = data as NodeDataWithHandlers;
-  const { nodeType, instance, onNodeDelete } = nodeData;
-  const categoryColor = getCategoryColor(NodeCategory.TRIGGER);
+  const { nodeType, instance } = nodeData;
   
-  const handleDelete = (event: React.MouseEvent) => {
-    event.stopPropagation();
-    if (onNodeDelete && id) {
-      onNodeDelete(id);
-    }
-  };
+  // Use our new modular hooks
+  const nodeConfig = useNodeConfiguration(nodeType?.id || 'instagram_trigger');
+  const executionData = useExecutionData(nodeData);
+  
+  // Get current settings from instance
+  const currentSettings = instance?.settings || {};
+  const { username = '', hashtags = '', check_interval = 300 } = currentSettings;
 
-  const handleSettings = () => {
+  // Initialize local settings when dialog opens
+  useEffect(() => {
+    if (settingsOpen) {
+      setLocalSettings(currentSettings);
+    }
+  }, [settingsOpen, currentSettings]);
+
+  // Validation effect
+  useEffect(() => {
+    const hasRequiredSettings = username && username.trim() !== '';
+    setValidationState(hasRequiredSettings ? 'success' : 'error');
+  }, [username]);
+
+  const handleSettingsClick = () => {
     setSettingsOpen(true);
   };
 
+  const handleSettingsClose = () => {
+    setSettingsOpen(false);
+  };
+
+  const handleSettingsSave = () => {
+    if (nodeData.onNodeUpdate) {
+      nodeData.onNodeUpdate(id, {
+        settings: localSettings
+      });
+    }
+    setSettingsOpen(false);
+  };
+
+  const handleLocalSettingChange = (key: string, value: any) => {
+    setLocalSettings((prev: any) => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  // Custom content for Instagram node
+  const renderCustomContent = () => (
+    <Box sx={{ mt: 1 }}>
+      <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>
+        Username: {username || 'Not configured'}
+      </Typography>
+      {hashtags && (
+        <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>
+          Hashtags: {hashtags}
+        </Typography>
+      )}
+      <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>
+        Check interval: {check_interval}s
+      </Typography>
+      
+      {/* Execution Results Display */}
+      {executionData.hasFreshResults && (
+        <Box sx={{ mt: 1, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+          <Typography variant="caption" sx={{ color: '#666', fontWeight: 600 }}>
+            Latest Posts:
+          </Typography>
+          {executionData.displayData && (
+            <Typography 
+              variant="caption" 
+              sx={{ 
+                display: 'block',
+                mt: 0.5,
+                color: '#333',
+                fontSize: '0.75rem',
+                lineHeight: 1.3,
+                maxHeight: '60px',
+                overflow: 'hidden',
+                wordBreak: 'break-word'
+              }}
+            >
+              {typeof executionData.displayData === 'object' && 
+               executionData.displayData && 
+               'posts' in executionData.displayData && 
+               Array.isArray(executionData.displayData.posts)
+                ? `${executionData.displayData.posts.length} new posts found`
+                : 'Monitoring active'
+              }
+            </Typography>
+          )}
+          {executionData.lastExecuted && (
+            <Typography variant="caption" sx={{ color: '#999', fontSize: '0.7rem' }}>
+              {new Date(executionData.lastExecuted).toLocaleTimeString()}
+            </Typography>
+          )}
+        </Box>
+      )}
+    </Box>
+  );
+
   return (
     <>
-      <Paper 
-        sx={{
-          ...baseNodeStyles,
-          borderColor: selected ? categoryColor : `${categoryColor}80`,
-          borderWidth: selected ? 3 : 2,
-          backgroundColor: selected ? `${categoryColor}10` : 'white'
-        }}
-      >
-        {/* Input Handles */}
-        {nodeType.ports.inputs.map((port: any, index: number) => (
-          <Handle
-            key={port.id}
-            type="target"
-            position={Position.Left}
-            id={port.id}
-            style={{
-              top: `${20 + (index * 20)}px`,
-              backgroundColor: port.required ? categoryColor : '#999'
-            }}
-          />
-        ))}
-        
-        {/* Node Header */}
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-          <Box sx={{ color: categoryColor, mr: 1 }}>
-            <InstagramIcon />
-          </Box>
-          <Typography variant="subtitle2" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
-            {instance.label || "Instagram Trigger"}
-          </Typography>
-          <IconButton size="small" onClick={handleSettings} sx={{ ml: 0.5 }}>
-            <SettingsIcon fontSize="small" />
-          </IconButton>
-          <IconButton size="small" onClick={handleDelete} sx={{ ml: 0.5 }}>
-            <DeleteIcon fontSize="small" color="error" />
-          </IconButton>
-        </Box>
-
-        {/* Node Category */}
-        <Chip
-          label={NodeCategory.TRIGGER}
-          size="small"
-          sx={{
-            backgroundColor: `${categoryColor}20`,
-            color: categoryColor,
-            fontSize: '0.7rem',
-            height: '20px'
-          }}
-        />
-        
-        {/* Custom Content */}
-        <Box sx={{ mt: 1, fontSize: '0.8rem', color: '#666' }}>
-          Monitors Instagram posts
-        </Box>
-        
-        {/* Output Handles */}
-        {nodeType.ports.outputs.map((port: any, index: number) => (
-          <Handle
-            key={port.id}
-            type="source"
-            position={Position.Right}
-            id={port.id}
-            style={{
-              top: `${20 + (index * 20)}px`,
-              backgroundColor: categoryColor
-            }}
-          />
-        ))}
-      </Paper>
+      <BaseNode
+        {...props}
+        nodeConfig={nodeConfig}
+        validationState={validationState}
+        onSettingsClick={handleSettingsClick}
+        customContent={renderCustomContent()}
+        icon={<InstagramIcon />}
+      />
       
       {/* Settings Dialog */}
-      <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)}>
-        <Box sx={{ p: 3, width: 400 }}>
-          <Typography variant="h6">Instagram Settings</Typography>
-          <TextField
-            fullWidth
-            label="Username to monitor"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            sx={{ my: 2 }}
-          />
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-            <Button onClick={() => setSettingsOpen(false)}>Cancel</Button>
-            <Button variant="contained" onClick={() => setSettingsOpen(false)}>
-              Save
-            </Button>
+      <Dialog open={settingsOpen} onClose={handleSettingsClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Instagram Trigger Settings</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+            <TextField
+              fullWidth
+              label="Username to Monitor"
+              value={localSettings.username || ''}
+              onChange={(e) => handleLocalSettingChange('username', e.target.value)}
+              placeholder="Enter Instagram username (without @)"
+              helperText="The Instagram account to monitor for new posts"
+            />
+            
+            <TextField
+              fullWidth
+              label="Hashtags (optional)"
+              value={localSettings.hashtags || ''}
+              onChange={(e) => handleLocalSettingChange('hashtags', e.target.value)}
+              placeholder="#hashtag1 #hashtag2"
+              helperText="Filter posts by specific hashtags"
+            />
+            
+            <TextField
+              fullWidth
+              label="Check Interval (seconds)"
+              type="number"
+              value={localSettings.check_interval || 300}
+              onChange={(e) => handleLocalSettingChange('check_interval', parseInt(e.target.value))}
+              inputProps={{ min: 60, max: 3600 }}
+              helperText="How often to check for new posts (60-3600 seconds)"
+            />
           </Box>
-        </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleSettingsClose}>Cancel</Button>
+          <Button 
+            onClick={handleSettingsSave} 
+            variant="contained"
+            disabled={!localSettings.username}
+          >
+            Save
+          </Button>
+        </DialogActions>
       </Dialog>
     </>
   );

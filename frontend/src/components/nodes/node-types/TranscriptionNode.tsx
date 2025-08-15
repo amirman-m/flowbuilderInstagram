@@ -1,20 +1,17 @@
 // src/components/nodes/node-types/TranscriptionNode.tsx
-import React, { useState, useEffect, useCallback } from 'react';
-import { Handle, Position, useReactFlow } from '@xyflow/react';
+import React, { useState } from 'react';
+import { useParams } from 'react-router-dom';
 import {
-  Box, Paper, Typography, IconButton, Tooltip, CircularProgress, Alert
+  Box, Typography, Alert
 } from '@mui/material';
 import { 
-  Delete as DeleteIcon,
-  PlayArrow as ExecuteIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon
 } from '@mui/icons-material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
-import { baseNodeStyles, getCategoryColor } from '../styles';
-import { NodeCategory } from '../../../types/nodes';
-import { useExecutionData } from '../hooks/useExecutionData';
-import { API_BASE_URL } from "../../../services/api" // Import API_BASE_URL
+import { BaseNode } from '../BaseNode';
+import { useNodeConfiguration, useExecutionData } from '../hooks';
+import { nodeService } from '../../../services/nodeService';
 
 // OpenAI Logo SVG Component - Reused for Transcription Node
 const OpenAILogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
@@ -28,345 +25,125 @@ const OpenAILogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
   </svg>
 );
 
-export const TranscriptionNode: React.FC<NodeComponentProps> = ({ data, selected, id }) => {
+export const TranscriptionNode: React.FC<NodeComponentProps> = (props) => {
+  const { data, id } = props;
   const [isExecuting, setIsExecuting] = useState(false);
   
-  // Access React Flow instance to get nodes and edges
-  const { getNodes, getEdges } = useReactFlow();
+  const { flowId } = useParams<{ flowId: string }>();
   
   const nodeData = data as NodeDataWithHandlers;
   const { nodeType, instance } = nodeData;
-  const categoryColor = getCategoryColor(NodeCategory.PROCESSOR);
   
-  // Use execution data hook to get fresh execution results
+  // Use our modular hooks
+  const nodeConfig = useNodeConfiguration(nodeType?.id || 'transcription');
   const executionData = useExecutionData(nodeData);
   
-  // Handle node deletion
-  const handleDelete = (event: React.MouseEvent) => {
-    event.stopPropagation();
-    // Prefer onNodeDelete (standard across nodes) but fall back to onDelete for backward compatibility
-    if (nodeData.onNodeDelete) {
-      nodeData.onNodeDelete(id);
-    } else if (nodeData.onDelete) {
-      nodeData.onDelete(id);
-    }
-  };
 
-  // Function to collect input data from connected nodes
-  const collectInputsFromConnectedNodes = async (): Promise<Record<string, any>> => {
-    const inputs: Record<string, any> = {};
-    
-    try {
-      // Get current nodes and edges from React Flow
-      const nodes = getNodes();
-      const edges = getEdges();
-      
-      if (!nodes || !edges) {
-        console.log('⚠️ No flow data available for input collection');
-        return inputs;
-      }
-      
-      // Find all edges that connect TO this node (incoming connections)
-      const incomingEdges = edges.filter((edge: any) => edge.target === id);
-      console.log('🔗 Found incoming edges:', incomingEdges);
-      
-      // For each incoming edge, get the output data from the source node
-      for (const edge of incomingEdges) {
-        const sourceNodeId = edge.source;
-        const sourcePortId = edge.sourceHandle;
-        const targetPortId = edge.targetHandle;
-        
-        // Find the source node
-        const sourceNode = nodes.find((node: any) => node.id === sourceNodeId);
-        if (!sourceNode) {
-          console.log(`⚠️ Source node ${sourceNodeId} not found`);
-          continue;
-        }
-        
-        console.log(`📤 Collecting output from node ${sourceNodeId} (${(sourceNode.data as any)?.instance?.label || 'Unknown'})`);
-        
-        // Get the output data from the source node's last execution
-        const sourceInstance = (sourceNode.data as any)?.instance;
-        const lastExecution = sourceInstance?.data?.lastExecution;
-        
-        if (lastExecution && lastExecution.outputs) {
-          // If there's a specific source port, get data from that port
-          if (sourcePortId && lastExecution.outputs[sourcePortId]) {
-            let portData = lastExecution.outputs[sourcePortId];
-            
-            // For transcription, we want to keep the full message_data structure
-            // to access voice_input and other metadata
-            
-            inputs[targetPortId || sourcePortId] = portData;
-            console.log(`✅ Collected from port ${sourcePortId}:`, portData);
-          } else {
-            // Otherwise, collect all outputs from the source node
-            Object.keys(lastExecution.outputs).forEach(outputPort => {
-              let portData = lastExecution.outputs[outputPort];
-              
-              const portKey = targetPortId || `${sourceNodeId}_${outputPort}`;
-              inputs[portKey] = portData;
-              console.log(`✅ Collected from ${outputPort}:`, portData);
-            });
-          }
-        } else {
-          // Try to get data from the node's instance data
-          console.log('⚠️ No execution results found, checking instance data');
-          
-          if (sourceInstance?.data?.outputs) {
-            const outputs = sourceInstance.data.outputs;
-            if (sourcePortId && outputs[sourcePortId]) {
-              inputs[targetPortId || sourcePortId] = outputs[sourcePortId];
-              console.log(`✅ Collected from instance data port ${sourcePortId}:`, outputs[sourcePortId]);
-            }
-          } else if (sourceInstance?.outputs) {
-            // Legacy format
-            const outputs = sourceInstance.outputs;
-            if (sourcePortId && outputs[sourcePortId]) {
-              inputs[targetPortId || sourcePortId] = outputs[sourcePortId];
-              console.log(`✅ Collected from legacy instance outputs ${sourcePortId}:`, outputs[sourcePortId]);
-            }
-          } else {
-            console.log(`⚠️ No outputs found for node ${sourceNodeId}`);
-          }
-        }
-      }
-      
-      console.log('🎯 Final collected inputs:', inputs);
-      return inputs;
-    } catch (error) {
-      console.error('❌ Error collecting inputs:', error);
-      return inputs;
-    }
-  };
 
-  // Handle node execution
-  const handleExecute = async (event: React.MouseEvent) => {
-    event.stopPropagation();
-    
-    if (isExecuting) return; // Prevent multiple executions
-    
+  const handleExecute = async () => {
     setIsExecuting(true);
-    
+
     try {
-      console.log('🚀 Executing Transcription Node');
-      
-      // Collect input data from connected nodes
-      const collectedInputs = await collectInputsFromConnectedNodes();
-      console.log('🔌 Collected inputs from connected nodes:', collectedInputs);
-      
-      // Check if we have any voice input data
-      let hasVoiceInput = false;
-      for (const [portId, portData] of Object.entries(collectedInputs)) {
-        if (typeof portData === 'object' && portData !== null) {
-          if (
-            (portData.voice_input && portData.input_type === 'voice') || 
-            (portData.message_data && 
-             typeof portData.message_data === 'object' && 
-             portData.message_data.voice_input && 
-             portData.message_data.input_type === 'voice')
-          ) {
-            hasVoiceInput = true;
-            break;
-          }
-        }
+      const result = await nodeService.execution.executeNode(
+        parseInt(flowId || '1'),
+        id,
+        {} // No settings needed for transcription
+      );
+
+      if (result && result.outputs) {
+        // Execution completed successfully
+        // The useExecutionData hook will automatically pick up the fresh results
+      } else {
+        alert('Transcription failed');
       }
-      
-      if (!hasVoiceInput) {
-        console.error('No voice input found in connected nodes');
-        throw new Error('This node requires voice input from a Voice Input node');
-      }
-      
-      // Prepare execution context
-      const executionContext = {
-        settings: {}, // No settings for transcription node
-        inputs: collectedInputs,
-        nodeId: id
-      };
-      
-      // Call backend API directly
-      const response = await fetch(`${API_BASE_URL}/nodes/execute/transcription`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include', // Include cookies for session authentication
-        body: JSON.stringify(executionContext)
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const result = await response.json();
-      console.log('✅ Transcription node execution successful:', result);
-      
-      // Persist execution result to the node instance so the inspector can display it
-      if (nodeData.onNodeUpdate) {
-        nodeData.onNodeUpdate(id, {
-          data: {
-            ...instance.data,
-            inputs: collectedInputs,
-            lastExecution: result as any // Store full execution result
-          }
-        });
-      }
-      
-    } catch (error: any) {
-      console.error('❌ Transcription node execution failed:', error);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`Transcription error: ${errorMsg}`);
     } finally {
       setIsExecuting(false);
     }
   };
 
-  return (
-    <>
-      {/* Input Handles */}
-      {nodeType.ports.inputs.map((port: any, index: number) => (
-        <Handle
-          key={port.id}
-          type="target"
-          position={Position.Left}
-          id={port.id}
-          style={{
-            top: `${20 + (index * 20)}px`,
-            backgroundColor: categoryColor
-          }}
-        />
-      ))}
-      
-      <Paper
-        elevation={selected ? 8 : 3}
-        sx={{
-          ...baseNodeStyles,
-          borderColor: categoryColor,
-          borderWidth: selected ? 2 : 1,
-          minWidth: 220,
-          maxWidth: 280
-        }}
-      >
-        {/* Node Header */}
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-          <Box sx={{ color: categoryColor, mr: 1 }}>
-            <OpenAILogo size={20} />
-          </Box>
-          <Typography variant="subtitle2" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
-            {instance.label || "Audio Transcription"}
-          </Typography>
-          {/* Execution button */}
-          <Tooltip title={isExecuting ? "Transcribing..." : "Transcribe Audio"}>
-            <IconButton 
-              size="small" 
-              onClick={handleExecute} 
-              sx={{ ml: 0.5 }}
-              disabled={isExecuting}
-            >
-              {isExecuting ? (
-                <CircularProgress size={16} />
-              ) : (
-                <ExecuteIcon fontSize="small" color="primary" />
-              )}
-            </IconButton>
-          </Tooltip>
-          <IconButton size="small" onClick={handleDelete} sx={{ ml: 0.5 }}>
-            <DeleteIcon fontSize="small" color="error" />
-          </IconButton>
-        </Box>
+  // Custom content for Transcription node
+  const renderCustomContent = () => (
+    <Box sx={{ mt: 1 }}>
+      <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>
+        Audio Transcription (Whisper)
+      </Typography>
 
-        {/* Node Category */}
-        <Typography
-          variant="caption"
-          sx={{
-            backgroundColor: `${categoryColor}20`,
-            color: categoryColor,
-            fontSize: '0.7rem',
-            px: 1,
-            py: 0.25,
-            borderRadius: 1,
-            display: 'inline-block',
-            mr: 0.5
-          }}
+      {/* Execution Results Display */}
+      {executionData.hasFreshResults && (
+        <Box sx={{ mt: 1, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+          <Typography variant="caption" sx={{ color: '#666', fontWeight: 600 }}>
+            Latest Transcription:
+          </Typography>
+          {executionData.displayData && (
+            <Typography 
+              variant="caption" 
+              sx={{ 
+                display: 'block',
+                mt: 0.5,
+                color: '#333',
+                fontSize: '0.75rem',
+                lineHeight: 1.3,
+                maxHeight: '60px',
+                overflow: 'hidden',
+                wordBreak: 'break-word'
+              }}
+            >
+              {executionData.displayData && executionData.displayData.type === 'ai_response' && executionData.displayData.aiResponse
+                ? (typeof executionData.displayData.aiResponse === 'string'
+                  ? executionData.displayData.aiResponse.substring(0, 100) + (executionData.displayData.aiResponse.length > 100 ? '...' : '')
+                  : executionData.displayData.aiResponse.ai_response
+                  ? executionData.displayData.aiResponse.ai_response.substring(0, 100) + (executionData.displayData.aiResponse.ai_response.length > 100 ? '...' : '')
+                  : 'Transcription completed')
+                : 'Transcription completed'
+              }
+            </Typography>
+          )}
+          {executionData.lastExecuted && (
+            <Typography variant="caption" sx={{ color: '#999', fontSize: '0.7rem' }}>
+              {new Date(executionData.lastExecuted).toLocaleTimeString()}
+            </Typography>
+          )}
+        </Box>
+      )}
+
+      {/* Success/Error indicators */}
+      {executionData.hasFreshResults && executionData.isSuccess && (
+        <Alert 
+          severity="success" 
+          icon={<CheckCircleIcon />}
+          sx={{ mt: 1, fontSize: '0.75rem' }}
         >
-          {NodeCategory.PROCESSOR}
-        </Typography>
-        
-        <Typography
-          variant="caption"
-          sx={{
-            backgroundColor: '#f0f0f0',
-            color: 'text.secondary',
-            fontSize: '0.7rem',
-            px: 1,
-            py: 0.25,
-            borderRadius: 1,
-            display: 'inline-block'
-          }}
+          <Typography variant="caption">
+            Audio transcribed successfully
+          </Typography>
+        </Alert>
+      )}
+      
+      {executionData.hasFreshResults && executionData.isError && (
+        <Alert 
+          severity="error" 
+          icon={<ErrorIcon />}
+          sx={{ mt: 1, fontSize: '0.75rem' }}
         >
-          Transcriptions
-        </Typography>
-        
-        {/* Output Handles */}
-        {nodeType.ports.outputs.map((port: any, index: number) => (
-          <Handle
-            key={port.id}
-            type="source"
-            position={Position.Right}
-            id={port.id}
-            style={{
-              top: `${20 + (index * 20)}px`,
-              backgroundColor: categoryColor
-            }}
-          />
-        ))}
-        
-        {/* Execution Results Display */}
-        {executionData.hasFreshResults && executionData.displayData.type === 'ai_response' && (
-          <Box sx={{ mt: 1, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
-            <Typography variant="caption" sx={{ fontWeight: 'bold', color: categoryColor }}>
-              Transcription:
-            </Typography>
-            <Typography variant="body2" sx={{ mt: 0.5, wordBreak: 'break-word' }}>
-              {executionData.displayData.aiResponse}
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary', mt: 0.5, display: 'block' }}>
-              {new Date(executionData.displayData.timestamp).toLocaleTimeString()}
-            </Typography>
-            {executionData.displayData.metadata && (
-              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                Model: {executionData.displayData.metadata.model}
-              </Typography>
-            )}
-          </Box>
-        )}
-        
-        {/* Success/Error indicators */}
-        {executionData.hasFreshResults && executionData.isSuccess && (
-          <Alert 
-            severity="success" 
-            icon={<CheckCircleIcon />}
-            sx={{ mt: 1, fontSize: '0.75rem' }}
-          >
-            <Typography variant="caption">
-              Audio transcribed successfully
-            </Typography>
-          </Alert>
-        )}
-        
-        {executionData.hasFreshResults && executionData.isError && (
-          <Alert 
-            severity="error" 
-            icon={<ErrorIcon />}
-            sx={{ mt: 1, fontSize: '0.75rem' }}
-          >
-            <Typography variant="caption">
-              Transcription failed
-            </Typography>
-          </Alert>
-        )}
-        
-        {/* No settings needed for this node */}
-      </Paper>
-    </>
+          <Typography variant="caption">
+            Transcription failed
+          </Typography>
+        </Alert>
+      )}
+    </Box>
+  );
+
+  return (
+    <BaseNode
+      {...props}
+      nodeConfig={nodeConfig}
+      isExecuting={isExecuting}
+      onExecute={handleExecute}
+      customContent={renderCustomContent()}
+      icon={<OpenAILogo />}
+    />
   );
 };
