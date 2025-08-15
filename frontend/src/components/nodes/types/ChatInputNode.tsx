@@ -8,7 +8,7 @@ import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
 import { NodeExecutionStatus } from '../../../types/nodes';
 import { nodeService } from '../../../services/nodeService';
 import { useParams } from 'react-router-dom';
-import { BaseNode } from '../BaseNode';
+import { BaseNode } from '../core/BaseNode';
 import { useNodeConfiguration, useExecutionData } from '../hooks';
 
 export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
@@ -166,6 +166,7 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
   return (
     <BaseNode
       {...props}
+      nodeTypeId="chat_input"
       nodeConfig={nodeConfig}
       onExecute={handleExecute}
       customContent={customContent}

@@ -39,7 +39,7 @@ import { Flow } from '../types';
 import { NodeType, NodeCategory, NodeInstance, NodeConnection, NodeDataType } from '../types/nodes';
 import { flowsAPI } from '../services/api';
 import { nodeService } from '../services/nodeService';
-import { NodeComponentFactory } from '../components/nodes/NodeComponentFactory';
+import { NodeComponentFactory } from '../components/nodes/core/NodeComponentFactory';
 import { edgeTypes } from '../components/edges/CustomEdge';
 import { NodeInspector } from '../components/inspector';
 import { FlowExecutionDialog } from '../components/dialogs/FlowExecutionDialog';

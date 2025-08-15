@@ -6,6 +6,7 @@ import { nodeService } from '../../../services/nodeService';
 export interface UseNodeActionsProps {
   nodeId: string;
   nodeTypeId: string;
+  flowId: number;
   config: NodeConfiguration;
   onNodeUpdate?: (nodeId: string, updates: any) => void;
   onNodeDelete?: (nodeId: string) => void;
@@ -38,6 +39,7 @@ export interface UseNodeActionsReturn {
 export const useNodeActions = ({
   nodeId,
   nodeTypeId,
+  flowId,
   config,
   onNodeUpdate,
   onNodeDelete
@@ -61,8 +63,7 @@ export const useNodeActions = ({
       console.log(`🚀 Executing node ${nodeId} (${nodeTypeId})`);
       
       // Call node execution API
-      const result = await nodeService.execution.executeNode(nodeTypeId, {
-        nodeId,
+      const result = await nodeService.execution.executeNode(flowId, nodeId, {
         // Add any additional execution parameters here
       });
       
@@ -94,7 +95,7 @@ export const useNodeActions = ({
     } finally {
       setIsExecuting(false);
     }
-  }, [nodeId, nodeTypeId, config.features?.hasExecution, isExecuting, onNodeUpdate]);
+  }, [nodeId, nodeTypeId, flowId, config.features?.hasExecution, isExecuting, onNodeUpdate]);
   
   // Open settings dialog
   const handleSettings = useCallback(() => {

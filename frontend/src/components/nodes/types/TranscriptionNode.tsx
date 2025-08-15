@@ -9,7 +9,7 @@ import {
   Error as ErrorIcon
 } from '@mui/icons-material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
-import { BaseNode } from '../BaseNode';
+import { BaseNode } from '../core/BaseNode';
 import { useNodeConfiguration, useExecutionData } from '../hooks';
 import { nodeService } from '../../../services/nodeService';
 
@@ -139,6 +139,7 @@ export const TranscriptionNode: React.FC<NodeComponentProps> = (props) => {
   return (
     <BaseNode
       {...props}
+      nodeTypeId="transcription"
       nodeConfig={nodeConfig}
       isExecuting={isExecuting}
       onExecute={handleExecute}

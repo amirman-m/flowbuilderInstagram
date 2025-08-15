@@ -1,11 +1,11 @@
 // Enhanced NodeComponentFactory with smart routing and configuration injection
 import React, { useMemo } from 'react';
 import { NodeProps } from '@xyflow/react';
-import { getNodeComponent, DefaultNode } from './registry';
-import { getSafeNodeConfiguration, isConfigurationReady } from '../../config/nodeConfiguration';
+import { getNodeComponent, DefaultNode } from '../registry';
+import { getSafeNodeConfiguration, isConfigurationReady } from '../../../config/nodeConfiguration';
 import { BaseNode } from './BaseNode';
-import { FlowNode } from '../../types/nodes';
-import { useNodeConfiguration } from './hooks/useNodeConfiguration';
+import { FlowNode } from '../../../types/nodes';
+import { useNodeConfiguration } from '../hooks/useNodeConfiguration';
 
 /**
  * Smart routing strategies for node rendering

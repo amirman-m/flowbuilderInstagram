@@ -57,19 +57,29 @@ async def execute_transcription(context: Dict[str, Any]) -> NodeExecutionResult:
     voice_data = None
     input_source = None
     session_id = None
+    send_to_transcription = True  # Default to True if not specified
     
     for port_id, port_data in inputs.items():
         if isinstance(port_data, dict):
             # Check for voice_input from voice input node
             if "voice_input" in port_data and port_data.get("input_type") == "voice":
+                # Check if send_to_transcription flag is present and False
+                if "send_to_transcription" in port_data and port_data["send_to_transcription"] is False:
+                    continue  # Skip this input if transcription is disabled
+                    
                 voice_data = port_data["voice_input"]
                 input_source = f"{port_id}.voice_input"
                 session_id = port_data.get("session_id")
                 break
+                
             # Check for message_data structure that contains voice_input
             elif "message_data" in port_data and isinstance(port_data["message_data"], dict):
                 message_data = port_data["message_data"]
                 if "voice_input" in message_data and message_data.get("input_type") == "voice":
+                    # Check if send_to_transcription flag is present and False
+                    if "send_to_transcription" in message_data and message_data["send_to_transcription"] is False:
+                        continue  # Skip this input if transcription is disabled
+                        
                     voice_data = message_data["voice_input"]
                     input_source = f"{port_id}.message_data.voice_input"
                     session_id = message_data.get("session_id")

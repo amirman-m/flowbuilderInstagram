@@ -12,7 +12,7 @@ import {
 } from '@mui/material';
 import { Instagram as InstagramIcon } from '@mui/icons-material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
-import { BaseNode } from '../BaseNode';
+import { BaseNode } from '../core/BaseNode';
 import { useNodeConfiguration, useExecutionData } from '../hooks';
 
 export const InstagramTriggerNode: React.FC<NodeComponentProps> = (props) => {

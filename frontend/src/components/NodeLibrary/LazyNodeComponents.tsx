@@ -35,7 +35,7 @@ const ComponentLoader: React.FC = () => (
  * Bundle: chat-input-node.chunk.js
  */
 export const LazyChatInputNode = lazy(() => 
-  import('../nodes/node-types/ChatInputNode').then(module => ({
+  import('../nodes/types/ChatInputNode').then(module => ({
     default: module.ChatInputNode
   }))
 );
@@ -45,7 +45,7 @@ export const LazyChatInputNode = lazy(() =>
  * Bundle: deepseek-chat-node.chunk.js
  */
 export const LazyDeepSeekChatNode = lazy(() => 
-  import('../nodes/node-types/DeepSeekChatNode').then(module => ({
+  import('../nodes/types/DeepSeekChatNode').then(module => ({
     default: module.DeepSeekChatNode
   }))
 );
@@ -55,7 +55,7 @@ export const LazyDeepSeekChatNode = lazy(() =>
  * Bundle: openai-chat-node.chunk.js
  */
 export const LazyOpenAIChatNode = lazy(() => 
-  import('../nodes/node-types/OpenAIChatNode').then(module => ({
+  import('../nodes/types/OpenAIChatNode').then(module => ({
     default: module.OpenAIChatNode
   }))
 );
@@ -65,7 +65,7 @@ export const LazyOpenAIChatNode = lazy(() =>
  * Bundle: telegram-input-node.chunk.js
  */
 export const LazyTelegramInputNode = lazy(() => 
-  import('../nodes/node-types/TelegramInputNode').then(module => ({
+  import('../nodes/types/TelegramInputNode').then(module => ({
     default: module.TelegramInputNode
   }))
 );
@@ -75,7 +75,7 @@ export const LazyTelegramInputNode = lazy(() =>
  * Bundle: telegram-message-action-node.chunk.js
  */
 export const LazyTelegramMessageActionNode = lazy(() => 
-  import('../nodes/node-types/TelegramMessageActionNode').then(module => ({
+  import('../nodes/types/TelegramMessageActionNode').then(module => ({
     default: module.TelegramMessageActionNode
   }))
 );
@@ -85,7 +85,7 @@ export const LazyTelegramMessageActionNode = lazy(() =>
  * Bundle: voice-input-node.chunk.js
  */
 export const LazyVoiceInputNode = lazy(() => 
-  import('../nodes/node-types/VoiceInputNode').then(module => ({
+  import('../nodes/types/VoiceInputNode').then(module => ({
     default: module.VoiceInputNode
   }))
 );
@@ -95,7 +95,7 @@ export const LazyVoiceInputNode = lazy(() =>
  * Bundle: transcription-node.chunk.js
  */
 export const LazyTranscriptionNode = lazy(() => 
-  import('../nodes/node-types/TranscriptionNode').then(module => ({
+  import('../nodes/types/TranscriptionNode').then(module => ({
     default: module.TranscriptionNode
   }))
 );
@@ -105,7 +105,7 @@ export const LazyTranscriptionNode = lazy(() =>
  * Bundle: instagram-trigger-node.chunk.js
  */
 export const LazyInstagramTriggerNode = lazy(() => 
-  import('../nodes/node-types/InstagramTriggerNode').then(module => ({
+  import('../nodes/types/InstagramTriggerNode').then(module => ({
     default: module.InstagramTriggerNode
   }))
 );

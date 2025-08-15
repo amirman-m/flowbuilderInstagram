@@ -11,7 +11,7 @@ import {
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
 } from '@mui/icons-material';
-import { BaseNode } from '../BaseNode';
+import { BaseNode } from '../core/BaseNode';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
 import { NodeExecutionStatus } from '../../../types/nodes';
 import { useExecutionData } from '../hooks/useExecutionData';

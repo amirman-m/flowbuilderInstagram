@@ -16,7 +16,7 @@ export interface NodeStyles {
   fontSize: string;
   fontWeight: string | number;
   cursor: string;
-  position: string;
+  position: 'static' | 'relative' | 'absolute' | 'fixed' | 'sticky';
   transition: string;
 }
 
@@ -258,7 +258,8 @@ export const createStatusIndicatorStyles = (
     [NodeExecutionStatus.PENDING]: '#94a3b8',
     [NodeExecutionStatus.RUNNING]: '#3b82f6',
     [NodeExecutionStatus.SUCCESS]: '#10b981',
-    [NodeExecutionStatus.ERROR]: '#ef4444'
+    [NodeExecutionStatus.ERROR]: '#ef4444',
+    [NodeExecutionStatus.SKIPPED]: '#9ca3af'  // Added SKIPPED status with a gray color
   };
   
   return {

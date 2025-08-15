@@ -21,7 +21,7 @@ import {
 } from '@mui/icons-material';
 import { IconButton } from '@mui/material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
-import { BaseNode } from '../BaseNode';
+import { BaseNode } from '../core/BaseNode';
 import { nodeService } from '../../../services/nodeService';
 import { useNodeConfiguration, useExecutionData } from '../hooks';
 
@@ -195,6 +195,7 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
     <>
       <BaseNode
         {...props}
+        nodeTypeId="simple-deepseek-chat"
         nodeConfig={nodeConfig}
         validationState={settingsValidationState}
         isExecuting={isExecuting}

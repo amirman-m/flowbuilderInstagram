@@ -20,7 +20,7 @@ import {
   ExpandLess as ExpandLessIcon
 } from '@mui/icons-material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
-import { BaseNode } from '../BaseNode';
+import { BaseNode } from '../core/BaseNode';
 import { nodeService } from '../../../services/nodeService';
 import { useNodeConfiguration, useExecutionData } from '../hooks';
 
@@ -198,15 +198,14 @@ export const OpenAIChatNode: React.FC<NodeComponentProps> = (props) => {
     setIsExecuting(true);
 
     try {
+      // Collect inputs from connected nodes if needed
+      // const inputs = await collectInputsFromConnectedNodes();
+      
+      // Execute the node with the correct parameter structure
       const result = await nodeService.execution.executeNode(
-        id,
-        nodeType?.id || 'openai_chat',
-        currentSettings,
-        {
-          flowId: nodeData.flowId || '1',
-          nodes: getNodes(),
-          edges: getEdges()
-        }
+        parseInt(nodeData.flowId || '1'), // flowId as number
+        id, // nodeId
+        currentSettings // inputs
       );
 
       console.log('OpenAI execution result:', result);
@@ -221,8 +220,7 @@ export const OpenAIChatNode: React.FC<NodeComponentProps> = (props) => {
           nodeData.onExecutionComplete(id, {
             success: true,
             output: output,
-            timestamp: new Date().toISOString(),
-            executionId: result.executionId
+            timestamp: new Date().toISOString()
           });
         }
       } else {
@@ -358,6 +356,7 @@ export const OpenAIChatNode: React.FC<NodeComponentProps> = (props) => {
     <>
       <BaseNode
         {...props}
+        nodeTypeId="simple-openai-chat"
         nodeConfig={nodeConfig}
         validationState={settingsValidationState}
         isExecuting={isExecuting}

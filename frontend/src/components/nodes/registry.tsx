@@ -10,10 +10,10 @@ import {
   Schedule
 } from '@mui/icons-material';
 import { NodeInstance, NodeExecutionStatus, NodeType, NodeCategory } from '../../types/nodes';
-import { ChatInputNode, VoiceInputNode, OpenAIChatNode, DeepSeekChatNode } from './node-types';
-import { TranscriptionNode } from './node-types/TranscriptionNode';
-import { TelegramInputNode } from './node-types/TelegramInputNode';
-import { TelegramMessageActionNode } from './node-types/TelegramMessageActionNode';
+import { ChatInputNode, VoiceInputNode, OpenAIChatNode, DeepSeekChatNode } from './types';
+import { TranscriptionNode } from './types/TranscriptionNode';
+import { TelegramInputNode } from './types/TelegramInputNode';
+import { TelegramMessageActionNode } from './types/TelegramMessageActionNode';
 import { getCategoryColor } from '../../config/nodeConfiguration';
 
 // Import other node components
@@ -37,6 +37,7 @@ export interface NodeDataWithHandlers {
   onNodeUpdate?: (nodeId: string, updates: any) => void;
   onDelete?: (nodeId: string) => void;
   onExecute?: (nodeId: string, data: any) => Promise<void>;
+  onExecutionComplete?: (nodeId: string, result: any) => void;
   executionResult?: any;
 }
 

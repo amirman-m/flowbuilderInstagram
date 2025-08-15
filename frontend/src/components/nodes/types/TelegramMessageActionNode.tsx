@@ -16,7 +16,7 @@ import {
   Error as ErrorIcon
 } from '@mui/icons-material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
-import { BaseNode } from '../BaseNode';
+import { BaseNode } from '../core/BaseNode';
 import { useNodeConfiguration, useExecutionData } from '../hooks';
 import { nodeService } from '../../../services/nodeService';
 import { useParams } from 'react-router-dom';
@@ -220,6 +220,7 @@ export const TelegramMessageActionNode: React.FC<NodeComponentProps> = (props) =
     <>
       <BaseNode
         {...props}
+        nodeTypeId="send_telegram_message"
         nodeConfig={nodeConfig}
         onExecute={handleExecute}
         onSettingsClick={handleSettingsClick}

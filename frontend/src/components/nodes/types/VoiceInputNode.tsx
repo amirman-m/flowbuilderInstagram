@@ -2,7 +2,8 @@
 import React, { useState, useRef } from 'react';
 import { 
   Box, Typography, Dialog, 
-  Button, Alert, LinearProgress
+  Button, Alert, LinearProgress,
+  FormControlLabel, Checkbox
 } from '@mui/material';
 import { 
   Mic as MicIcon, 
@@ -13,7 +14,7 @@ import {
   CheckCircle as CheckCircleIcon 
 } from '@mui/icons-material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
-import { BaseNode } from '../BaseNode';
+import { BaseNode } from '../core/BaseNode';
 import { useNodeConfiguration, useExecutionData } from '../hooks';
 import { nodeService } from '../../../services/nodeService';
 import { useParams } from 'react-router-dom';
@@ -27,6 +28,7 @@ export const VoiceInputNode: React.FC<NodeComponentProps> = (props) => {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
   const [validationState] = useState<'error' | 'success' | 'none'>('none');
+  const [sendToTranscription, setSendToTranscription] = useState(false);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -209,12 +211,14 @@ export const VoiceInputNode: React.FC<NodeComponentProps> = (props) => {
       
       const executionContext = {
         voice_data: base64Audio,
-        content_type: audioBlob.type
+        content_type: audioBlob.type,
+        send_to_transcription: sendToTranscription
       };
       
       console.log('🎤 Sending execution context:', {
         voice_data_length: base64Audio.length,
         content_type: audioBlob.type,
+        send_to_transcription: sendToTranscription,
         flowId,
         nodeId: id
       });
@@ -236,7 +240,7 @@ export const VoiceInputNode: React.FC<NodeComponentProps> = (props) => {
       if (onNodeUpdate && result) {
         const lastExecution = {
           timestamp: new Date().toISOString(),
-          status: result.status || NodeExecutionStatus.SUCCESS,
+          status: result.status || 'success',
           outputs: result.outputs || {}
         };
         
@@ -327,6 +331,7 @@ export const VoiceInputNode: React.FC<NodeComponentProps> = (props) => {
     <>
       <BaseNode
         {...props}
+        nodeTypeId="voice_input"
         nodeConfig={nodeConfig}
         validationState={validationState}
         onExecute={handleExecute}
@@ -421,6 +426,23 @@ export const VoiceInputNode: React.FC<NodeComponentProps> = (props) => {
               </Typography>
             </Box>
           )}
+          
+          {/* Transcription Option */}
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <FormControlLabel
+              control={
+                <Checkbox 
+                  checked={sendToTranscription}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSendToTranscription(e.target.checked)}
+                />
+              }
+              label={
+                <Typography variant="body2">
+                  Send to Transcription Node (if connected)
+                </Typography>
+              }
+            />
+          </Box>
           
           {/* Dialog Actions */}
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
