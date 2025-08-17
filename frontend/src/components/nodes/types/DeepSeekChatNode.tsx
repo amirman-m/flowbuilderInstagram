@@ -115,6 +115,16 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
 
       // 1) Collect inputs from connected upstream nodes (modular and reusable)
       const inputs = await collectInputs();
+      // Persist collected inputs immediately so Data tab can show them (even before execution completes)
+      if (nodeData.onNodeUpdate && id) {
+        nodeData.onNodeUpdate(id, {
+          data: {
+            ...(instance?.data || {}),
+            inputs: inputs
+          },
+          updatedAt: new Date()
+        });
+      }
 
       // 2) Execute node with collected inputs and current settings
       const result = await nodeService.execution.executeNode(
@@ -137,7 +147,9 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
               lastExecution: {
                 ...(result as any)
               },
-              outputs: result.outputs || {}
+              // Keep both outputs and the most recent collected inputs
+              outputs: result.outputs || {},
+              inputs: inputs
             },
             updatedAt: new Date()
           });
