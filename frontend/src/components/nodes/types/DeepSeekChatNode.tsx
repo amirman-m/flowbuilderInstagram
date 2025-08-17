@@ -23,7 +23,8 @@ import { IconButton } from '@mui/material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
 import { BaseNode } from '../core/BaseNode';
 import { nodeService } from '../../../services/nodeService';
-import { useNodeConfiguration, useExecutionData } from '../hooks';
+import { useNodeConfiguration, useExecutionData, useNodeInputs } from '../hooks';
+import { NodeExecutionStatus } from '../../../types/nodes';
 
 // DeepSeek Logo SVG Component
 const DeepSeekLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
@@ -56,6 +57,7 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
   // Use our new modular hooks
   const nodeConfig = useNodeConfiguration(nodeType?.id || 'deepseek_chat');
   const executionData = useExecutionData(nodeData);
+  const { collectInputs, inputs: collectedInputs, isCollecting, inputSources } = useNodeInputs(id);
   
   // Get current settings from instance
   const currentSettings = instance?.data?.settings || {};
@@ -85,20 +87,119 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
     setIsExecuting(true);
 
     try {
+      // Mark node as running so UI shows loading and status indicator updates
+      if (nodeData.onNodeUpdate && id) {
+        nodeData.onNodeUpdate(id, {
+          data: {
+            ...(instance?.data || {}),
+            lastExecution: {
+              status: NodeExecutionStatus.RUNNING,
+              outputs: {},
+              startedAt: new Date().toISOString()
+            },
+            outputs: {}
+          },
+          updatedAt: new Date()
+        });
+      }
+
+      // 1) Collect inputs from connected upstream nodes (modular and reusable)
+      const inputs = await collectInputs();
+
+      // 2) Execute node with collected inputs and current settings
       const result = await nodeService.execution.executeNode(
         parseInt(flowId || '1'),
         id,
+        inputs,
         currentSettings
       );
 
       if (result && result.outputs) {
-        // Execution completed successfully
-        // The useExecutionData hook will automatically pick up the fresh results
+        // Persist fresh results under instance.data for downstream nodes
+        if (nodeData.onNodeUpdate && id) {
+          nodeData.onNodeUpdate(id, {
+            data: {
+              ...(instance?.data || {}),
+              lastExecution: {
+                ...(result as any)
+              },
+              outputs: result.outputs || {}
+            },
+            updatedAt: new Date()
+          });
+        }
+        // Also emit root-level execution event for UI hooks (fresh results)
+        if (nodeData.onExecutionComplete) {
+          nodeData.onExecutionComplete(id, {
+            status: (result.status as any) || NodeExecutionStatus.SUCCESS,
+            outputs: result.outputs || {},
+            error: (result as any).error,
+            startedAt: (result as any).startedAt || new Date().toISOString(),
+            completedAt: (result as any).completedAt || new Date().toISOString(),
+            metadata: (result as any).metadata,
+            success: ((result as any).status || 'success') === NodeExecutionStatus.SUCCESS,
+            timestamp: new Date().toISOString()
+          });
+        }
       } else {
+        // Explicit failure path
+        if (nodeData.onNodeUpdate && id) {
+          nodeData.onNodeUpdate(id, {
+            data: {
+              ...(instance?.data || {}),
+              lastExecution: {
+                status: NodeExecutionStatus.ERROR,
+                outputs: {},
+                error: (result as any)?.error || 'Execution returned no outputs',
+                startedAt: new Date().toISOString(),
+                completedAt: new Date().toISOString()
+              }
+            },
+            updatedAt: new Date()
+          });
+        }
+        if (nodeData.onExecutionComplete) {
+          nodeData.onExecutionComplete(id, {
+            status: NodeExecutionStatus.ERROR,
+            outputs: {},
+            error: (result as any)?.error || 'Execution returned no outputs',
+            startedAt: new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+            success: false,
+            timestamp: new Date().toISOString()
+          });
+        }
         alert('Execution failed');
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
+      // Update node state with error so UI reflects failure
+      if (nodeData.onNodeUpdate && id) {
+        nodeData.onNodeUpdate(id, {
+          data: {
+            ...(instance?.data || {}),
+            lastExecution: {
+              status: NodeExecutionStatus.ERROR,
+              outputs: {},
+              error: errorMsg,
+              startedAt: new Date().toISOString(),
+              completedAt: new Date().toISOString()
+            }
+          },
+          updatedAt: new Date()
+        });
+      }
+      if (nodeData.onExecutionComplete) {
+        nodeData.onExecutionComplete(id, {
+          status: NodeExecutionStatus.ERROR,
+          outputs: {},
+          error: errorMsg,
+          startedAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+          success: false,
+          timestamp: new Date().toISOString()
+        });
+      }
       alert(`Execution error: ${errorMsg}`);
     } finally {
       setIsExecuting(false);
@@ -120,7 +221,8 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
         data: {
           ...instance?.data,
           settings: localSettings
-        }
+        },
+        updatedAt: new Date()
       });
     }
     setSettingsOpen(false);
@@ -133,62 +235,83 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
     }));
   };
 
+  // Convert any AI response payload to plain text, removing emojis/HTML/markdown
+  const toPlainText = (input: any): string => {
+    let text = '';
+    if (typeof input === 'string') {
+      text = input;
+    } else if (input && typeof input === 'object') {
+      if (typeof (input as any).aiResponse === 'string') {
+        text = (input as any).aiResponse;
+      } else if (typeof (input as any).ai_response === 'string') {
+        text = (input as any).ai_response;
+      } else {
+        try {
+          text = JSON.stringify(input);
+        } catch {
+          text = String(input);
+        }
+      }
+    } else if (input != null) {
+      text = String(input);
+    }
+    // Strip HTML tags
+    text = text.replace(/<[^>]+>/g, ' ');
+    // Strip basic markdown tokens
+    text = text.replace(/[*_`>#-]+/g, ' ');
+    
+    // Collapse whitespace
+    return text.replace(/\s+/g, ' ').trim();
+  };
+
   // Custom content for DeepSeek node
   const renderCustomContent = () => (
-    <Box sx={{ mt: 1 }}>
-      <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>
-        Model: {model || 'Not configured'}
-      </Typography>
-      <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>
-        Temperature: {temperature}
-      </Typography>
-      {system_prompt && (
-        <Typography 
-          variant="caption" 
-          sx={{ 
-            color: '#666', 
-            display: 'block',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            maxWidth: '150px'
-          }}
-        >
-          Prompt: {system_prompt}
-        </Typography>
-      )}
-
-      {/* Execution Results Display */}
-      {executionData.hasFreshResults && (
-        <Box sx={{ mt: 1, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
-          <Typography variant="caption" sx={{ color: '#666', fontWeight: 600 }}>
-            Latest Execution:
+    <Box sx={{ mt: 0.5 }}>
+      {!executionData.isExecuted && (
+        <>
+          <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>
+            Model: {model || 'Not configured'}
           </Typography>
-          {executionData.displayData && (
+          {system_prompt && (
             <Typography 
               variant="caption" 
               sx={{ 
+                color: '#666', 
                 display: 'block',
-                mt: 0.5,
-                color: '#333',
-                fontSize: '0.75rem',
-                lineHeight: 1.3,
-                maxHeight: '60px',
                 overflow: 'hidden',
-                wordBreak: 'break-word'
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                maxWidth: '150px'
               }}
+              title={system_prompt}
             >
-              {typeof executionData.displayData === 'object' && executionData.displayData.aiResponse
-                ? executionData.displayData.aiResponse.substring(0, 100) + (executionData.displayData.aiResponse.length > 100 ? '...' : '')
-                : 'Execution completed'
-              }
+              Prompt: {system_prompt}
             </Typography>
           )}
-          {executionData.lastExecuted && (
-            <Typography variant="caption" sx={{ color: '#999', fontSize: '0.7rem' }}>
-              {new Date(executionData.lastExecuted).toLocaleTimeString()}
-            </Typography>
-          )}
+        </>
+      )}
+
+      {/* Execution Results Display */}
+      {executionData.isExecuted && executionData.displayData && (
+        <Box sx={{ mt: 0.5, py: 0.75, px: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+          <Typography variant="caption" sx={{ color: '#666', fontWeight: 600, mb: 0.25, display: 'block' }}>
+            Latest Execution:
+          </Typography>
+          <Typography 
+            variant="caption" 
+            sx={{ 
+              display: 'block',
+              color: '#333',
+              fontSize: '0.8rem',
+              lineHeight: 1.25,
+              maxHeight: '180px',
+              overflowY: 'auto',
+              wordBreak: 'break-word',
+              whiteSpace: 'normal'
+            }}
+          >
+            {toPlainText((executionData.displayData as any).aiResponse ?? executionData.displayData)}
+          </Typography>
         </Box>
       )}
     </Box>

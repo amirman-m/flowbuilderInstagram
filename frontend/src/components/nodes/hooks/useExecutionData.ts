@@ -68,14 +68,13 @@ export const useExecutionData = (data: NodeDataWithHandlers) => {
     const outputs = (data as any)?.outputs;
     const status = (data as any)?.status;
     const executionTime = (data as any)?.executionTime;
-    const lastExecuted = (data as any)?.lastExecuted;
     
     // Get static instance data as fallback
     const instance = data?.instance;
     const instanceData = instance?.data || {};
     
     // Determine if we have fresh execution results
-    const hasFreshResults = Boolean(executionResult && outputs);
+    const hasFreshResults = Boolean(executionResult || outputs);
     
     // Get the most recent output data (execution results take priority over instance data)
     // For Telegram webhook results, also check lastExecution.outputs
@@ -83,11 +82,16 @@ export const useExecutionData = (data: NodeDataWithHandlers) => {
     
     // If no outputs found, check lastExecution data (for webhook-triggered executions)
     if (!currentOutputs || Object.keys(currentOutputs).length === 0) {
-      const lastExecution = (instance as any)?.lastExecution;
+      const lastExecution = instanceData?.lastExecution;
       if (lastExecution && lastExecution.outputs) {
         currentOutputs = lastExecution.outputs;
       }
     }
+    
+    // Resolve last executed timestamp from either root-level data or instance lastExecution
+    const resolvedLastExecuted = (data as any)?.lastExecuted 
+      || instanceData?.lastExecution?.completedAt 
+      || instanceData?.lastExecution?.startedAt;
     
     // Extract specific output values based on node type
     const getOutputValue = (portId: string) => {
@@ -133,7 +137,7 @@ export const useExecutionData = (data: NodeDataWithHandlers) => {
       hasFreshResults,
       status: status || 'idle',
       executionTime,
-      lastExecuted,
+      lastExecuted: resolvedLastExecuted,
       
       // Output data
       outputs: currentOutputs,

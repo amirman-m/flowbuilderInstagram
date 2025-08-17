@@ -172,9 +172,13 @@ export const nodeExecutionAPI = {
   executeNode: async (
     flowId: number, 
     nodeId: string, 
-    inputs?: Record<string, any>
+    inputs?: Record<string, any>,
+    settings?: Record<string, any>
   ): Promise<NodeExecutionResult> => {
-    const response = await api.post(`/flows/${flowId}/nodes/${nodeId}/execute`, { inputs });
+    const payload: Record<string, any> = {};
+    if (inputs) payload.inputs = inputs;
+    if (settings) payload.settings = settings;
+    const response = await api.post(`/flows/${flowId}/nodes/${nodeId}/execute`, payload);
     return response.data;
   },
 

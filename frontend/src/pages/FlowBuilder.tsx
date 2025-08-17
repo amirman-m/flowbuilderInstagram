@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -23,9 +23,8 @@ import {
   MiniMap,
   Controls,
   Background,
-  useNodesState,
-  useEdgesState,
   addEdge,
+  applyEdgeChanges,
   Connection,
   Edge,
   Node,
@@ -35,7 +34,6 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { Flow } from '../types';
 import { NodeType, NodeCategory, NodeInstance, NodeConnection, NodeDataType } from '../types/nodes';
 import { flowsAPI } from '../services/api';
 import { nodeService } from '../services/nodeService';
@@ -47,6 +45,7 @@ import { loadNodeConfigurations } from '../config/nodeConfiguration';
 import { useConnectionValidation } from '../hooks/useConnectionValidation';
 import { useSnackbar } from '../components/SnackbarProvider';
 import { ModernNodeLibrary } from '../components/NodeLibrary';
+import { useFlowBuilderStore } from '../store/flowBuilderStore';
 import '../styles/connectionValidation.css';
 import '../styles/flowBuilder.css';
 
@@ -58,27 +57,54 @@ const nodeTypes = {
 // Inner FlowBuilder component that uses React Flow hooks
 const FlowBuilderInner: React.FC = () => {
   const { showSnackbar } = useSnackbar();
-  
-  // Local editable name state
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [flowName, setFlowName] = useState('');
-  const [nameSaving, setNameSaving] = useState(false);
-
   const { flowId } = useParams<{ flowId: string }>();
   const navigate = useNavigate();
   const reactFlowInstance = useReactFlow();
   
-  const [flow, setFlow] = useState<Flow | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Use centralized store
+  const {
+    // Flow state
+    flow, flowName, isEditingName, nameSaving, loading, saving,
+    // Node state
+    nodes, edges, availableNodeTypes,
+    // Inspector state
+    selectedNode, selectedNodeType, inspectorOpen,
+    // Execution state
+    executionDialogOpen, triggerNodeId, triggerNodeType,
+    // Actions
+    setFlow, setFlowName, setIsEditingName, setNameSaving, setLoading, setSaving,
+    setNodes, setEdges, setAvailableNodeTypes,
+    setSelectedNode, setSelectedNodeType, setInspectorOpen,
+    setExecutionDialogOpen, setTriggerNodeId, setTriggerNodeType,
+    updateNode, deleteNode, syncExecutionResults
+  } = useFlowBuilderStore();
 
-  const [saving, setSaving] = useState(false);
-  const [availableNodeTypes, setAvailableNodeTypes] = useState<NodeType[]>([]);
-  
-  // React Flow state
-  const [nodes, setNodes, onNodesChange] = useNodesState([] as Node[]);
+  // React Flow change handlers
+  const onNodesChange = useCallback((changes: any) => {
+    setNodes((nds) => {
+      const updatedNodes = [...nds];
+      changes.forEach((change: any) => {
+        const nodeIndex = updatedNodes.findIndex(n => n.id === change.id);
+        if (nodeIndex >= 0) {
+          if (change.type === 'position' && change.position) {
+            updatedNodes[nodeIndex] = {
+              ...updatedNodes[nodeIndex],
+              position: change.position
+            };
+          } else if (change.type === 'remove') {
+            updatedNodes.splice(nodeIndex, 1);
+          }
+        }
+      });
+      return updatedNodes;
+    });
+  }, [setNodes]);
+
+  const onEdgesChange = useCallback((changes: any) => {
+    setEdges((eds) => applyEdgeChanges(changes, eds));
+  }, [setEdges]);
 
   // When node types are loaded, ensure all existing nodes have their nodeType attached
-  // AND retry loading flow if it was waiting for node types
   useEffect(() => {
     if (availableNodeTypes.length === 0 || nodes.length === 0) return;
     let updated = false;
@@ -103,7 +129,7 @@ const FlowBuilderInner: React.FC = () => {
     if (updated) {
       setEdges((es) => es.map((e) => ({ ...e })));
     }
-  }, [availableNodeTypes, flowId, nodes.length, loading]);
+  }, [availableNodeTypes, flowId, nodes.length, loading, setNodes, setEdges]);
   
   // First declare the mapConnection without the onEdgeDelete handler
   const mapConnection = useCallback((c: NodeConnection): Edge => ({
@@ -115,9 +141,8 @@ const FlowBuilderInner: React.FC = () => {
     type: 'custom',
   }), []);
 
-  const [edges, setEdges, onEdgesChange] = useEdgesState([] as Edge[]);
   
-  // Now define onEdgeDelete after setEdges is available
+  // Define onEdgeDelete
   const onEdgeDelete = useCallback((edgeId: string) => {
     setEdges((eds) => eds.filter((edge) => edge.id !== edgeId));
   }, [setEdges]);
@@ -142,11 +167,8 @@ const FlowBuilderInner: React.FC = () => {
   // Initialize connection validation
   const {
     validateConnection,
-    isConnectionValid,
     getValidatedEdges,
-    onConnect: handleConnect,
-    isValidConnection,
-    getConnectionError
+    isValidConnection
   } = useConnectionValidation(nodes, nodeTypesMap, {
     realTimeValidation: true,
     preventInvalidConnections: true
@@ -187,15 +209,6 @@ const FlowBuilderInner: React.FC = () => {
     return getValidatedEdges(edges);
   }, [getValidatedEdges, edges]);
   
-  // Node Inspector state
-  const [selectedNode, setSelectedNode] = useState<NodeInstance | null>(null);
-  const [selectedNodeType, setSelectedNodeType] = useState<NodeType | null>(null);
-  const [inspectorOpen, setInspectorOpen] = useState(false);
-  
-  // Flow execution state
-  const [executionDialogOpen, setExecutionDialogOpen] = useState(false);
-  const [triggerNodeId, setTriggerNodeId] = useState<string | null>(null);
-  const [triggerNodeType, setTriggerNodeType] = useState<string | null>(null);
 
   // Load node types on mount, then load the flow
   useEffect(() => {
@@ -231,7 +244,6 @@ const FlowBuilderInner: React.FC = () => {
       setLoading(true);
       const flowData = await flowsAPI.getFlow(parseInt(flowId));
       setFlow(flowData);
-      setFlowName(flowData.name);
       
       // Fetch graph from backend
       const flowNodes = await flowsAPI.getFlowNodes(parseInt(flowId));
@@ -363,21 +375,18 @@ const FlowBuilderInner: React.FC = () => {
     }
   };
 
-  const handleSave = async (callback?: (error?: Error) => void) => {
+  const handleSave = async () => {
     if (!flowId) {
       const error = new Error("No flow ID available to save.");
       showSnackbar({
         message: `Failed to save flow: ${error.message}`,
         severity: 'error',
       });
-      callback?.(error);
       return;
     }
 
     try {
       setSaving(true);
-      // Get the current view state from React Flow
-      const currentViewport = reactFlowInstance.getViewport();
       // Prepare node instances with current position & settings
       const nodeInstances = nodes.map((node) => {
         const nodeData = node.data as any;
@@ -412,14 +421,12 @@ const FlowBuilderInner: React.FC = () => {
         message: 'Flow saved successfully',
         severity: 'success',
       });
-      callback?.(); // Signal success
     } catch (err: any) {
       console.error('Error saving flow:', err);
       showSnackbar({
         message: `Failed to save flow: ${err?.message || 'Unknown error'}`,
         severity: 'error',
       });
-      callback?.(err); // Signal error
     } finally {
       setSaving(false);
     }
@@ -482,49 +489,6 @@ const FlowBuilderInner: React.FC = () => {
     setExecutionDialogOpen(true);
   };
 
-  // Sync frontend node states with backend execution results
-  const syncNodeStatesWithExecutionResults = async (executionResults: Record<string, any>) => {
-    console.log('🔄 Syncing node states with execution results:', executionResults);
-    
-    // Update nodes state with execution results
-    setNodes((currentNodes) => 
-      currentNodes.map((node) => {
-        const nodeId = node.id;
-        const executionResult = executionResults[nodeId];
-        
-        if (executionResult && executionResult.outputs) {
-          console.log(`📝 Updating node ${nodeId} with outputs:`, executionResult.outputs);
-          
-          // Safely access and update node data
-          const currentData = (node.data as any) || {};
-          
-          // Update the node's data with the execution outputs
-          const updatedNode = {
-            ...node,
-            data: {
-              ...currentData,
-              // Store execution results in the node data
-              executionResult: executionResult,
-              // Update outputs for display in the node
-              outputs: executionResult.outputs,
-              // Update status and metadata
-              status: executionResult.status,
-              executionTime: executionResult.execution_time_ms,
-              lastExecuted: executionResult.completed_at,
-              // Ensure instance data is preserved
-              instance: currentData.instance
-            }
-          };
-          
-          return updatedNode;
-        }
-        
-        return node;
-      })
-    );
-    
-    console.log('✅ Frontend node states updated with execution results');
-  };
 
   const handleFlowExecution = async (triggerInputs: Record<string, any>) => {
     if (!flowId) {
@@ -541,7 +505,7 @@ const FlowBuilderInner: React.FC = () => {
       console.log('✅ Flow execution completed:', result);
       
       // Update frontend node states with execution results
-      await syncNodeStatesWithExecutionResults(result.execution_results);
+      syncExecutionResults(result.execution_results);
       
       // Close dialog after successful execution
       setExecutionDialogOpen(false);
@@ -560,15 +524,8 @@ const FlowBuilderInner: React.FC = () => {
 
   // Handle node deletion
   const onNodeDelete = useCallback((nodeId: string) => {
-    setNodes((nds) => nds.filter((node) => node.id !== nodeId));
-    setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
-    // Close inspector if deleted node was selected
-    if (selectedNode?.id === nodeId) {
-      setInspectorOpen(false);
-      setSelectedNode(null);
-      setSelectedNodeType(null);
-    }
-  }, [setNodes, setEdges, selectedNode]);
+    deleteNode(nodeId);
+  }, [deleteNode]);
 
 
 
@@ -577,7 +534,11 @@ const FlowBuilderInner: React.FC = () => {
     const handleAutoSave = (event: Event) => {
       const customEvent = event as CustomEvent;
       console.log(`💾 Auto-saving flow due to: ${customEvent.detail.reason}`);
-      handleSave(customEvent.detail.callback);
+      handleSave().then(() => {
+        customEvent.detail.callback?.();
+      }).catch((error) => {
+        customEvent.detail.callback?.(error);
+      });
     };
 
     window.addEventListener('autoSaveFlow', handleAutoSave);
@@ -598,116 +559,8 @@ const FlowBuilderInner: React.FC = () => {
 
   // Handle node updates from inspector and node execution results
   const handleNodeUpdate = useCallback((nodeId: string, updates: any) => {
-    console.log('🔄 Updating node:', nodeId, updates);
-    
-    setNodes((nds) => {
-      const updatedNodes = nds.map((node) => {
-        if (node.id === nodeId) {
-          // Type assertion for node.data to access its properties
-          const nodeData = node.data as any;
-          
-          // Check if this is a lastExecution update from a node component
-          if (updates.data?.lastExecution) {
-            console.log('📊 Updating node execution results:', updates.data.lastExecution);
-            
-            // Create a new node with updated execution results
-            const updatedNode = {
-              ...node,
-              data: {
-                ...nodeData,
-                instance: {
-                  ...(nodeData.instance || {}),
-                  data: {
-                    ...(nodeData.instance?.data || {}),
-                    lastExecution: updates.data.lastExecution,
-                    ...(updates.data.inputs ? { inputs: updates.data.inputs } : {})
-                  }
-                }
-              }
-            };
-            
-            // Only update selectedNode and open inspector if not already editing this node
-            const isCurrentlyEditingThisNode = selectedNode?.id === nodeId && inspectorOpen;
-            
-            // Find the updated node from the nodes array
-            const nodeInstance = (updatedNode.data as any).instance as NodeInstance;
-            
-            const updatedSelectedNode: NodeInstance = {
-              ...nodeInstance,
-              data: {
-                ...nodeInstance.data,
-                lastExecution: updates.data.lastExecution,
-                ...(updates.data.inputs ? { inputs: updates.data.inputs } : {})
-              }
-            };
-            
-            if (!isCurrentlyEditingThisNode) {
-              console.log('🔍 Updating selectedNode and opening inspector for execution results');
-              
-              // Update selectedNode and open inspector to show results
-              setSelectedNode(updatedSelectedNode);
-              setSelectedNodeType((updatedNode.data as any).instance.nodeType);
-              setInspectorOpen(true);
-              
-              console.log('🔄 Updated selectedNode and opened inspector with execution results:', updatedSelectedNode);
-            } else {
-              console.log('🔒 Node is currently being edited, not overriding inspector state');
-              // Still update the selectedNode data to reflect execution results, but don't change inspector state
-              if (selectedNode?.id === nodeId) {
-                setSelectedNode(updatedSelectedNode);
-              }
-            }
-            
-            return updatedNode;
-          }
-          
-          // Regular update from inspector
-          console.log('🔧 Processing regular update from inspector:', updates);
-          
-          // Handle settings updates properly
-          if (updates.data?.settings) {
-            console.log('⚙️ Updating node settings:', updates.data.settings);
-            
-            const updatedNode = {
-              ...node,
-              data: {
-                ...nodeData,
-                instance: {
-                  ...(nodeData.instance || {}),
-                  data: {
-                    ...(nodeData.instance?.data || {}),
-                    settings: updates.data.settings
-                  }
-                }
-              }
-            };
-            
-            // Update selectedNode to maintain inspector state
-            const updatedInstance = (updatedNode.data as any).instance as NodeInstance;
-            setSelectedNode(updatedInstance);
-            
-            console.log('✅ Node updated with settings:', updatedInstance.data?.settings);
-            return updatedNode;
-          }
-          
-          // Handle other updates
-          return {
-            ...node,
-            data: {
-              ...nodeData,
-              instance: {
-                ...(nodeData.instance || {}),
-                ...updates
-              }
-            }
-          };
-        }
-        return node;
-      });
-      
-      return updatedNodes;
-    });
-  }, [setNodes, selectedNode]);
+    updateNode(nodeId, updates);
+  }, [updateNode]);
 
   // Legacy handleChatInputExecution removed - now handled by individual node components
 
@@ -788,19 +641,6 @@ const FlowBuilderInner: React.FC = () => {
     } as Node;
   }, [availableNodeTypes, onNodeDelete, handleNodeUpdate, flowId]);
 
-  // Category colors for node types
-  const getCategoryColor = (category: NodeCategory) => {
-    switch (category) {
-      case NodeCategory.TRIGGER:
-        return '#4CAF50';
-      case NodeCategory.PROCESSOR:
-        return '#2196F3';
-      case NodeCategory.ACTION:
-        return '#FF9800';
-      default:
-        return '#757575';
-    }
-  };
 
 
   const handleNameSave = async () => {
@@ -895,7 +735,7 @@ const FlowBuilderInner: React.FC = () => {
             <Button
               variant="contained"
               startIcon={<SaveIcon />}
-              onClick={handleSave}
+              onClick={() => handleSave()}
               disabled={saving}
             >
               {saving ? 'Saving...' : 'Save'}
@@ -944,7 +784,7 @@ const FlowBuilderInner: React.FC = () => {
             deleteKeyCode={null}
             fitView
             attributionPosition="bottom-left"
-            isValidConnection={isValidConnection}
+            isValidConnection={(connection) => isValidConnection(connection as Connection)}
           >
             <Controls />
             <MiniMap />
