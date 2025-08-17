@@ -13,11 +13,13 @@ import {
   FormControl,
   InputLabel,
   Typography,
-  Box
+  Box,
+  Tooltip
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon
+  ExpandLess as ExpandLessIcon,
+  InfoOutlined as InfoOutlinedIcon
 } from '@mui/icons-material';
 import { IconButton } from '@mui/material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
@@ -356,7 +358,18 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
             <FormControl fullWidth>
-              <InputLabel>Model</InputLabel>
+              <InputLabel>
+                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                  Model
+                  <Tooltip
+                    title="Which DeepSeek brain to use. 'deepseek-chat' is fast and cheaper. 'deepseek-reasoner' thinks deeper but is slower and costlier."
+                    placement="right"
+                    arrow
+                  >
+                    <InfoOutlinedIcon sx={{ fontSize: 16, color: 'action.active' }} />
+                  </Tooltip>
+                </Box>
+              </InputLabel>
               <Select
                 value={localSettings.model || ''}
                 label="Model"
@@ -368,7 +381,18 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
             </FormControl>
 
             <TextField
-              label="System Prompt"
+              label={
+                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                  System Prompt
+                  <Tooltip
+                    title="Tell the AI how to act. Example: 'You are a helpful assistant. Answer briefly.'"
+                    placement="right"
+                    arrow
+                  >
+                    <InfoOutlinedIcon sx={{ fontSize: 16, color: 'action.active' }} />
+                  </Tooltip>
+                </Box>
+              }
               multiline
               rows={expandedPrompt ? 8 : 4}
               value={localSettings.system_prompt || ''}
@@ -392,7 +416,18 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
             />
 
             <TextField
-              label="Temperature"
+              label={
+                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                  Temperature
+                  <Tooltip
+                    title="Creativity level. Lower = safer and more exact. Higher = more creative and random."
+                    placement="right"
+                    arrow
+                  >
+                    <InfoOutlinedIcon sx={{ fontSize: 16, color: 'action.active' }} />
+                  </Tooltip>
+                </Box>
+              }
               type="number"
               value={localSettings.temperature || 0.7}
               onChange={(e) => handleLocalSettingChange('temperature', parseFloat(e.target.value))}
