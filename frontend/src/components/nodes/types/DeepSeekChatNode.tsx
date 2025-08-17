@@ -43,7 +43,8 @@ const DeepSeekLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
 
 export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
   const { data, id } = props;
-  const [settingsValidationState, setSettingsValidationState] = useState<'error' | 'success' | 'none'>('none');
+  const [nodeStatus, setNodeStatus] = useState<NodeExecutionStatus>(NodeExecutionStatus.PENDING);
+  const [statusMessage, setStatusMessage] = useState<string>('');
   const [isExecuting, setIsExecuting] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [localSettings, setLocalSettings] = useState<any>({});
@@ -54,7 +55,7 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
   const nodeData = data as NodeDataWithHandlers;
   const { nodeType, instance } = nodeData;
   
-  // Use our new modular hooks
+  // Use hooks
   const nodeConfig = useNodeConfiguration(nodeType?.id || 'deepseek_chat');
   const executionData = useExecutionData(nodeData);
   const { collectInputs, inputs: collectedInputs, isCollecting, inputSources } = useNodeInputs(id);
@@ -70,21 +71,30 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
     }
   }, [settingsOpen, currentSettings]);
 
-  // Validation effect
+  // Status validation effect
   useEffect(() => {
-    const hasRequiredSettings = model && system_prompt && temperature && max_tokens;
-    setSettingsValidationState(hasRequiredSettings ? 'success' : 'error');
-  }, [model, system_prompt, temperature, max_tokens]);
+    const hasRequiredSettings = model && system_prompt;
+    if (!hasRequiredSettings) {
+      setNodeStatus(NodeExecutionStatus.SKIPPED);
+      setStatusMessage('Settings not configured');
+    } else {
+      setNodeStatus(NodeExecutionStatus.PENDING);
+      setStatusMessage('Ready to execute');
+    }
+  }, [model, system_prompt]);
 
 
 
   const handleExecute = async () => {
     if (!model || !system_prompt) {
-      alert('Please configure the model and system prompt first.');
+      setNodeStatus(NodeExecutionStatus.ERROR);
+      setStatusMessage('Please configure settings first');
       return;
     }
 
     setIsExecuting(true);
+    setNodeStatus(NodeExecutionStatus.RUNNING);
+    setStatusMessage('Executing...');
 
     try {
       // Mark node as running so UI shows loading and status indicator updates
@@ -93,7 +103,7 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
           data: {
             ...(instance?.data || {}),
             lastExecution: {
-              status: NodeExecutionStatus.RUNNING,
+              status: NodeExecutionStatus.RUNNING as NodeExecutionStatus,
               outputs: {},
               startedAt: new Date().toISOString()
             },
@@ -115,6 +125,10 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
       );
 
       if (result && result.outputs) {
+        // Success status
+        setNodeStatus(NodeExecutionStatus.SUCCESS);
+        setStatusMessage('Execution completed successfully');
+        
         // Persist fresh results under instance.data for downstream nodes
         if (nodeData.onNodeUpdate && id) {
           nodeData.onNodeUpdate(id, {
@@ -143,6 +157,9 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
         }
       } else {
         // Explicit failure path
+        setNodeStatus(NodeExecutionStatus.ERROR);
+        setStatusMessage('Execution failed - no outputs');
+        
         if (nodeData.onNodeUpdate && id) {
           nodeData.onNodeUpdate(id, {
             data: {
@@ -169,10 +186,14 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
             timestamp: new Date().toISOString()
           });
         }
-        alert('Execution failed');
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
+      
+      // Error status
+      setNodeStatus(NodeExecutionStatus.ERROR);
+      setStatusMessage(`Error: ${errorMsg}`);
+      
       // Update node state with error so UI reflects failure
       if (nodeData.onNodeUpdate && id) {
         nodeData.onNodeUpdate(id, {
@@ -200,7 +221,6 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
           timestamp: new Date().toISOString()
         });
       }
-      alert(`Execution error: ${errorMsg}`);
     } finally {
       setIsExecuting(false);
     }
@@ -323,7 +343,8 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
         {...props}
         nodeTypeId="simple-deepseek-chat"
         nodeConfig={nodeConfig}
-        validationState={settingsValidationState}
+        status={nodeStatus}
+        statusMessage={statusMessage}
         isExecuting={isExecuting}
         onExecute={handleExecute}
         onSettingsClick={handleSettingsClick}

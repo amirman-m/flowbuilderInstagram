@@ -5,7 +5,8 @@ export type { NodeHeaderProps } from './NodeHeader';
 export { NodeHandles } from './NodeHandles';
 export type { NodeHandlesProps } from './NodeHandles';
 
-export { NodeStatusIndicator, NodeExecutionStatus } from './NodeStatusIndicator';
+export { NodeStatusIndicator } from './NodeStatusIndicator';
+export { NodeExecutionStatus } from '../../../types/nodes';
 export type { NodeStatusIndicatorProps } from './NodeStatusIndicator';
 
 export { NodeActionButtons } from './NodeActionButtons';

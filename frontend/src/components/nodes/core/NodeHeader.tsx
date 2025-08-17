@@ -1,54 +1,36 @@
 // Shared NodeHeader component for consistent node headers
 import React from 'react';
-import { Box, Typography, Chip, Tooltip } from '@mui/material';
+import { Box, Typography, Tooltip } from '@mui/material';
 import { NodeConfiguration } from '../../../config/nodeConfiguration';
-import { NodeCategory } from '../../../types/nodes';
+import { NodeStatusIndicator } from './NodeStatusIndicator';
+import { NodeExecutionStatus } from '../../../types/nodes';
 
 export interface NodeHeaderProps {
   config: NodeConfiguration;
   isSelected?: boolean;
   isExecuting?: boolean;
+  status?: NodeExecutionStatus;
+  statusMessage?: string;
   onHeaderClick?: () => void;
 }
 
 /**
  * Reusable NodeHeader component providing consistent styling and behavior
- * across all node types. Handles icon display, title, category chip, and
+ * across all node types. Handles icon display, title, status indicator, and
  * interactive states.
  */
 export const NodeHeader: React.FC<NodeHeaderProps> = ({
   config,
   isSelected = false,
   isExecuting = false,
+  status = NodeExecutionStatus.PENDING,
+  statusMessage,
   onHeaderClick
 }) => {
   const IconComponent = config.icon;
   
-  const getCategoryDisplayName = (category: NodeCategory): string => {
-    switch (category) {
-      case NodeCategory.TRIGGER:
-        return 'Trigger';
-      case NodeCategory.PROCESSOR:
-        return 'Processor';
-      case NodeCategory.ACTION:
-        return 'Action';
-      default:
-        return 'Node';
-    }
-  };
-
-  const getCategoryColor = (category: NodeCategory): string => {
-    switch (category) {
-      case NodeCategory.TRIGGER:
-        return '#10b981'; // Green
-      case NodeCategory.PROCESSOR:
-        return '#3b82f6'; // Blue
-      case NodeCategory.ACTION:
-        return '#f59e0b'; // Orange
-      default:
-        return '#6b7280'; // Gray
-    }
-  };
+  // Determine status based on execution state if not explicitly provided
+  const currentStatus = isExecuting ? NodeExecutionStatus.RUNNING : status;
 
   return (
     <Box
@@ -61,6 +43,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
         backgroundColor: isExecuting ? 'action.hover' : 'transparent',
         cursor: onHeaderClick ? 'pointer' : 'default',
         transition: 'all 0.2s ease-in-out',
+        position: 'relative',
         '&:hover': onHeaderClick ? {
           backgroundColor: 'action.hover'
         } : {}
@@ -105,20 +88,11 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
         </Tooltip>
       </Box>
 
-      {/* Right side: Category Chip */}
-      <Chip
-        label={getCategoryDisplayName(config.category)}
+      {/* Right side: Status Indicator */}
+      <NodeStatusIndicator
+        status={currentStatus}
+        message={statusMessage}
         size="small"
-        sx={{
-          height: '20px',
-          fontSize: '10px',
-          fontWeight: 600,
-          backgroundColor: getCategoryColor(config.category),
-          color: 'white',
-          '& .MuiChip-label': {
-            padding: '0 6px'
-          }
-        }}
       />
     </Box>
   );

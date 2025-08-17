@@ -4,20 +4,14 @@ import { Box, Tooltip, CircularProgress } from '@mui/material';
 import {
   CheckCircle as SuccessIcon,
   Error as ErrorIcon,
-  Schedule as PendingIcon,
-  PlayArrow as ReadyIcon
+  Warning as WarningIcon,
+  RadioButtonUnchecked as IdleIcon
 } from '@mui/icons-material';
-
-export enum NodeExecutionStatus {
-  IDLE = 'idle',
-  PENDING = 'pending',
-  RUNNING = 'running',
-  SUCCESS = 'success',
-  ERROR = 'error'
-}
+import { NodeExecutionStatus } from '../../../types/nodes';
 
 export interface NodeStatusIndicatorProps {
   status: NodeExecutionStatus;
+  message?: string;
   executionTime?: number;
   lastExecuted?: string;
   error?: string;
@@ -30,6 +24,7 @@ export interface NodeStatusIndicatorProps {
  */
 export const NodeStatusIndicator: React.FC<NodeStatusIndicatorProps> = ({
   status,
+  message,
   executionTime,
   lastExecuted,
   error,
@@ -37,44 +32,46 @@ export const NodeStatusIndicator: React.FC<NodeStatusIndicatorProps> = ({
 }) => {
   const getStatusConfig = () => {
     switch (status) {
-      case NodeExecutionStatus.IDLE:
-        return {
-          icon: ReadyIcon,
-          color: '#6b7280',
-          tooltip: 'Ready to execute',
-          animated: false
-        };
+      // PENDING maps to neutral idle state (simple circle)
       case NodeExecutionStatus.PENDING:
         return {
-          icon: PendingIcon,
-          color: '#f59e0b',
-          tooltip: 'Execution pending...',
-          animated: true
+          icon: IdleIcon,
+          color: '#6b7280',
+          tooltip: message || 'Ready to execute',
+          animated: false
         };
       case NodeExecutionStatus.RUNNING:
         return {
           icon: CircularProgress,
-          color: '#3b82f6',
-          tooltip: 'Executing...',
+          color: '#f59e0b',
+          tooltip: message || 'Running...',
           animated: true
         };
       case NodeExecutionStatus.SUCCESS:
         return {
           icon: SuccessIcon,
           color: '#10b981',
-          tooltip: `Executed successfully${executionTime ? ` in ${executionTime}ms` : ''}${lastExecuted ? ` at ${new Date(lastExecuted).toLocaleTimeString()}` : ''}`,
+          tooltip: message || `Executed successfully${executionTime ? ` in ${executionTime}ms` : ''}${lastExecuted ? ` at ${new Date(lastExecuted).toLocaleTimeString()}` : ''}`,
           animated: false
         };
       case NodeExecutionStatus.ERROR:
         return {
           icon: ErrorIcon,
           color: '#ef4444',
-          tooltip: error || 'Execution failed',
+          tooltip: message || error || 'Execution failed',
+          animated: false
+        };
+      // SKIPPED maps to the prior WARNING visual (yellow, settings not configured)
+      case NodeExecutionStatus.SKIPPED:
+        return {
+          icon: WarningIcon,
+          color: '#f59e0b',
+          tooltip: message || 'Warning - Settings not configured',
           animated: false
         };
       default:
         return {
-          icon: ReadyIcon,
+          icon: IdleIcon,
           color: '#6b7280',
           tooltip: 'Unknown status',
           animated: false

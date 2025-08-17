@@ -6,25 +6,22 @@ import {
   Typography, 
   IconButton, 
   Tooltip,
-  CircularProgress,
-  Zoom
+  CircularProgress
 } from '@mui/material';
 import { 
   Delete as DeleteIcon,
   Settings as SettingsIcon,
-  PlayArrow as ExecuteIcon,
-  CheckCircle as SuccessIcon,
-  Error as ErrorIcon,
-  Schedule as PendingIcon,
-  Check as CheckIcon
+  PlayArrow as ExecuteIcon
 } from '@mui/icons-material';
 
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
 import { NodeConfiguration, getNodeConfiguration } from '../../../config/nodeConfiguration';
-import { createHandleStyles, createStatusIndicatorStyles, getCategoryGradient } from '../../../styles/nodeTheme';
+import { createHandleStyles, getCategoryGradient } from '../../../styles/nodeTheme';
 import { NODE_ICONS } from '../../../config/nodeIcons';
-import { NodeExecutionStatus, NodeCategory } from '../../../types/nodes';
+import { NodeCategory } from '../../../types/nodes';
 import { useExecutionData } from '../hooks/useExecutionData';
+import { NodeStatusIndicator } from './NodeStatusIndicator';
+import { NodeExecutionStatus } from '../../../types/nodes';
 
 // Extended props for BaseNode
 export interface BaseNodeProps extends NodeComponentProps {
@@ -35,8 +32,8 @@ export interface BaseNodeProps extends NodeComponentProps {
   onExecute?: () => Promise<void> | void;
   onSettings?: () => void;
   onSettingsClick?: () => void; // Alternative name for settings handler
-  executionStatus?: NodeExecutionStatus;
-  validationState?: 'error' | 'success' | 'none'; // Validation state for nodes
+  status?: NodeExecutionStatus;
+  statusMessage?: string;
   isExecuting?: boolean; // External execution state
   hideDefaultContent?: boolean;
   customHeader?: React.ReactNode;
@@ -44,13 +41,6 @@ export interface BaseNodeProps extends NodeComponentProps {
   icon?: React.ReactNode; // Custom icon for the node
 }
 
-// Status icon mapping
-const STATUS_ICONS = {
-  pending: PendingIcon,
-  running: CircularProgress,
-  success: SuccessIcon,
-  error: ErrorIcon
-};
 
 export const BaseNode: React.FC<BaseNodeProps> = (props) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -67,6 +57,9 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
     customContent,
     onExecute,
     onSettings,
+    onSettingsClick,
+    status = NodeExecutionStatus.PENDING,
+    statusMessage,
     hideDefaultContent = false,
     customHeader,
     customFooter
@@ -123,13 +116,6 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
     }
   }, [onNodeDelete, id]);
   
-  // Handle settings action
-  const handleSettings = useCallback((event: React.MouseEvent) => {
-    event.stopPropagation();
-    if (onSettings) {
-      onSettings();
-    }
-  }, [onSettings]);
   
   // Handle execute action
   const handleExecute = useCallback(async (event: React.MouseEvent) => {
@@ -146,69 +132,19 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
     }
   }, [onExecute, isExecuting]);
   
-  // Render status icon with animations
-  const renderStatusIcon = () => {
+  // Render status indicator using new NodeStatusIndicator component
+  const renderStatusIndicator = () => {
     if (!safeConfig.features.hasStatusIndicator) return null;
     
-    const StatusIcon = STATUS_ICONS[currentExecutionStatus as keyof typeof STATUS_ICONS];
-    if (!StatusIcon) return null;
-    
-    const statusStyles = createStatusIndicatorStyles(currentExecutionStatus);
+    // Determine current status - prioritize isExecuting state
+    const currentStatus = isExecuting ? NodeExecutionStatus.RUNNING : status;
     
     return (
-      <Box
-        sx={{
-          position: 'absolute',
-          top: 8,
-          right: 8,
-          zIndex: 10,
-          ...statusStyles
-        }}
-      >
-        {currentExecutionStatus === 'running' ? (
-          <CircularProgress size={12} sx={{ color: 'inherit' }} />
-        ) : (
-          <StatusIcon sx={{ fontSize: 12 }} />
-        )}
-        
-        {/* Success Animation Overlay */}
-        {showSuccessAnimation && (
-          <Zoom in={showSuccessAnimation} timeout={300}>
-            <Box
-              sx={{
-                position: 'absolute',
-                top: -8,
-                right: -8,
-                width: 28,
-                height: 28,
-                borderRadius: '50%',
-                backgroundColor: '#10b981',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)',
-                animation: 'pulse 1s ease-in-out infinite',
-                '@keyframes pulse': {
-                  '0%': {
-                    transform: 'scale(1)',
-                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)'
-                  },
-                  '50%': {
-                    transform: 'scale(1.1)',
-                    boxShadow: '0 6px 16px rgba(16, 185, 129, 0.6)'
-                  },
-                  '100%': {
-                    transform: 'scale(1)',
-                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)'
-                  }
-                }
-              }}
-            >
-              <CheckIcon sx={{ fontSize: 16, color: 'white' }} />
-            </Box>
-          </Zoom>
-        )}
-      </Box>
+      <NodeStatusIndicator
+        status={currentStatus}
+        message={statusMessage}
+        size="small"
+      />
     );
   };
   
@@ -408,29 +344,19 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
             >
               {instance?.label || safeConfig.name}
             </Typography>
-            <Typography 
-              variant="caption" 
-              sx={{ 
-                color: '#64748b',
-                fontSize: '0.75rem',
-                textTransform: 'lowercase'
-              }}
-            >
-              {safeConfig.category}
-            </Typography>
           </Box>
         </Box>
         
         {/* Action Buttons */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          {/* Status Icon */}
-          {renderStatusIcon()}
+          {/* Status Indicator */}
+          {renderStatusIndicator()}
           
           {/* Settings Button */}
-          {safeConfig.features.hasSettings && onSettings && (
+          {safeConfig.features.hasSettings && (onSettings || onSettingsClick) && (
             <IconButton
               size="small"
-              onClick={handleSettings}
+              onClick={onSettings || onSettingsClick}
               sx={{
                 width: 28,
                 height: 28,
@@ -639,7 +565,7 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Status Indicator */}
-      {renderStatusIcon()}
+      {renderStatusIndicator()}
       
       {/* Input Handles */}
       {renderInputHandles()}
@@ -681,7 +607,7 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
             })()}
           </Box>
           
-          {/* Title and Subtitle */}
+          {/* Title */}
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography 
               variant="body2" 
@@ -694,17 +620,6 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
               }}
             >
               {safeConfig.name}
-            </Typography>
-            <Typography 
-              variant="caption" 
-              sx={{ 
-                fontSize: '12px',
-                color: '#666666',
-                fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif',
-                textTransform: 'lowercase'
-              }}
-            >
-              {safeConfig.category}
             </Typography>
           </Box>
           
@@ -738,12 +653,13 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
                 )}
               </IconButton>
             )}
-            {onSettings && (
+            {(onSettings || onSettingsClick) && (
               <IconButton
                 size="small"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onSettings();
+                  if (onSettings) onSettings();
+                  if (onSettingsClick) onSettingsClick();
                 }}
                 sx={{
                   width: 20,
