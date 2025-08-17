@@ -356,7 +356,10 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
           {safeConfig.features.hasSettings && (onSettings || onSettingsClick) && (
             <IconButton
               size="small"
-              onClick={onSettings || onSettingsClick}
+              onClick={(e) => {
+                e.stopPropagation();
+                (onSettings || onSettingsClick)?.();
+              }}
               sx={{
                 width: 28,
                 height: 28,
@@ -381,7 +384,10 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
           {safeConfig.features.hasExecution && onExecute && (
             <IconButton
               size="small"
-              onClick={handleExecute}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleExecute(e);
+              }}
               disabled={isExecuting}
               sx={{
                 width: 28,

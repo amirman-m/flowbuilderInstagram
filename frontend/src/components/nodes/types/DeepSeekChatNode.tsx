@@ -64,12 +64,10 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
   const currentSettings = instance?.data?.settings || {};
   const { model = '', system_prompt = '', temperature = 0.7, max_tokens = 1000 } = currentSettings;
 
-  // Initialize local settings when dialog opens
+  // Keep localSettings in sync with instance settings continuously
   useEffect(() => {
-    if (settingsOpen) {
-      setLocalSettings(currentSettings);
-    }
-  }, [settingsOpen, currentSettings]);
+    setLocalSettings(currentSettings);
+  }, [currentSettings]);
 
   // Status validation effect
   useEffect(() => {
@@ -236,23 +234,23 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
   };
 
   const handleSettingsSave = () => {
-    if (nodeData.onNodeUpdate && id) {
-      nodeData.onNodeUpdate(id, {
-        data: {
-          ...instance?.data,
-          settings: localSettings
-        },
-        updatedAt: new Date()
-      });
-    }
+    // Settings are already persisted on every field change; just close
     setSettingsOpen(false);
   };
 
   const handleLocalSettingChange = (key: string, value: any) => {
-    setLocalSettings((prev: any) => ({
-      ...prev,
-      [key]: value
-    }));
+    const next = { ...(localSettings || {}), [key]: value };
+    setLocalSettings(next);
+    // Persist immediately so external editors stay in sync
+    if (nodeData.onNodeUpdate && id) {
+      nodeData.onNodeUpdate(id, {
+        data: {
+          ...instance?.data,
+          settings: next
+        },
+        updatedAt: new Date()
+      });
+    }
   };
 
   // Convert any AI response payload to plain text, removing emojis/HTML/markdown
@@ -365,7 +363,7 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
                 onChange={(e) => handleLocalSettingChange('model', e.target.value)}
               >
                 <MenuItem value="deepseek-chat">deepseek-chat</MenuItem>
-                <MenuItem value="deepseek-coder">deepseek-coder</MenuItem>
+                <MenuItem value="deepseek-reasoner">deepseek-reasoner</MenuItem>
               </Select>
             </FormControl>
 
@@ -400,14 +398,6 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
               onChange={(e) => handleLocalSettingChange('temperature', parseFloat(e.target.value))}
               inputProps={{ min: 0, max: 2, step: 0.1 }}
             />
-
-            <TextField
-              label="Max Tokens"
-              type="number"
-              value={localSettings.max_tokens || 1000}
-              onChange={(e) => handleLocalSettingChange('max_tokens', parseInt(e.target.value))}
-              inputProps={{ min: 1, max: 4000 }}
-            />
           </Box>
         </DialogContent>
         <DialogActions>
@@ -415,7 +405,7 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
           <Button 
             onClick={handleSettingsSave} 
             variant="contained"
-            disabled={!localSettings.model || !localSettings.system_prompt}
+            disabled={false}
           >
             Save
           </Button>
