@@ -400,7 +400,11 @@ export const BaseNode: React.FC<BaseNodeProps> = memo((props) => {
               {onExecute && (
                 <IconButton
                   size="small"
-                  onClick={handleExecute}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleExecute(e);
+                  }}
+                  
                   disabled={isExecuting}
                   sx={{
                     width: 20,

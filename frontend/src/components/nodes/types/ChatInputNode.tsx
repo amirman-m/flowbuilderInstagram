@@ -153,8 +153,15 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
       )}
       
       {/* Node-specific dialog */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)}>
-        <Box sx={{ p: 3, width: 400 }}>
+      <Dialog 
+        open={dialogOpen} 
+        onClose={(e: React.MouseEvent<HTMLElement>) => {
+          e.stopPropagation();
+          setDialogOpen(false);
+        }}
+        onClick={(e: React.MouseEvent<HTMLElement>) => e.stopPropagation()}
+      >
+        <Box sx={{ p: 3, width: 400 }} onClick={(e: React.MouseEvent<HTMLElement>) => e.stopPropagation()}>
           <Typography variant="h6">Enter Message Input</Typography>
           <TextField
             fullWidth
@@ -166,10 +173,16 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
             sx={{ my: 2 }}
           />
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-            <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+            <Button onClick={(e) => {
+              e.stopPropagation();
+              setDialogOpen(false);
+            }}>Cancel</Button>
             <Button 
               variant="contained" 
-              onClick={handleSubmit}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSubmit();
+              }}
               disabled={!inputText.trim() || isExecuting}
             >
               {isExecuting ? 'Executing...' : 'Submit'}
