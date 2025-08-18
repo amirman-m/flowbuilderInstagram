@@ -7,8 +7,8 @@ import uuid
 def get_chat_input_node_type() -> NodeType:
     return NodeType(
         id="chat_input",
-        name="Chat Input",
-        description="Manual text input trigger for testing and user interaction",
+        name="Message",
+        description="Manual text input for testing purposes only.This node is not intended for use in production environments. ",
         category=NodeCategory.TRIGGER,
         version="1.0.0",
         icon="message",

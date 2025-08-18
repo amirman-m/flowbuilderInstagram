@@ -1,5 +1,5 @@
 // src/components/nodes/node-types/ChatInputNode.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Box, Typography, Dialog, TextField, Button, Alert
 } from '@mui/material';
@@ -16,14 +16,27 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
   const { flowId } = useParams<{ flowId: string }>();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [inputText, setInputText] = useState('');
-  const [executing, setExecuting] = useState(false);
-  
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string>('');
   const nodeData = data as NodeDataWithHandlers;
   const { nodeType, instance, onNodeUpdate } = nodeData;
+  const [nodeStatus, setNodeStatus] = useState<NodeExecutionStatus>(NodeExecutionStatus.PENDING);
   
-  // Use our new modular hooks
+  // Use hooks
   const nodeConfig = useNodeConfiguration(nodeType?.id || 'chat_input');
   const executionData = useExecutionData(nodeData);
+  
+  // Initialize node status based on lastExecution data
+  useEffect(() => {
+    // Check if the node has lastExecution data with success status
+    if (instance?.data?.lastExecution?.status === 'success') {
+      setNodeStatus(NodeExecutionStatus.SUCCESS);
+      setStatusMessage('Execution completed successfully');
+    } else if (instance?.data?.lastExecution?.status === 'error') {
+      setNodeStatus(NodeExecutionStatus.ERROR);
+      setStatusMessage('Execution failed');
+    }
+  }, [instance?.data?.lastExecution]);
   
   const handleExecute = async () => {
     setDialogOpen(true);
@@ -33,11 +46,10 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
     if (!inputText.trim() || !flowId || !id) return;
     
     try {
-      setExecuting(true);
+      setIsExecuting(true);
       console.log(' Executing Chat Input node via backend API...');
-      
-      // First, ensure the node is saved to the database
-      console.log(' Auto-saving flow to ensure node exists in database...');
+      setNodeStatus(NodeExecutionStatus.RUNNING);
+      setStatusMessage('Executing...');
       try {
         await new Promise((resolve, reject) => {
           const saveFlowEvent = new CustomEvent('autoSaveFlow', {
@@ -78,30 +90,34 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
       setInputText('');
       
       // Update node state with execution results
-      if (onNodeUpdate && result) {
-        const lastExecution = {
-          timestamp: new Date().toISOString(),
-          status: result.status || NodeExecutionStatus.SUCCESS,
-          outputs: result.outputs || {},
-          startedAt: new Date().toISOString()
-        };
-        
-        onNodeUpdate(id, {
-          data: {
-            ...instance.data,
-            lastExecution
-          }
-        });
-        
-        console.log(' Node state updated with execution results:', lastExecution);
-      } else {
-        console.warn(' Could not update node state: onNodeUpdate function not available');
+      if (result && result.outputs) {
+        setNodeStatus(NodeExecutionStatus.SUCCESS);
+        setStatusMessage('Execution completed successfully');
+        if (nodeData.onNodeUpdate && id) {
+          nodeData.onNodeUpdate(id, {
+            data: {
+              ...(instance?.data || {}),
+              lastExecution: {
+                ...(result as any)
+              },
+              outputs: result.outputs || {}
+            },
+            updatedAt: new Date()
+          });
+          
+          console.log(' Node state updated with execution results:');
+        } else {
+          console.warn(' Could not update node state: onNodeUpdate function not available');
+        }
       }
+      
     } catch (error: any) {
       console.error(' Backend execution failed:', error);
+      setNodeStatus(NodeExecutionStatus.ERROR);
+      setStatusMessage('Execution failed - no outputs');
       // Keep dialog open on error so user can retry
     } finally {
-      setExecuting(false);
+      setIsExecuting(false);
     }
   };
 
@@ -139,7 +155,7 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
       {/* Node-specific dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)}>
         <Box sx={{ p: 3, width: 400 }}>
-          <Typography variant="h6">Enter Chat Input</Typography>
+          <Typography variant="h6">Enter Message Input</Typography>
           <TextField
             fullWidth
             multiline
@@ -154,9 +170,9 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
             <Button 
               variant="contained" 
               onClick={handleSubmit}
-              disabled={!inputText.trim() || executing}
+              disabled={!inputText.trim() || isExecuting}
             >
-              {executing ? 'Executing...' : 'Submit'}
+              {isExecuting ? 'Executing...' : 'Submit'}
             </Button>
           </Box>
         </Box>
@@ -169,9 +185,11 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
       {...props}
       nodeTypeId="chat_input"
       nodeConfig={nodeConfig}
+      status={nodeStatus}
+      statusMessage={statusMessage}
+      isExecuting={isExecuting}
       onExecute={handleExecute}
       customContent={customContent}
-      executionStatus={executing ? NodeExecutionStatus.RUNNING : undefined}
     />
   );
 };

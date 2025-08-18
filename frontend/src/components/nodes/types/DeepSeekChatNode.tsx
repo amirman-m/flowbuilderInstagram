@@ -71,6 +71,18 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
     setLocalSettings(currentSettings);
   }, [currentSettings]);
 
+  // Initialize node status based on lastExecution data
+  useEffect(() => {
+    // Check if the node has lastExecution data with success status
+    if (instance?.data?.lastExecution?.status === 'success') {
+      setNodeStatus(NodeExecutionStatus.SUCCESS);
+      setStatusMessage('Execution completed successfully');
+    } else if (instance?.data?.lastExecution?.status === 'error') {
+      setNodeStatus(NodeExecutionStatus.ERROR);
+      setStatusMessage('Execution failed');
+    }
+  }, [instance?.data?.lastExecution]);
+
   // Status validation effect
   useEffect(() => {
     const hasRequiredSettings = model && system_prompt;

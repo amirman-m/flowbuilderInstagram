@@ -597,7 +597,6 @@ const FlowBuilderInner: React.FC = () => {
             instance: {
               id: `node_${Date.now()}`,
               typeId: nodeTypeData.nodeType.id,
-              label: nodeTypeData.nodeType.name,
               position,
               data: {
                 settings: {},

@@ -1,5 +1,5 @@
-// BaseNode - Core shared functionality for all node components
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+// BaseNode - Performance-optimized core shared functionality for all node components
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { 
   Box, 
@@ -31,18 +31,18 @@ export interface BaseNodeProps extends NodeComponentProps {
   customContent?: React.ReactNode;
   onExecute?: () => Promise<void> | void;
   onSettings?: () => void;
-  onSettingsClick?: () => void; // Alternative name for settings handler
+  onSettingsClick?: () => void;
   status?: NodeExecutionStatus;
   statusMessage?: string;
-  isExecuting?: boolean; // External execution state
+  isExecuting?: boolean;
   hideDefaultContent?: boolean;
   customHeader?: React.ReactNode;
   customFooter?: React.ReactNode;
-  icon?: React.ReactNode; // Custom icon for the node
+  icon?: React.ReactNode;
 }
 
-
-export const BaseNode: React.FC<BaseNodeProps> = (props) => {
+// Memoized BaseNode component for performance optimization
+export const BaseNode: React.FC<BaseNodeProps> = memo((props) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
@@ -65,8 +65,11 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
     customFooter
   } = props;
 
-  // Get node configuration
-  const config = useMemo(() => nodeTypeId ? getNodeConfiguration(nodeTypeId) : undefined, [nodeTypeId]);
+  // Get node configuration with memoization
+  const config = useMemo(() => 
+    nodeTypeId ? getNodeConfiguration(nodeTypeId) : undefined, 
+    [nodeTypeId]
+  );
   
   // Extract node data
   const nodeData = data as NodeDataWithHandlers;
@@ -75,9 +78,9 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
   // Use execution data hook for fresh results
   const executionData = useExecutionData(nodeData);
   
-  // Fallback configuration if not found
-  const safeConfig: NodeConfiguration = config || {
-    id: nodeTypeId || 'unknown-node', // Ensure id is always a string
+  // Fallback configuration with memoization
+  const safeConfig: NodeConfiguration = useMemo(() => config || {
+    id: nodeTypeId || 'unknown-node',
     category: NodeCategory.PROCESSOR,
     subcategory: 'Unknown',
     name: 'Unknown Node',
@@ -87,11 +90,14 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
     componentName: 'UnknownNode',
     features: {
       hasSettings: false,
-      hasExecution: true, // Enable execution by default for all nodes
+      hasExecution: true,
       hasCustomUI: false,
       hasStatusIndicator: true
     }
-  };
+  }, [config, nodeTypeId]);
+  
+  // Get gradient colors
+  const gradient = useMemo(() => getCategoryGradient(safeConfig.category), [safeConfig.category]);
   
   // Determine current execution status
   const currentExecutionStatus = executionData.status || 'pending';
@@ -100,7 +106,6 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
   useEffect(() => {
     if (currentExecutionStatus === 'success' && !showSuccessAnimation) {
       setShowSuccessAnimation(true);
-      // Reset animation after 2 seconds
       const timer = setTimeout(() => {
         setShowSuccessAnimation(false);
       }, 2000);
@@ -115,7 +120,6 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
       onNodeDelete(id);
     }
   }, [onNodeDelete, id]);
-  
   
   // Handle execute action
   const handleExecute = useCallback(async (event: React.MouseEvent) => {
@@ -132,11 +136,10 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
     }
   }, [onExecute, isExecuting]);
   
-  // Render status indicator using new NodeStatusIndicator component
-  const renderStatusIndicator = () => {
+  // Render status indicator
+  const renderStatusIndicator = useCallback(() => {
     if (!safeConfig.features.hasStatusIndicator) return null;
     
-    // Determine current status - prioritize isExecuting state
     const currentStatus = isExecuting ? NodeExecutionStatus.RUNNING : status;
     
     return (
@@ -146,10 +149,10 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
         size="small"
       />
     );
-  };
+  }, [safeConfig.features.hasStatusIndicator, isExecuting, status, statusMessage]);
   
   // Render input handles
-  const renderInputHandles = () => {
+  const renderInputHandles = useCallback(() => {
     if (!nodeType?.ports?.inputs) return null;
     
     return nodeType.ports.inputs.map((port: any, index: number) => {
@@ -157,7 +160,6 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
       const handleStyles = createHandleStyles(safeConfig, isRequired);
       const topPosition = `${30 + (index * 25)}px`;
       
-      // Create a clean style object for React
       const cleanStyles: React.CSSProperties = {
         top: topPosition,
         width: (handleStyles as any).width || 12,
@@ -170,7 +172,6 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
       
       return (
         <Box key={port.id} sx={{ position: 'absolute', left: 0, top: topPosition, display: 'flex', alignItems: 'center' }}>
-          {/* Port Label - Only visible on hover */}
           <Typography 
             sx={{
               position: 'absolute',
@@ -222,10 +223,10 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
         </Box>
       );
     });
-  };
+  }, [nodeType?.ports?.inputs, safeConfig, isHovered]);
   
   // Render output handles
-  const renderOutputHandles = () => {
+  const renderOutputHandles = useCallback(() => {
     if (!nodeType?.ports?.outputs) return null;
     
     return nodeType.ports.outputs.map((port: any, index: number) => {
@@ -233,7 +234,6 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
       const handleStyles = createHandleStyles(safeConfig, isRequired);
       const topPosition = `${30 + (index * 25)}px`;
       
-      // Create a clean style object for React
       const cleanStyles: React.CSSProperties = {
         top: topPosition,
         width: (handleStyles as any).width || 12,
@@ -273,7 +273,6 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
             </Tooltip>
           </Handle>
           
-          {/* Port Label - Only visible on hover */}
           <Typography 
             sx={{
               position: 'absolute',
@@ -298,230 +297,7 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
         </Box>
       );
     });
-  };
-  
-  // Render node header
-  const renderHeader = () => {
-    if (customHeader) return customHeader;
-    
-    const IconComponent = safeConfig.icon;
-    const gradient = getCategoryGradient(safeConfig.category);
-
-    return (
-      <Box sx={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'space-between',
-        p: 2,
-        pb: 1.5,
-      }}>
-        {/* Icon and Title */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          {IconComponent && (
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              width: 32, 
-              height: 32,
-              borderRadius: '12px',
-              background: `linear-gradient(135deg, ${gradient.primary}, ${gradient.secondary})`,
-              color: 'white',
-              boxShadow: `0 4px 12px ${gradient.primary}30`
-            }}>
-              <IconComponent sx={{ fontSize: 18 }} />
-            </Box>
-          )}
-          <Box>
-            <Typography 
-              variant="subtitle1" 
-              sx={{ 
-                fontWeight: 600,
-                color: '#0f172a',
-                fontSize: '0.95rem',
-                lineHeight: 1.2
-              }}
-            >
-              {instance?.label || safeConfig.name}
-            </Typography>
-          </Box>
-        </Box>
-        
-        {/* Action Buttons */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          {/* Status Indicator */}
-          {renderStatusIndicator()}
-          
-          {/* Settings Button */}
-          {safeConfig.features.hasSettings && (onSettings || onSettingsClick) && (
-            <IconButton
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                (onSettings || onSettingsClick)?.();
-              }}
-              sx={{
-                width: 28,
-                height: 28,
-                borderRadius: '8px',
-                color: '#64748b',
-                backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                backdropFilter: 'blur(8px)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                '&:hover': {
-                  backgroundColor: `${gradient.primary}10`,
-                  color: gradient.primary,
-                  transform: 'scale(1.05)'
-                },
-                transition: 'all 0.2s ease'
-              }}
-            >
-              <SettingsIcon sx={{ fontSize: 14 }} />
-            </IconButton>
-          )}
-          
-          {/* Execute Button */}
-          {safeConfig.features.hasExecution && onExecute && (
-            <IconButton
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleExecute(e);
-              }}
-              disabled={isExecuting}
-              sx={{
-                width: 28,
-                height: 28,
-                borderRadius: '8px',
-                color: 'white',
-                background: `linear-gradient(135deg, ${gradient.primary}, ${gradient.secondary})`,
-                boxShadow: `0 2px 8px ${gradient.primary}30`,
-                '&:hover': {
-                  transform: 'scale(1.05)',
-                  boxShadow: `0 4px 12px ${gradient.primary}40`
-                },
-                '&.Mui-disabled': {
-                  background: 'linear-gradient(135deg, #94a3b8, #64748b)',
-                  color: 'white',
-                  opacity: 0.6
-                },
-                transition: 'all 0.2s ease'
-              }}
-            >
-              <ExecuteIcon sx={{ fontSize: 14 }} />
-            </IconButton>
-          )}
-          
-          {/* Delete Button */}
-          <IconButton
-            size="small"
-            onClick={handleDelete}
-            sx={{
-              width: 28,
-              height: 28,
-              borderRadius: '8px',
-              color: '#64748b',
-              backgroundColor: 'rgba(255, 255, 255, 0.8)',
-              backdropFilter: 'blur(8px)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              '&:hover': {
-                backgroundColor: '#fef2f2',
-                color: '#ef4444',
-                transform: 'scale(1.05)'
-              },
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <DeleteIcon sx={{ fontSize: 14 }} />
-          </IconButton>
-        </Box>
-      </Box>
-    );
-  };
-  
-  
-  // Render default content
-  const renderDefaultContent = () => {
-    if (hideDefaultContent) return null;
-    
-    return (
-      <Box sx={{ mt: 1 }}>
-        {/* Description */}
-        <Typography 
-          variant="caption" 
-          sx={{ 
-            color: '#64748b',
-            fontSize: '11px',
-            lineHeight: 1.3,
-            display: 'block',
-            mb: 1
-          }}
-        >
-          {safeConfig.description}
-        </Typography>
-        
-        {/* Execution Data Display */}
-        {executionData && (
-          <Box sx={{ 
-            mt: 1, 
-            p: 1, 
-            backgroundColor: 'rgba(var(--node-color-rgb), 0.05)',
-            borderRadius: 1,
-            border: '1px solid rgba(var(--node-color-rgb), 0.1)'
-          }}>
-            <Typography variant="caption" sx={{ fontSize: '10px', color: '#64748b' }}>
-              Last execution: {executionData.lastExecuted || 'Never'}
-            </Typography>
-            {executionData.displayData && (
-              <Typography 
-                variant="caption" 
-                sx={{ 
-                  fontSize: '10px', 
-                  color: 'var(--node-text-color)',
-                  display: 'block',
-                  mt: 0.5,
-                  wordBreak: 'break-word'
-                }}
-              >
-                {(() => {
-                  const { displayData } = executionData;
-                  let text = '';
-                  
-                  if (displayData.type === 'message_data') {
-                    text = displayData.inputText || 'No input text';
-                  } else if (displayData.type === 'ai_response') {
-                    text = displayData.aiResponse || 'No AI response';
-                  } else if (displayData.type === 'raw' && displayData.data) {
-                    text = JSON.stringify(displayData.data);
-                  } else {
-                    text = 'No output data';
-                  }
-                  
-                  return text.substring(0, 50);
-                })()}
-                {(() => {
-                  const { displayData } = executionData;
-                  let text = '';
-                  
-                  if (displayData.type === 'message_data') {
-                    text = displayData.inputText || '';
-                  } else if (displayData.type === 'ai_response') {
-                    text = displayData.aiResponse || '';
-                  } else if (displayData.type === 'raw' && displayData.data) {
-                    text = JSON.stringify(displayData.data);
-                  }
-                  
-                  return text.length > 50 ? '...' : '';
-                })()}
-              </Typography>
-            )}
-          </Box>
-        )}
-      </Box>
-    );
-  };
-  
-  const gradient = getCategoryGradient(safeConfig.category);
+  }, [nodeType?.ports?.outputs, safeConfig, isHovered]);
 
   return (
     <Box
@@ -554,17 +330,6 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
           borderColor: `${gradient.primary}`,
           borderWidth: '2px',
           backgroundColor: 'rgba(255, 255, 255, 1)',
-          '& .node-ports': {
-            opacity: 1
-          },
-          '& .port-label': {
-            opacity: 1,
-            transform: 'translateX(0)'
-          }
-        },
-        '&:active': {
-          transform: 'translateY(0px) scale(1.05)',
-          transition: 'all 0.1s ease-out'
         }
       }}
       onMouseEnter={() => setIsHovered(true)}
@@ -586,158 +351,156 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
         overflow: 'hidden',
         padding: '16px'
       }}>
-        {/* Logo and Title Section */}
-        <Box sx={{ 
-          display: 'flex', 
-          alignItems: 'flex-start', 
-          gap: 1.5, 
-          mb: 2 
-        }}>
-          {/* Node Icon */}
-          <Box
-            sx={{
-              width: 24,
-              height: 24,
-              borderRadius: '50%',
-              backgroundColor: gradient.primary,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.15)'
-            }}
-          >
-            {(() => {
-              const IconComponent = NODE_ICONS[nodeType?.id || 'default'] || NODE_ICONS['default'];
-              return <IconComponent sx={{ fontSize: 14 }} />;
-            })()}
-          </Box>
-          
-          {/* Title */}
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography 
-              variant="body2" 
-              sx={{ 
-                fontWeight: 600,
-                fontSize: '14px',
-                lineHeight: 1.2,
-                color: '#1a1a1a',
-                fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif'
-              }}
-            >
-              {safeConfig.name}
-            </Typography>
-          </Box>
-          
-          {/* Action Buttons */}
-          <Box sx={{ display: 'flex', gap: 0.5, opacity: isHovered ? 1 : 0, transition: 'opacity 0.2s ease' }}>
-            {onExecute && (
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleExecute(e);
-                }}
-                disabled={isExecuting}
-                sx={{
-                  width: 20,
-                  height: 20,
-                  color: 'rgba(34, 197, 94, 0.8)',
-                  '&:hover': {
-                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                    color: 'rgba(34, 197, 94, 1)'
-                  },
-                  '&:disabled': {
-                    opacity: 0.5
-                  }
-                }}
-              >
-                {isExecuting ? (
-                  <CircularProgress size={12} sx={{ color: 'inherit' }} />
-                ) : (
-                  <ExecuteIcon sx={{ fontSize: 14 }} />
-                )}
-              </IconButton>
-            )}
-            {(onSettings || onSettingsClick) && (
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (onSettings) onSettings();
-                  if (onSettingsClick) onSettingsClick();
-                }}
-                sx={{
-                  width: 20,
-                  height: 20,
-                  color: 'rgba(0, 0, 0, 0.5)',
-                  '&:hover': {
-                    backgroundColor: 'rgba(0, 0, 0, 0.04)',
-                    color: 'rgba(0, 0, 0, 0.7)'
-                  }
-                }}
-              >
-                <SettingsIcon sx={{ fontSize: 14 }} />
-              </IconButton>
-            )}
-            <IconButton
-              size="small"
-              onClick={handleDelete}
+        {/* Header */}
+        {customHeader || (
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'flex-start', 
+            gap: 1.5, 
+            mb: 2 
+          }}>
+            {/* Node Icon */}
+            <Box
               sx={{
-                width: 20,
-                height: 20,
-                color: 'rgba(0, 0, 0, 0.5)',
-                '&:hover': {
-                  backgroundColor: 'rgba(244, 67, 54, 0.04)',
-                  color: '#f44336'
-                }
+                width: 24,
+                height: 24,
+                borderRadius: '50%',
+                backgroundColor: gradient.primary,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.15)'
               }}
             >
-              <DeleteIcon sx={{ fontSize: 14 }} />
-            </IconButton>
+              {(() => {
+                const IconComponent = NODE_ICONS[nodeType?.id || 'default'] || NODE_ICONS['default'];
+                return <IconComponent sx={{ fontSize: 14 }} />;
+              })()}
+            </Box>
+            
+            {/* Title */}
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  fontWeight: 600,
+                  fontSize: '14px',
+                  lineHeight: 1.2,
+                  color: '#1a1a1a',
+                  fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif'
+                }}
+              >
+                {instance?.label || safeConfig.name}
+              </Typography>
+            </Box>
+            
+            {/* Action Buttons */}
+            <Box sx={{ display: 'flex', gap: 0.5, opacity: isHovered ? 1 : 0, transition: 'opacity 0.2s ease' }}>
+              {onExecute && (
+                <IconButton
+                  size="small"
+                  onClick={handleExecute}
+                  disabled={isExecuting}
+                  sx={{
+                    width: 20,
+                    height: 20,
+                    color: 'rgba(34, 197, 94, 0.8)',
+                    '&:hover': {
+                      backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                      color: 'rgba(34, 197, 94, 1)'
+                    },
+                    '&:disabled': {
+                      opacity: 0.5
+                    }
+                  }}
+                >
+                  {isExecuting ? (
+                    <CircularProgress size={12} sx={{ color: 'inherit' }} />
+                  ) : (
+                    <ExecuteIcon sx={{ fontSize: 12 }} />
+                  )}
+                </IconButton>
+              )}
+              
+              {(onSettings || onSettingsClick) && (
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    (onSettings || onSettingsClick)?.();
+                  }}
+                  sx={{
+                    width: 20,
+                    height: 20,
+                    color: 'rgba(99, 102, 241, 0.8)',
+                    '&:hover': {
+                      backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                      color: 'rgba(99, 102, 241, 1)'
+                    }
+                  }}
+                >
+                  <SettingsIcon sx={{ fontSize: 12 }} />
+                </IconButton>
+              )}
+              
+              <IconButton
+                size="small"
+                onClick={handleDelete}
+                sx={{
+                  width: 20,
+                  height: 20,
+                  color: 'rgba(239, 68, 68, 0.8)',
+                  '&:hover': {
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    color: 'rgba(239, 68, 68, 1)'
+                  }
+                }}
+              >
+                <DeleteIcon sx={{ fontSize: 12 }} />
+              </IconButton>
+            </Box>
           </Box>
-        </Box>
+        )}
         
         {/* Custom Content */}
         {customContent}
         
         {/* Default Content */}
-        <Box sx={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
-          {!hideDefaultContent && (
-            <Box sx={{ mt: 1 }}>
-              {/* Description */}
-              <Typography 
-                variant="caption" 
-                sx={{ 
-                  color: '#4a4a4a',
-                  fontSize: '12px',
-                  lineHeight: 1.4,
-                  display: 'block',
-                  fontWeight: 500
-                }}
-              >
-                {safeConfig.description}
-              </Typography>
-              
-              {/* Execution Status */}
-              {executionData.hasFreshResults && (
-                <Box sx={{ mt: 1 }}>
-                  <Typography 
-                    variant="caption" 
-                    sx={{ 
-                      color: '#16a34a',
-                      fontSize: '11px',
-                      fontWeight: 600
-                    }}
-                  >
-                    ✓ Last executed: {new Date(executionData.lastExecuted || '').toLocaleTimeString()}
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-          )}
-          {children}
-        </Box>
+        {!hideDefaultContent && (
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <Typography 
+              variant="caption" 
+              sx={{ 
+                color: '#64748b',
+                fontSize: '11px',
+                lineHeight: 1.3,
+                display: 'block',
+                mb: 1
+              }}
+            >
+              {safeConfig.description}
+            </Typography>
+            
+            {/* Execution Data Display */}
+            {executionData.hasFreshResults && (
+              <Box sx={{ 
+                mt: 1, 
+                p: 1, 
+                backgroundColor: 'rgba(16, 185, 129, 0.05)',
+                borderRadius: 1,
+                border: '1px solid rgba(16, 185, 129, 0.1)'
+              }}>
+                <Typography variant="caption" sx={{ fontSize: '10px', color: '#64748b' }}>
+                  Last execution: {executionData.lastExecuted || 'Never'}
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        )}
+        
+        {/* Children */}
+        {children}
         
         {/* Custom Footer */}
         {customFooter}
@@ -747,4 +510,6 @@ export const BaseNode: React.FC<BaseNodeProps> = (props) => {
       {renderOutputHandles()}
     </Box>
   );
-};
+});
+
+BaseNode.displayName = 'BaseNode';
