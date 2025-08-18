@@ -11,7 +11,8 @@ import {
 import { 
   Delete as DeleteIcon,
   Settings as SettingsIcon,
-  PlayArrow as ExecuteIcon
+  PlayArrow as ExecuteIcon,
+  Refresh as RefreshIcon
 } from '@mui/icons-material';
 
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
@@ -30,6 +31,7 @@ export interface BaseNodeProps extends NodeComponentProps {
   children?: React.ReactNode;
   customContent?: React.ReactNode;
   onExecute?: () => Promise<void> | void;
+  onRefresh?: () => Promise<void> | void;
   onSettings?: () => void;
   onSettingsClick?: () => void;
   status?: NodeExecutionStatus;
@@ -56,6 +58,7 @@ export const BaseNode: React.FC<BaseNodeProps> = memo((props) => {
     children,
     customContent,
     onExecute,
+    onRefresh,
     onSettings,
     onSettingsClick,
     status = NodeExecutionStatus.PENDING,
@@ -135,6 +138,18 @@ export const BaseNode: React.FC<BaseNodeProps> = memo((props) => {
       }
     }
   }, [onExecute, isExecuting]);
+  
+  // Handle refresh action
+  const handleRefresh = useCallback(async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (onRefresh) {
+      try {
+        await onRefresh();
+      } catch (error) {
+        console.error('Node refresh failed:', error);
+      }
+    }
+  }, [onRefresh]);
   
   // Render status indicator
   const renderStatusIndicator = useCallback(() => {
@@ -424,6 +439,27 @@ export const BaseNode: React.FC<BaseNodeProps> = memo((props) => {
                   ) : (
                     <ExecuteIcon sx={{ fontSize: 12 }} />
                   )}
+                </IconButton>
+              )}
+              
+              {onRefresh && (
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRefresh(e);
+                  }}
+                  sx={{
+                    width: 20,
+                    height: 20,
+                    color: 'rgba(99, 102, 241, 0.8)',
+                    '&:hover': {
+                      backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                      color: 'rgba(99, 102, 241, 1)'
+                    }
+                  }}
+                >
+                  <RefreshIcon sx={{ fontSize: 12 }} />
                 </IconButton>
               )}
               

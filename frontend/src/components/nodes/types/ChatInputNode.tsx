@@ -121,26 +121,96 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
     }
   };
 
+  const handleRefresh = async () => {
+    // Reset node status to pending
+    setNodeStatus(NodeExecutionStatus.PENDING);
+    setStatusMessage('');
+    
+    // Clear input text
+    setInputText('');
+    
+    // Update node data to clear execution results
+    if (nodeData.onNodeUpdate && id) {
+      nodeData.onNodeUpdate(id, {
+        data: {
+          ...(instance?.data || {}),
+          lastExecution: {
+            status: NodeExecutionStatus.PENDING,
+            outputs: {},
+            startedAt: new Date(),
+          },
+          outputs: {},
+        },
+        updatedAt: new Date()
+      });
+      
+      console.log('Node execution data reset');
+    }
+  };
+
   // Custom content for the ChatInputNode
   const customContent = (
     <>
       {/* Execution Results Display */}
-      {executionData.hasFreshResults && executionData.displayData.type === 'message_data' && (
-        <Box sx={{ mt: 1, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
-          <Typography variant="caption" sx={{ fontWeight: 'bold', color: nodeConfig?.color }}>
-            Latest Input:
+      {executionData.isExecuted && executionData.displayData && (
+        <Box sx={{ mt: 0.5, py: 0.75, px: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+          <Typography variant="caption" sx={{ color: '#666', fontWeight: 600, mb: 0.25, display: 'block' }}>
+            Message:
           </Typography>
-          <Typography variant="body2" sx={{ mt: 0.5, wordBreak: 'break-word' }}>
-            "{executionData.displayData.inputText}"
-          </Typography>
-          <Typography variant="caption" sx={{ color: 'text.secondary', mt: 0.5, display: 'block' }}>
-            {executionData.displayData.metadata?.word_count} words • {new Date(executionData.displayData.timestamp).toLocaleTimeString()}
-          </Typography>
+          <Box
+            sx={{
+              maxHeight: '80px',
+              overflowY: 'auto',
+              border: '1px solid #e0e0e0',
+              borderRadius: '4px',
+              p: 1,
+              backgroundColor: '#fff',
+              '&::-webkit-scrollbar': {
+                width: '8px',
+              },
+              '&::-webkit-scrollbar-track': {
+                background: '#f1f1f1',
+                borderRadius: '4px',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                background: '#c1c1c1',
+                borderRadius: '4px',
+                border: '2px solid #f1f1f1',
+              },
+              '&::-webkit-scrollbar-thumb:hover': {
+                background: '#a8a8a8',
+              },
+              // Firefox scrollbar styles
+              scrollbarWidth: 'thin',
+              scrollbarColor: '#c1c1c1 #f1f1f1',
+            }}
+          >
+            <Typography 
+              variant="caption" 
+              sx={{ 
+                display: 'block',
+                color: '#333',
+                fontSize: '0.8rem',
+                lineHeight: 1.25,
+                wordBreak: 'break-word',
+                whiteSpace: 'pre-wrap'
+              }}
+            >
+              {executionData.displayData.type === 'message_data' ? 
+                executionData.displayData.inputText : 
+                JSON.stringify(executionData.displayData)}
+            </Typography>
+          </Box>
+          {executionData.displayData.type === 'message_data' && executionData.displayData.metadata && (
+            <Typography variant="caption" sx={{ color: 'text.secondary', mt: 0.5, display: 'block', fontSize: '0.7rem' }}>
+              {executionData.displayData.metadata?.word_count} words • {new Date(executionData.displayData.timestamp).toLocaleTimeString()}
+            </Typography>
+          )}
         </Box>
       )}
       
       {/* Success indicator for fresh execution */}
-      {executionData.hasFreshResults && executionData.isSuccess && (
+      {executionData.isSuccess && (
         <Alert 
           severity="success" 
           icon={<CheckCircleIcon />}
@@ -202,7 +272,9 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
       statusMessage={statusMessage}
       isExecuting={isExecuting}
       onExecute={handleExecute}
+      onRefresh={handleRefresh}
       customContent={customContent}
+      hideDefaultContent={executionData.isExecuted}
     />
   );
 };
