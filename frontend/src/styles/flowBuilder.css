@@ -27,6 +27,19 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
+/* Custom flow controls with orange/yellow hover effect */
+.custom-flow-controls button:hover {
+  background-color: #f59e0b !important; /* Amber-500 */
+  color: #ffffff !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4) !important;
+}
+
+.custom-flow-controls button:hover path {
+  fill: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
 .react-flow__controls button path {
   fill: #e2e8f0;
   stroke: #e2e8f0;

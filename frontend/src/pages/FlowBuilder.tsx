@@ -20,7 +20,6 @@ import {
 } from '@mui/icons-material';
 import {
   ReactFlow,
-  MiniMap,
   Controls,
   Background,
   addEdge,
@@ -684,9 +683,9 @@ const FlowBuilderInner: React.FC = () => {
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Flow Builder Header */}
       <AppBar position="static" color="default" elevation={1}>
-        <Toolbar>
+        <Toolbar sx={{ minHeight: '64px' }}>
           <Tooltip title="Back to Dashboard">
-            <IconButton edge="start" onClick={handleBack}>
+            <IconButton edge="start" onClick={handleBack} sx={{ mr: 1 }}>
               <ArrowBackIcon />
             </IconButton>
           </Tooltip>
@@ -695,6 +694,7 @@ const FlowBuilderInner: React.FC = () => {
               size="small"
               value={flowName}
               autoFocus
+              variant="outlined"
               onChange={(e) => setFlowName(e.target.value)}
               onBlur={handleNameSave}
               onKeyDown={(e) => {
@@ -705,28 +705,52 @@ const FlowBuilderInner: React.FC = () => {
                   setFlowName(flow?.name || '');
                 }
               }}
-              sx={{ flexGrow: 1, ml: 2, maxWidth: 300 }}
+              sx={{ 
+                flexGrow: 1, 
+                ml: 2, 
+                maxWidth: 300,
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '6px',
+                }
+              }}
               disabled={nameSaving}
             />
           ) : (
             <Typography
               variant="h6"
-              sx={{ flexGrow: 1, ml: 2, cursor: 'pointer' }}
+              sx={{ 
+                flexGrow: 1, 
+                ml: 2, 
+                cursor: 'pointer',
+                fontWeight: 500,
+                '&:hover': {
+                  color: 'primary.main'
+                }
+              }}
               onClick={() => setIsEditingName(true)}
             >
               {flowName || 'Flow Builder'}
             </Typography>
           )}
 
-          <Box sx={{ display: 'flex', gap: 1 }}>
+          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
             <Tooltip title="Flow Settings">
-              <IconButton>
+              <IconButton sx={{ color: 'text.secondary' }}>
                 <SettingsIcon />
               </IconButton>
             </Tooltip>
             
             <Tooltip title="Execute Flow">
-              <IconButton color="primary" onClick={handleExecuteFlow}>
+              <IconButton 
+                color="primary" 
+                onClick={handleExecuteFlow}
+                sx={{ 
+                  backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                  '&:hover': {
+                    backgroundColor: 'rgba(25, 118, 210, 0.15)'
+                  }
+                }}
+              >
                 <PlayIcon />
               </IconButton>
             </Tooltip>
@@ -736,6 +760,12 @@ const FlowBuilderInner: React.FC = () => {
               startIcon={<SaveIcon />}
               onClick={() => handleSave()}
               disabled={saving}
+              sx={{ 
+                borderRadius: '6px',
+                textTransform: 'none',
+                fontWeight: 500,
+                boxShadow: '0 2px 4px rgba(0,0,0,0.08)'
+              }}
             >
               {saving ? 'Saving...' : 'Save'}
             </Button>
@@ -754,8 +784,13 @@ const FlowBuilderInner: React.FC = () => {
             borderColor: 'divider',
             display: 'flex',
             flexDirection: 'column',
-            backgroundColor: '#fafafa'
+            backgroundColor: '#fafafa',
+            boxShadow: 'none',
+            overflow: 'hidden',
+            position: 'relative',
+            zIndex: 2
           }}
+          elevation={0}
         >
           <ModernNodeLibrary onNodeDragStart={(event, nodeType) => {
             event.dataTransfer.setData('application/reactflow', nodeType.category);
@@ -768,7 +803,11 @@ const FlowBuilderInner: React.FC = () => {
         </Paper>
 
         {/* React Flow Canvas */}
-        <Box sx={{ flexGrow: 1, position: 'relative' }}>
+        <Box sx={{ 
+          flexGrow: 1, 
+          position: 'relative',
+          borderLeft: '1px solid rgba(0, 0, 0, 0.08)'
+        }}>
           <ReactFlow
             nodes={nodes}
             edges={validatedEdges}
@@ -785,8 +824,17 @@ const FlowBuilderInner: React.FC = () => {
             attributionPosition="bottom-left"
             isValidConnection={(connection) => isValidConnection(connection as Connection)}
           >
-            <Controls />
-            <MiniMap />
+            <Controls 
+              position="bottom-right" 
+              showInteractive={false} 
+              style={{ 
+                background: 'rgba(255, 255, 255, 0.8)', 
+                borderRadius: '8px',
+                boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
+                padding: '4px'
+              }}
+              className="custom-flow-controls"
+            />
             <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
           </ReactFlow>
         </Box>
