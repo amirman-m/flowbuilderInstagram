@@ -66,7 +66,8 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
   
   // Voice recording refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordingIntervalRef = useRef<number | null>(null);
+  // Use ReturnType<typeof setInterval> to be compatible with both browser and Node typings
+  const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -99,6 +100,7 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
     return () => {
       if (recordingIntervalRef.current) {
         clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
       }
     };
   }, []);
@@ -353,14 +355,15 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
             px: 2,
             py: 1,
             maxWidth: '70%',
-            backgroundColor: isUser ? 'primary.main' : 'grey.100',
-            color: isUser ? 'white' : 'text.primary',
+            backgroundColor: isUser ? '#1976d2' : '#f0f0f0',
+            color: isUser ? 'white' : '#000000',
             borderRadius: 2,
             borderTopLeftRadius: isUser ? 2 : 0.5,
-            borderTopRightRadius: isUser ? 0.5 : 2
+            borderTopRightRadius: isUser ? 0.5 : 2,
+            border: isUser ? 'none' : '1px solid #e0e0e0'
           }}
         >
-          <Typography variant="body2">
+          <Typography variant="body2" sx={{ fontWeight: 'normal', fontSize: '14px' }}>
             {message.content}
           </Typography>
         </Paper>
@@ -371,16 +374,15 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
   if (!open) return null;
 
   return (
-    <Slide direction="right" in={open} mountOnEnter unmountOnExit>
+    <Slide direction="left" in={open} mountOnEnter unmountOnExit>
       <Paper
         elevation={8}
         sx={{
           position: 'fixed',
-          left: 16,
-          top: '50%',
-          transform: 'translateY(-50%)',
+          right: 16,
+          top: 20,
           width: 400,
-          height: 600,
+          height: 'calc(100vh - 120px)',
           display: 'flex',
           flexDirection: 'column',
           zIndex: 1300,
@@ -420,7 +422,10 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
             flexGrow: 1,
             p: 2,
             overflowY: 'auto',
-            backgroundColor: '#f5f5f5'
+            backgroundColor: '#ffffff',
+            border: '1px solid #e0e0e0',
+            margin: '8px',
+            borderRadius: 2
           }}
         >
           {messages.map(renderMessage)}
@@ -436,6 +441,7 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
             borderColor: 'divider'
           }}
         >
+          {/* Recording indicator - moved to top of input area for better visibility */}
           {isRecording && (
             <Fade in={isRecording}>
               <Box
@@ -444,17 +450,44 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
                   p: 1,
                   backgroundColor: 'error.light',
                   borderRadius: 1,
-                  textAlign: 'center'
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 1
                 }}
               >
-                <Typography variant="body2" color="white">
+                <StopIcon fontSize="small" />
+                <Typography variant="body2" color="white" fontWeight="medium">
                   Recording... {formatTime(recordingTime)}
                 </Typography>
               </Box>
             </Fade>
           )}
 
-          <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* Voice input button moved to left side */}
+            {triggerNodeType === 'voice_input' && (
+              <Tooltip title={isRecording ? "Stop recording" : "Start voice recording"}>
+                <IconButton
+                  color={isRecording ? "error" : "primary"}
+                  onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
+                  disabled={isProcessing}
+                  sx={{
+                    backgroundColor: isRecording ? 'error.main' : 'primary.main',
+                    color: 'white',
+                    '&:hover': {
+                      backgroundColor: isRecording ? 'error.dark' : 'primary.dark'
+                    },
+                    minWidth: '40px',
+                    height: '40px',
+                    boxShadow: '0px 2px 4px rgba(0,0,0,0.2)'
+                  }}
+                >
+                  {isRecording ? <StopIcon /> : <MicIcon />}
+                </IconButton>
+              </Tooltip>
+            )}
+
             <TextField
               ref={inputRef}
               fullWidth
@@ -469,29 +502,38 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
               size="small"
               sx={{
                 '& .MuiOutlinedInput-root': {
-                  borderRadius: 3
+                  borderRadius: 3,
+                  backgroundColor: 'white',
+                  '& fieldset': {
+                    borderColor: '#e0e0e0',
+                    borderWidth: '1px'
+                  },
+                  '&:hover fieldset': {
+                    borderColor: '#1976d2',
+                    borderWidth: '1px'
+                  },
+                  '&.Mui-focused fieldset': {
+                    borderColor: '#1976d2',
+                    borderWidth: '2px'
+                  }
+                },
+                '& .MuiInputBase-input': {
+                  color: '#000000 !important',
+                  backgroundColor: 'white !important',
+                  fontWeight: 'normal',
+                  fontSize: '14px',
+                  padding: '12px 14px'
+                },
+                '& .MuiInputBase-input::placeholder': {
+                  color: '#666666',
+                  opacity: 1
+                },
+                '& .Mui-disabled': {
+                  opacity: 0.7,
+                  backgroundColor: '#f5f5f5 !important'
                 }
               }}
             />
-
-            {triggerNodeType === 'voice_input' && (
-              <Tooltip title={isRecording ? "Stop recording" : "Start voice recording"}>
-                <IconButton
-                  color={isRecording ? "error" : "primary"}
-                  onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
-                  disabled={isProcessing}
-                  sx={{
-                    backgroundColor: isRecording ? 'error.light' : 'primary.light',
-                    color: 'white',
-                    '&:hover': {
-                      backgroundColor: isRecording ? 'error.main' : 'primary.main'
-                    }
-                  }}
-                >
-                  {isRecording ? <StopIcon /> : <MicIcon />}
-                </IconButton>
-              </Tooltip>
-            )}
 
             <Tooltip title="Send message">
               <IconButton
@@ -499,14 +541,19 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
                 onClick={handleSendMessage}
                 disabled={!inputText.trim() || isProcessing || isRecording}
                 sx={{
-                  backgroundColor: 'primary.main',
+                  backgroundColor: '#1976d2',
                   color: 'white',
                   '&:hover': {
-                    backgroundColor: 'primary.dark'
+                    backgroundColor: '#1565c0'
                   },
                   '&:disabled': {
-                    backgroundColor: 'grey.300'
-                  }
+                    backgroundColor: '#cccccc !important',
+                    color: '#666666 !important'
+                  },
+                  minWidth: '40px',
+                  height: '40px',
+                  boxShadow: '0px 2px 4px rgba(0,0,0,0.2)',
+                  marginBottom: '0px'
                 }}
               >
                 <SendIcon />
