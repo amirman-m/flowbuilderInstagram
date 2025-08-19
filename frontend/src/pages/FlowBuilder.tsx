@@ -39,6 +39,7 @@ import { nodeService } from '../services/nodeService';
 import { NodeComponentFactory } from '../components/nodes/core/NodeComponentFactory';
 import { edgeTypes } from '../components/edges/CustomEdge';
 import { NodeInspector } from '../components/inspector';
+import { ChatBotExecutionDialog } from '../components/dialogs/ChatBotExecutionDialog';
 import { FlowExecutionDialog } from '../components/dialogs/FlowExecutionDialog';
 import { loadNodeConfigurations } from '../config/nodeConfiguration';
 import { useConnectionValidation } from '../hooks/useConnectionValidation';
@@ -440,37 +441,53 @@ const FlowBuilderInner: React.FC = () => {
     console.log('📊 Current nodes:', nodes);
     console.log('📋 Available node types:', availableNodeTypes);
     
-    // Find trigger node before opening dialog
-    const triggerNode = nodes.find(node => {
+    // Find trigger node(s) before opening dialog
+    const triggerNodes = nodes.filter(node => {
       const nodeData = node.data as any;
       console.log('🔍 Checking node:', node.id, 'data:', nodeData);
       
-      // Check if nodeType is attached
+      // Prefer attached nodeType
       if (nodeData?.nodeType) {
-        console.log('📝 Node type found:', nodeData.nodeType.category);
-        return nodeData.nodeType.category === NodeCategory.TRIGGER;
+        const isTrigger = nodeData.nodeType.category === NodeCategory.TRIGGER;
+        if (isTrigger) console.log('📝 Node type found (attached): TRIGGER');
+        return isTrigger;
       }
       
-      // Fallback: check by instance.typeId if nodeType not attached
+      // Fallback: resolve via instance.typeId
       if (nodeData?.instance?.typeId) {
         const nodeType = availableNodeTypes.find(nt => nt.id === nodeData.instance.typeId);
-        if (nodeType) {
-          console.log('📝 Node type found via typeId:', nodeType.category);
-          return nodeType.category === NodeCategory.TRIGGER;
-        }
+        const isTrigger = !!nodeType && nodeType.category === NodeCategory.TRIGGER;
+        if (isTrigger) console.log('📝 Node type found via typeId: TRIGGER');
+        return isTrigger;
       }
       
       return false;
     });
     
-    console.log('🎯 Found trigger node:', triggerNode);
+    console.log('🎯 Found trigger nodes:', triggerNodes.map(n => n.id));
     
-    if (!triggerNode) {
+    if (triggerNodes.length === 0) {
       // Show error - no trigger node found
       console.error('❌ No trigger node found in flow');
-      alert('No trigger node found in this flow. Please add a Chat Input node to execute the flow.');
+      showSnackbar({
+        message: 'No trigger node found. Please add exactly one trigger node (e.g., Chat Input) to execute the flow.',
+        severity: 'error',
+      });
       return;
     }
+
+    if (triggerNodes.length > 1) {
+      // Show error - more than one trigger node found
+      console.error(`❌ Multiple trigger nodes found in flow: ${triggerNodes.map(n => n.id).join(', ')}`);
+      showSnackbar({
+        message: `Multiple trigger nodes found (${triggerNodes.length}). Only one trigger node is allowed. Keep exactly one trigger node.`,
+        severity: 'error',
+      });
+      return;
+    }
+
+    const triggerNode = triggerNodes[0];
+    console.log('🎯 Selected trigger node:', triggerNode);
     
     // Get trigger node type
     const nodeData = triggerNode.data as any;
@@ -849,15 +866,26 @@ const FlowBuilderInner: React.FC = () => {
         />
       </Box>
       
-      {/* Flow Execution Dialog */}
-      <FlowExecutionDialog
-        open={executionDialogOpen}
-        onClose={() => setExecutionDialogOpen(false)}
-        flowName={flow?.name || 'Untitled Flow'}
-        triggerNodeId={triggerNodeId}
-        triggerNodeType={triggerNodeType}
-        onExecute={handleFlowExecution}
-      />
+      {/* Flow Execution Dialogs (conditional) */}
+      {executionDialogOpen && (triggerNodeType === 'chat_input' || triggerNodeType === 'voice_input') ? (
+        <ChatBotExecutionDialog
+          open={executionDialogOpen}
+          onClose={() => setExecutionDialogOpen(false)}
+          flowName={flow?.name || 'Untitled Flow'}
+          triggerNodeId={triggerNodeId}
+          triggerNodeType={triggerNodeType}
+          onExecute={handleFlowExecution}
+        />
+      ) : (
+        <FlowExecutionDialog
+          open={executionDialogOpen}
+          onClose={() => setExecutionDialogOpen(false)}
+          flowName={flow?.name || 'Untitled Flow'}
+          triggerNodeId={triggerNodeId}
+          triggerNodeType={triggerNodeType}
+          onExecute={handleFlowExecution}
+        />
+      )}
     </Box>
   );
 };
