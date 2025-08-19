@@ -59,6 +59,29 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
       timestamp: new Date()
     }
   ]);
+  
+  // Set initial welcome message based on trigger node type
+  useEffect(() => {
+    if (triggerNodeType === 'chat_input') {
+      setMessages([
+        {
+          id: 'welcome',
+          type: 'bot',
+          content: 'Hi there! Please type your message to continue.',
+          timestamp: new Date()
+        }
+      ]);
+    } else if (triggerNodeType === 'voice_input') {
+      setMessages([
+        {
+          id: 'welcome',
+          type: 'bot',
+          content: 'Hi there! Please click the microphone button to record your voice message.',
+          timestamp: new Date()
+        }
+      ]);
+    }
+  }, [triggerNodeType]);
   const [inputText, setInputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -540,104 +563,128 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
           )}
 
           <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1.5 }}>
-            {/* Voice input button */}
-            {(triggerNodeType === 'voice_input' || triggerNodeType === 'chat_input') && (
-              <Tooltip title={isRecording ? "Stop recording" : "Start voice recording"}>
-                <IconButton
-                  onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
-                  disabled={isProcessing}
-                  sx={{
-                    backgroundColor: isRecording ? '#ff4444' : '#4CAF50',
-                    color: 'white',
-                    width: 44,
-                    height: 44,
-                    '&:hover': {
-                      backgroundColor: isRecording ? '#ff3333' : '#45a049'
-                    },
-                    '&:disabled': {
-                      backgroundColor: '#666',
-                      color: '#999'
-                    },
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                    mb: 0.5
+            {/* Voice input button - only show for voice_input node type */}
+            {triggerNodeType === 'voice_input' && (
+              <>
+                <Box 
+                  sx={{ 
+                    flexGrow: 1, 
+                    backgroundColor: '#404040',
+                    borderRadius: 3,
+                    px: 2,
+                    py: 1.5,
+                    color: '#aaa',
+                    fontSize: '14px',
+                    border: '1px solid #555',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}
                 >
-                  {isRecording ? <StopIcon fontSize="small" /> : <MicIcon fontSize="small" />}
-                </IconButton>
-              </Tooltip>
+                  {isRecording ? 'Recording voice message...' : 'Click the microphone button to start recording'}
+                </Box>
+                <Tooltip title={isRecording ? "Stop recording" : "Start voice recording"}>
+                  <IconButton
+                    onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
+                    disabled={isProcessing}
+                    sx={{
+                      backgroundColor: isRecording ? '#ff4444' : '#4CAF50',
+                      color: 'white',
+                      width: 44,
+                      height: 44,
+                      '&:hover': {
+                        backgroundColor: isRecording ? '#ff3333' : '#45a049'
+                      },
+                      '&:disabled': {
+                        backgroundColor: '#666',
+                        color: '#999'
+                      },
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                      mb: 0.5
+                    }}
+                  >
+                    {isRecording ? <StopIcon fontSize="small" /> : <MicIcon fontSize="small" />}
+                  </IconButton>
+                </Tooltip>
+              </>
             )}
 
-            <TextField
-              ref={inputRef}
-              fullWidth
-              multiline
-              maxRows={4}
-              placeholder="Type your question..."
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyPress={handleKeyPress}
-              disabled={isProcessing || isRecording}
-              variant="outlined"
-              size="small"
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 3,
-                  backgroundColor: '#404040',
-                  '& fieldset': {
-                    borderColor: '#555',
-                    borderWidth: '1px'
-                  },
-                  '&:hover fieldset': {
-                    borderColor: '#777',
-                    borderWidth: '1px'
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: '#007bff',
-                    borderWidth: '2px'
-                  }
-                },
-                '& .MuiInputBase-input': {
-                  color: '#ffffff',
-                  fontSize: '14px',
-                  padding: '12px 16px',
-                  lineHeight: 1.4
-                },
-                '& .MuiInputBase-input::placeholder': {
-                  color: '#aaa',
-                  opacity: 1
-                },
-                '& .Mui-disabled': {
-                  opacity: 0.6,
-                  '& .MuiInputBase-input': {
-                    color: '#888'
-                  }
-                }
-              }}
-            />
+            {/* Text input field - only show for chat_input node type */}
+            {triggerNodeType === 'chat_input' && (
+              <>
+                <TextField
+                  ref={inputRef}
+                  fullWidth
+                  multiline
+                  maxRows={4}
+                  placeholder="Type your question..."
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  disabled={isProcessing}
+                  variant="outlined"
+                  size="small"
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 3,
+                      backgroundColor: '#404040',
+                      '& fieldset': {
+                        borderColor: '#555',
+                        borderWidth: '1px'
+                      },
+                      '&:hover fieldset': {
+                        borderColor: '#777',
+                        borderWidth: '1px'
+                      },
+                      '&.Mui-focused fieldset': {
+                        borderColor: '#007bff',
+                        borderWidth: '2px'
+                      }
+                    },
+                    '& .MuiInputBase-input': {
+                      color: '#ffffff',
+                      fontSize: '14px',
+                      padding: '12px 16px',
+                      lineHeight: 1.4
+                    },
+                    '& .MuiInputBase-input::placeholder': {
+                      color: '#aaa',
+                      opacity: 1
+                    },
+                    '& .Mui-disabled': {
+                      opacity: 0.6,
+                      '& .MuiInputBase-input': {
+                        color: '#888'
+                      }
+                    }
+                  }}
+                />
 
-            <Tooltip title="Send message">
-              <IconButton
-                onClick={handleSendMessage}
-                disabled={!inputText.trim() || isProcessing || isRecording}
-                sx={{
-                  backgroundColor: '#007bff',
-                  color: 'white',
-                  width: 44,
-                  height: 44,
-                  '&:hover': {
-                    backgroundColor: '#0056b3'
-                  },
-                  '&:disabled': {
-                    backgroundColor: '#666',
-                    color: '#999'
-                  },
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                  mb: 0.5
-                }}
-              >
-                <SendIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
+                <Tooltip title="Send message">
+                  <IconButton
+                    onClick={handleSendMessage}
+                    disabled={!inputText.trim() || isProcessing}
+                    sx={{
+                      backgroundColor: '#007bff',
+                      color: 'white',
+                      width: 44,
+                      height: 44,
+                      '&:hover': {
+                        backgroundColor: '#0056b3'
+                      },
+                      '&:disabled': {
+                        backgroundColor: '#666',
+                        color: '#999'
+                      },
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                      mb: 0.5
+                    }}
+                  >
+                    <SendIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </>
+            )}
           </Box>
         </Box>
       </Paper>
