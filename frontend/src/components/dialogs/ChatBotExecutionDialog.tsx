@@ -313,14 +313,17 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
           }}
         >
           <Chip
-            icon={message.isProcessing ? <CircularProgress size={16} /> : <PlayIcon />}
+            icon={message.isProcessing ? <CircularProgress size={14} sx={{ color: '#4CAF50' }} /> : <PlayIcon sx={{ fontSize: 14 }} />}
             label={message.content}
             variant="outlined"
-            color="primary"
             sx={{
-              backgroundColor: 'rgba(25, 118, 210, 0.08)',
+              backgroundColor: 'rgba(76, 175, 80, 0.1)',
+              borderColor: '#4CAF50',
+              color: '#4CAF50',
+              fontSize: '12px',
+              height: '28px',
               '& .MuiChip-icon': {
-                color: 'primary.main'
+                color: '#4CAF50'
               }
             }}
           />
@@ -334,39 +337,72 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
         sx={{
           display: 'flex',
           alignItems: 'flex-start',
-          mb: 2,
+          mb: 2.5,
           flexDirection: isUser ? 'row-reverse' : 'row'
         }}
       >
-        <Avatar
-          sx={{
-            width: 32,
-            height: 32,
-            bgcolor: isUser ? 'primary.main' : 'grey.300',
-            mx: 1
-          }}
-        >
-          {isUser ? <PersonIcon fontSize="small" /> : <BotIcon fontSize="small" />}
-        </Avatar>
+        {!isUser && (
+          <Box
+            sx={{
+              width: 28,
+              height: 28,
+              borderRadius: '50%',
+              backgroundColor: '#4CAF50',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              mr: 1.5,
+              flexShrink: 0
+            }}
+          >
+            <BotIcon sx={{ fontSize: 16, color: 'white' }} />
+          </Box>
+        )}
         
-        <Paper
-          elevation={1}
+        <Box
           sx={{
+            maxWidth: '75%',
+            backgroundColor: isUser ? '#007bff' : '#333',
+            color: isUser ? '#ffffff' : '#e0e0e0',
+            borderRadius: 3,
             px: 2,
-            py: 1,
-            maxWidth: '70%',
-            backgroundColor: isUser ? '#1976d2' : '#f0f0f0',
-            color: isUser ? 'white' : '#000000',
-            borderRadius: 2,
-            borderTopLeftRadius: isUser ? 2 : 0.5,
-            borderTopRightRadius: isUser ? 0.5 : 2,
-            border: isUser ? 'none' : '1px solid #e0e0e0'
+            py: 1.5,
+            wordWrap: 'break-word',
+            overflow: 'hidden',
+            border: isUser ? 'none' : '1px solid #444',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
           }}
         >
-          <Typography variant="body2" sx={{ fontWeight: 'normal', fontSize: '14px' }}>
+          <Typography 
+            variant="body2" 
+            sx={{ 
+              fontWeight: 'normal', 
+              fontSize: '14px',
+              lineHeight: 1.4,
+              color: 'inherit'
+            }}
+          >
             {message.content}
           </Typography>
-        </Paper>
+        </Box>
+
+        {isUser && (
+          <Box
+            sx={{
+              width: 28,
+              height: 28,
+              borderRadius: '50%',
+              backgroundColor: '#666',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              ml: 1.5,
+              flexShrink: 0
+            }}
+          >
+            <PersonIcon sx={{ fontSize: 16, color: 'white' }} />
+          </Box>
+        )}
       </Box>
     );
   };
@@ -376,43 +412,65 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
   return (
     <Slide direction="left" in={open} mountOnEnter unmountOnExit>
       <Paper
-        elevation={8}
+        elevation={24}
         sx={{
           position: 'fixed',
           right: 16,
           top: 20,
-          width: 400,
+          width: 380,
           height: 'calc(100vh - 120px)',
           display: 'flex',
           flexDirection: 'column',
           zIndex: 1300,
-          borderRadius: 3,
-          overflow: 'hidden'
+          borderRadius: 4,
+          overflow: 'hidden',
+          backgroundColor: '#1a1a1a',
+          border: '1px solid #333'
         }}
       >
         {/* Header */}
         <Box
           sx={{
-            p: 2,
-            backgroundColor: 'primary.main',
-            color: 'white',
+            p: 2.5,
+            backgroundColor: '#2d2d2d',
+            color: '#ffffff',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between'
+            justifyContent: 'space-between',
+            borderBottom: '1px solid #404040'
           }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <BotIcon sx={{ mr: 1 }} />
-            <Typography variant="h6" sx={{ fontSize: '1rem' }}>
+            <Box
+              sx={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                backgroundColor: '#4CAF50',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                mr: 2
+              }}
+            >
+              <BotIcon sx={{ fontSize: 18, color: 'white' }} />
+            </Box>
+            <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
               {flowName}
             </Typography>
           </Box>
           <IconButton
             size="small"
             onClick={onClose}
-            sx={{ color: 'white' }}
+            sx={{ 
+              color: '#999',
+              '&:hover': {
+                color: '#fff',
+                backgroundColor: 'rgba(255,255,255,0.1)'
+              }
+            }}
           >
-            <CloseIcon />
+            <CloseIcon fontSize="small" />
           </IconButton>
         </Box>
 
@@ -422,10 +480,19 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
             flexGrow: 1,
             p: 2,
             overflowY: 'auto',
-            backgroundColor: '#ffffff',
-            border: '1px solid #e0e0e0',
-            margin: '8px',
-            borderRadius: 2
+            backgroundColor: '#1a1a1a',
+            margin: '0px',
+            borderRadius: 0,
+            '&::-webkit-scrollbar': {
+              width: '6px'
+            },
+            '&::-webkit-scrollbar-track': {
+              backgroundColor: '#2d2d2d'
+            },
+            '&::-webkit-scrollbar-thumb': {
+              backgroundColor: '#555',
+              borderRadius: '3px'
+            }
           }}
         >
           {messages.map(renderMessage)}
@@ -436,54 +503,66 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
         <Box
           sx={{
             p: 2,
-            backgroundColor: 'white',
-            borderTop: 1,
-            borderColor: 'divider'
+            backgroundColor: '#2d2d2d',
+            borderTop: '1px solid #404040'
           }}
         >
-          {/* Recording indicator - moved to top of input area for better visibility */}
+          {/* Recording indicator */}
           {isRecording && (
             <Fade in={isRecording}>
               <Box
                 sx={{
                   mb: 2,
-                  p: 1,
-                  backgroundColor: 'error.light',
-                  borderRadius: 1,
+                  p: 1.5,
+                  backgroundColor: '#ff4444',
+                  borderRadius: 2,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 1
+                  gap: 1,
+                  boxShadow: '0 2px 8px rgba(255,68,68,0.3)'
                 }}
               >
-                <StopIcon fontSize="small" />
-                <Typography variant="body2" color="white" fontWeight="medium">
+                <Box
+                  sx={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    backgroundColor: 'white',
+                    animation: 'pulse 1s infinite'
+                  }}
+                />
+                <Typography variant="body2" color="white" fontWeight="medium" fontSize="13px">
                   Recording... {formatTime(recordingTime)}
                 </Typography>
               </Box>
             </Fade>
           )}
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {/* Voice input button moved to left side */}
-            {triggerNodeType === 'voice_input' && (
+          <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1.5 }}>
+            {/* Voice input button */}
+            {(triggerNodeType === 'voice_input' || triggerNodeType === 'chat_input') && (
               <Tooltip title={isRecording ? "Stop recording" : "Start voice recording"}>
                 <IconButton
-                  color={isRecording ? "error" : "primary"}
                   onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
                   disabled={isProcessing}
                   sx={{
-                    backgroundColor: isRecording ? 'error.main' : 'primary.main',
+                    backgroundColor: isRecording ? '#ff4444' : '#4CAF50',
                     color: 'white',
+                    width: 44,
+                    height: 44,
                     '&:hover': {
-                      backgroundColor: isRecording ? 'error.dark' : 'primary.dark'
+                      backgroundColor: isRecording ? '#ff3333' : '#45a049'
                     },
-                    minWidth: '40px',
-                    height: '40px',
-                    boxShadow: '0px 2px 4px rgba(0,0,0,0.2)'
+                    '&:disabled': {
+                      backgroundColor: '#666',
+                      color: '#999'
+                    },
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                    mb: 0.5
                   }}
                 >
-                  {isRecording ? <StopIcon /> : <MicIcon />}
+                  {isRecording ? <StopIcon fontSize="small" /> : <MicIcon fontSize="small" />}
                 </IconButton>
               </Tooltip>
             )}
@@ -492,7 +571,7 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
               ref={inputRef}
               fullWidth
               multiline
-              maxRows={3}
+              maxRows={4}
               placeholder="Type your question..."
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
@@ -503,60 +582,60 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
               sx={{
                 '& .MuiOutlinedInput-root': {
                   borderRadius: 3,
-                  backgroundColor: 'white',
+                  backgroundColor: '#404040',
                   '& fieldset': {
-                    borderColor: '#e0e0e0',
+                    borderColor: '#555',
                     borderWidth: '1px'
                   },
                   '&:hover fieldset': {
-                    borderColor: '#1976d2',
+                    borderColor: '#777',
                     borderWidth: '1px'
                   },
                   '&.Mui-focused fieldset': {
-                    borderColor: '#1976d2',
+                    borderColor: '#007bff',
                     borderWidth: '2px'
                   }
                 },
                 '& .MuiInputBase-input': {
-                  color: '#000000 !important',
-                  backgroundColor: 'white !important',
-                  fontWeight: 'normal',
+                  color: '#ffffff',
                   fontSize: '14px',
-                  padding: '12px 14px'
+                  padding: '12px 16px',
+                  lineHeight: 1.4
                 },
                 '& .MuiInputBase-input::placeholder': {
-                  color: '#666666',
+                  color: '#aaa',
                   opacity: 1
                 },
                 '& .Mui-disabled': {
-                  opacity: 0.7,
-                  backgroundColor: '#f5f5f5 !important'
+                  opacity: 0.6,
+                  '& .MuiInputBase-input': {
+                    color: '#888'
+                  }
                 }
               }}
             />
 
             <Tooltip title="Send message">
               <IconButton
-                color="primary"
                 onClick={handleSendMessage}
                 disabled={!inputText.trim() || isProcessing || isRecording}
                 sx={{
-                  backgroundColor: '#1976d2',
+                  backgroundColor: '#007bff',
                   color: 'white',
+                  width: 44,
+                  height: 44,
                   '&:hover': {
-                    backgroundColor: '#1565c0'
+                    backgroundColor: '#0056b3'
                   },
                   '&:disabled': {
-                    backgroundColor: '#cccccc !important',
-                    color: '#666666 !important'
+                    backgroundColor: '#666',
+                    color: '#999'
                   },
-                  minWidth: '40px',
-                  height: '40px',
-                  boxShadow: '0px 2px 4px rgba(0,0,0,0.2)',
-                  marginBottom: '0px'
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                  mb: 0.5
                 }}
               >
-                <SendIcon />
+                <SendIcon fontSize="small" />
               </IconButton>
             </Tooltip>
           </Box>
