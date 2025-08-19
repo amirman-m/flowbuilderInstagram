@@ -532,7 +532,7 @@ export const BaseNode: React.FC<BaseNodeProps> = memo((props) => {
                 border: '1px solid rgba(16, 185, 129, 0.1)'
               }}>
                 <Typography variant="caption" sx={{ fontSize: '10px', color: '#64748b' }}>
-                  Last execution: {executionData.lastExecuted || 'Never'}
+                  Last execution: {String(executionData.lastExecuted || 'Never')}
                 </Typography>
               </Box>
             )}

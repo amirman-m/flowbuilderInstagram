@@ -5,7 +5,6 @@ import {
   Typography,
   TextField,
   IconButton,
-  Avatar,
   Chip,
   CircularProgress,
   Tooltip,
@@ -22,13 +21,32 @@ import {
   Close as CloseIcon
 } from '@mui/icons-material';
 import { useSnackbar } from '../SnackbarProvider';
+import useFlowBuilderStore from '../../store/flowBuilderStore';
+import { NodeExecutionStatus } from '../../types/nodes';
+import nodeService from '../../services/nodeService';
+
+// Define custom node type that matches the actual structure
+type CustomNode = {
+  id: string;
+  data?: {
+    nodeType?: {
+      name?: string;
+    };
+    instance?: {
+      label?: string;
+    };
+    flowId?: number | string;
+  };
+};
 
 interface ChatMessage {
   id: string;
-  type: 'user' | 'bot' | 'system';
+  type: 'user' | 'bot' | 'system' | 'node_status';
   content: string;
   timestamp: Date;
   isProcessing?: boolean;
+  nodeId?: string;
+  status?: NodeExecutionStatus;
 }
 
 interface ChatBotExecutionDialogProps {
@@ -40,7 +58,8 @@ interface ChatBotExecutionDialogProps {
   onExecute: (triggerInputs: Record<string, any>) => Promise<void>;
 }
 
-const EXECUTION_TIMEOUT_MS = 30000; // 30 seconds
+const EXECUTION_TIMEOUT_MS = 60000; // 60 seconds
+const NODE_EXECUTION_TIMEOUT_MS = 30000; // 30 seconds per node
 
 export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
   open,
@@ -50,6 +69,8 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
   triggerNodeType,
   onExecute
 }) => {
+  // Get nodes and edges from flow builder store
+  const { nodes: flowNodes, edges: flowEdges } = useFlowBuilderStore();
   const { showSnackbar } = useSnackbar();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -84,8 +105,13 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
   }, [triggerNodeType]);
   const [inputText, setInputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [nodeExecutionOrder, setNodeExecutionOrder] = useState<string[]>([]);
+  const [currentExecutingNodeIndex, setCurrentExecutingNodeIndex] = useState<number>(-1);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  
+  // Message ID counter for ensuring unique IDs
+  const messageIdCounter = useRef(0);
   
   // Voice recording refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -129,9 +155,12 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
   }, []);
 
   const addMessage = (message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
+    // Increment counter for unique IDs
+    messageIdCounter.current += 1;
+    
     const newMessage: ChatMessage = {
       ...message,
-      id: Date.now().toString(),
+      id: `${Date.now()}-${messageIdCounter.current}`,
       timestamp: new Date()
     };
     setMessages(prev => [...prev, newMessage]);
@@ -146,10 +175,221 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
 
   // Wrap an execution promise with a timeout guard
   const withTimeout = async <T,>(promise: Promise<T>, timeoutMs = EXECUTION_TIMEOUT_MS): Promise<T> => {
-    return await Promise.race<T>([
+    return await Promise.race([
       promise,
       new Promise<T>((_, reject) => setTimeout(() => reject(new Error('Execution timed out')), timeoutMs))
     ]);
+  };
+
+
+  // Initialize node execution order and reset all nodes to PENDING when dialog opens
+  useEffect(() => {
+    if (open && triggerNodeId) {
+      // Get current nodes and edges from store to avoid dependency loop
+      const { nodes: currentNodes, edges: currentEdges } = useFlowBuilderStore.getState();
+      
+      // Build execution order inline to avoid dependency issues
+      if (!triggerNodeId || !currentNodes.length || !currentEdges.length) return;
+
+      // Start with trigger node
+      const executionOrder: string[] = [triggerNodeId];
+      const visited = new Set<string>([triggerNodeId]);
+      let nodesToProcess = [triggerNodeId];
+
+      // Build execution graph using breadth-first traversal
+      while (nodesToProcess.length > 0) {
+        const nextNodes: string[] = [];
+        
+        for (const nodeId of nodesToProcess) {
+          // Find all outgoing edges from this node
+          const outgoingEdges = currentEdges.filter(edge => edge.source === nodeId);
+          
+          for (const edge of outgoingEdges) {
+            const targetNodeId = edge.target;
+            
+            // Only add nodes we haven't visited yet
+            if (!visited.has(targetNodeId)) {
+              executionOrder.push(targetNodeId);
+              nextNodes.push(targetNodeId);
+              visited.add(targetNodeId);
+            }
+          }
+        }
+
+        nodesToProcess = nextNodes;
+      }
+
+      setNodeExecutionOrder(executionOrder);
+      setCurrentExecutingNodeIndex(-1); // Reset execution index
+      
+      // Reset all nodes in the execution order to PENDING status and clear last execution
+      const { setNodes } = useFlowBuilderStore.getState();
+      setNodes((nodes) =>
+        nodes.map((node) => {
+          if (executionOrder.includes(node.id)) {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                // Clear last execution result and set to PENDING
+                instance: {
+                  ...((node.data as any)?.instance || {}),
+                  data: {
+                    ...((node.data as any)?.instance?.data || {}),
+                    lastExecution: {
+                      status: NodeExecutionStatus.PENDING,
+                      outputs: {},
+                      startedAt: new Date(),
+                      metadata: {}
+                    }
+                  }
+                },
+                // Also set execution status at node level
+                executionStatus: NodeExecutionStatus.PENDING,
+                executionResult: null
+              }
+            };
+          }
+          return node;
+        })
+      );
+      
+      console.log('📋 Node execution order:', executionOrder);
+      console.log('🔄 Reset all nodes to PENDING status');
+    }
+  }, [open, triggerNodeId]);
+
+  // Execute a single node and update its status
+  // Using the imported FlowNode interface
+
+  const executeNode = async (nodeId: string, inputs: Record<string, any> = {}): Promise<any> => {
+    if (!nodeId) throw new Error('No node ID provided');
+    
+    // Find the node in the flow with proper typing
+    const node = flowNodes.find(n => n.id === nodeId) as CustomNode | undefined;
+    if (!node) throw new Error(`Node ${nodeId} not found`);
+    
+    // Access flowId with proper typing
+    const flowId = parseInt(node.data?.flowId?.toString() || '0');
+    if (!flowId) throw new Error('No flow ID available');
+    
+    // Get node label with proper typing
+    const nodeLabel = node.data?.instance?.label || node.data?.nodeType?.name || 'Node';
+    
+    // Add node status message
+    const statusMessageId = addMessage({
+      type: 'node_status',
+      content: `Executing ${nodeLabel}...`,
+      nodeId: nodeId,
+      status: NodeExecutionStatus.RUNNING
+    });
+    
+    try {
+      // Execute the node
+      console.log(`🔄 Executing node ${nodeId} with inputs:`, inputs);
+      const result = await withTimeout(
+        nodeService.execution.executeNode(flowId, nodeId, inputs),
+        NODE_EXECUTION_TIMEOUT_MS
+      );
+      
+      // Update status message to success
+      updateMessage(statusMessageId, {
+        content: `${nodeLabel} executed successfully`,
+        status: NodeExecutionStatus.SUCCESS
+      });
+      
+      console.log(`✅ Node ${nodeId} execution result:`, result);
+      return result;
+    } catch (error: any) {
+      // Update status message to error
+      updateMessage(statusMessageId, {
+        content: `Error executing ${nodeLabel}: ${error?.message || 'Unknown error'}`,
+        status: NodeExecutionStatus.ERROR
+      });
+      
+      console.error(`❌ Node ${nodeId} execution failed:`, error);
+      throw error;
+    }
+  };
+
+  // Execute nodes sequentially based on execution order
+  const executeNodesSequentially = async (triggerInputs: Record<string, any>) => {
+    if (!nodeExecutionOrder.length) {
+      throw new Error('No nodes to execute');
+    }
+    
+    // Initialize execution results
+    const results: Record<string, any> = {};
+    
+    try {
+      // Start with trigger node
+      setCurrentExecutingNodeIndex(0);
+      const triggerNodeResult = await executeNode(nodeExecutionOrder[0], triggerInputs);
+      results[nodeExecutionOrder[0]] = triggerNodeResult;
+      
+      // Execute remaining nodes in order
+      for (let i = 1; i < nodeExecutionOrder.length; i++) {
+        setCurrentExecutingNodeIndex(i);
+        const nodeId = nodeExecutionOrder[i];
+        
+        // Prepare inputs for this node from previous results
+        const nodeInputs = prepareNodeInputs(nodeId, results);
+        
+        // Execute the node
+        const nodeResult = await executeNode(nodeId, nodeInputs);
+        results[nodeId] = nodeResult;
+      }
+      
+      // All nodes executed successfully
+      return results;
+    } catch (error) {
+      // Mark remaining nodes as skipped
+      for (let i = currentExecutingNodeIndex + 1; i < nodeExecutionOrder.length; i++) {
+        const nodeId = nodeExecutionOrder[i];
+        const node = flowNodes.find(n => n.id === nodeId) as CustomNode | undefined;
+        const nodeLabel = node?.data?.instance?.label || node?.data?.nodeType?.name || 'Node';
+        
+        addMessage({
+          type: 'node_status',
+          content: `${nodeLabel} skipped due to previous error`,
+          nodeId: nodeId,
+          status: NodeExecutionStatus.SKIPPED
+        });
+      }
+      
+      throw error as Error;
+    } finally {
+      setCurrentExecutingNodeIndex(-1);
+    }
+  };
+
+  // Prepare inputs for a node based on previous execution results
+  const prepareNodeInputs = (nodeId: string, results: Record<string, any>): Record<string, any> => {
+    const inputs: Record<string, any> = {};
+    
+    // Find all edges where this node is the target
+    const incomingEdges = flowEdges.filter(edge => edge.target === nodeId);
+    
+    for (const edge of incomingEdges) {
+      const sourceNodeId = edge.source;
+      const sourcePortId = edge.sourceHandle || '';
+      const targetPortId = edge.targetHandle || '';
+      
+      // If we have results for the source node
+      if (results[sourceNodeId] && results[sourceNodeId].outputs) {
+        // Extract the output from the source node's results
+        const sourceOutput = results[sourceNodeId].outputs[sourcePortId.split('__')[1]] || 
+                            results[sourceNodeId].outputs.default;
+        
+        if (sourceOutput !== undefined) {
+          // Map to the target node's input
+          const inputKey = targetPortId.split('__')[1] || 'default';
+          inputs[inputKey] = sourceOutput;
+        }
+      }
+    }
+    
+    return inputs;
   };
 
   const handleSendMessage = async () => {
@@ -174,17 +414,38 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
     try {
       setIsProcessing(true);
 
-      // Execute the flow with timeout guard
-      await withTimeout(onExecute({
-        user_input: userMessage
-      }));
+      // Execute nodes sequentially
+      const results = await withTimeout(
+        executeNodesSequentially({ user_input: userMessage }),
+        EXECUTION_TIMEOUT_MS
+      );
+      
+      // Call the original onExecute to sync results with store
+      await onExecute({ user_input: userMessage });
 
       // Update processing message to success
       updateMessage(processingId, {
-        type: 'bot',
-        content: 'Hello! How can I assist you today?',
+        type: 'system',
+        content: 'Flow execution complete',
         isProcessing: false
       });
+      
+      // Add final bot response if available
+      const lastNodeId = nodeExecutionOrder[nodeExecutionOrder.length - 1];
+      const lastNodeResult = results[lastNodeId];
+      
+      if (lastNodeResult && lastNodeResult.outputs) {
+        const botResponse = lastNodeResult.outputs.message || 
+                           lastNodeResult.outputs.response || 
+                           lastNodeResult.outputs.text || 
+                           lastNodeResult.outputs.default || 
+                           'Flow execution completed successfully.';
+        
+        addMessage({
+          type: 'bot',
+          content: typeof botResponse === 'string' ? botResponse : JSON.stringify(botResponse)
+        });
+      }
 
       showSnackbar({
         message: 'Flow executed successfully!',
@@ -196,11 +457,17 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
       
       // Update processing message to error
       updateMessage(processingId, {
+        type: 'system',
+        content: 'Flow execution failed',
+        isProcessing: false
+      });
+      
+      // Add error message
+      addMessage({
         type: 'bot',
         content: error?.message === 'Execution timed out' 
           ? 'Processing is taking longer than expected. Please try again later.'
-          : 'Sorry, there was an error processing your request. Please try again.',
-        isProcessing: false
+          : 'Sorry, there was an error processing your request. Please try again.'
       });
 
       showSnackbar({
@@ -256,25 +523,53 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
             reader.readAsDataURL(audioBlob);
           });
 
-          await withTimeout(
-            onExecute({
-              voice_data: audioData
-            })
+          // Execute nodes sequentially
+          const results = await withTimeout(
+            executeNodesSequentially({ voice_data: audioData }),
+            EXECUTION_TIMEOUT_MS
           );
+          
+          // Call the original onExecute to sync results with store
+          await onExecute({ voice_data: audioData });
 
+          // Update processing message
           updateMessage(processingId, {
-            type: 'bot',
-            content: 'Hello! How can I assist you today?',
+            type: 'system',
+            content: 'Flow execution complete',
             isProcessing: false
           });
+          
+          // Add final bot response if available
+          const lastNodeId = nodeExecutionOrder[nodeExecutionOrder.length - 1];
+          const lastNodeResult = results[lastNodeId];
+          
+          if (lastNodeResult && lastNodeResult.outputs) {
+            const botResponse = lastNodeResult.outputs.message || 
+                               lastNodeResult.outputs.response || 
+                               lastNodeResult.outputs.text || 
+                               lastNodeResult.outputs.default || 
+                               'Voice processed successfully.';
+            
+            addMessage({
+              type: 'bot',
+              content: typeof botResponse === 'string' ? botResponse : JSON.stringify(botResponse)
+            });
+          }
 
         } catch (error: any) {
+          // Update processing message to error
           updateMessage(processingId, {
+            type: 'system',
+            content: 'Flow execution failed',
+            isProcessing: false
+          });
+          
+          // Add error message
+          addMessage({
             type: 'bot',
             content: error?.message === 'Execution timed out'
               ? 'Voice processing timed out. Please try again.'
-              : 'Sorry, I couldn\'t process your voice message. Please try again.',
-            isProcessing: false
+              : 'Sorry, I couldn\'t process your voice message. Please try again.'
           });
         } finally {
           setIsProcessing(false);
@@ -324,6 +619,7 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
   const renderMessage = (message: ChatMessage) => {
     const isUser = message.type === 'user';
     const isSystem = message.type === 'system';
+    const isNodeStatus = message.type === 'node_status';
 
     if (isSystem) {
       return (
@@ -347,6 +643,55 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
               height: '28px',
               '& .MuiChip-icon': {
                 color: '#4CAF50'
+              }
+            }}
+          />
+        </Box>
+      );
+    }
+    
+    if (isNodeStatus) {
+      // Define colors based on status
+      let statusColor = '#4CAF50'; // Default green
+      let statusBgColor = 'rgba(76, 175, 80, 0.1)';
+      let statusIcon = <PlayIcon sx={{ fontSize: 14 }} />;
+      
+      if (message.status === NodeExecutionStatus.RUNNING) {
+        statusIcon = <CircularProgress size={14} sx={{ color: '#2196F3' }} />;
+        statusColor = '#2196F3'; // Blue
+        statusBgColor = 'rgba(33, 150, 243, 0.1)';
+      } else if (message.status === NodeExecutionStatus.SUCCESS) {
+        statusColor = '#4CAF50'; // Green
+        statusBgColor = 'rgba(76, 175, 80, 0.1)';
+      } else if (message.status === NodeExecutionStatus.ERROR) {
+        statusColor = '#F44336'; // Red
+        statusBgColor = 'rgba(244, 67, 54, 0.1)';
+      } else if (message.status === NodeExecutionStatus.SKIPPED) {
+        statusColor = '#9E9E9E'; // Gray
+        statusBgColor = 'rgba(158, 158, 158, 0.1)';
+      }
+      
+      return (
+        <Box
+          key={message.id}
+          sx={{
+            display: 'flex',
+            justifyContent: 'center',
+            mb: 2
+          }}
+        >
+          <Chip
+            icon={statusIcon}
+            label={message.content}
+            variant="outlined"
+            sx={{
+              backgroundColor: statusBgColor,
+              borderColor: statusColor,
+              color: statusColor,
+              fontSize: '12px',
+              height: '28px',
+              '& .MuiChip-icon': {
+                color: statusColor
               }
             }}
           />
@@ -584,27 +929,29 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
                   {isRecording ? 'Recording voice message...' : 'Click the microphone button to start recording'}
                 </Box>
                 <Tooltip title={isRecording ? "Stop recording" : "Start voice recording"}>
-                  <IconButton
-                    onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
-                    disabled={isProcessing}
-                    sx={{
-                      backgroundColor: isRecording ? '#ff4444' : '#4CAF50',
-                      color: 'white',
-                      width: 44,
-                      height: 44,
-                      '&:hover': {
-                        backgroundColor: isRecording ? '#ff3333' : '#45a049'
-                      },
-                      '&:disabled': {
-                        backgroundColor: '#666',
-                        color: '#999'
-                      },
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                      mb: 0.5
-                    }}
-                  >
-                    {isRecording ? <StopIcon fontSize="small" /> : <MicIcon fontSize="small" />}
-                  </IconButton>
+                  <span>
+                    <IconButton
+                      onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
+                      disabled={isProcessing}
+                      sx={{
+                        backgroundColor: isRecording ? '#ff4444' : '#4CAF50',
+                        color: 'white',
+                        width: 44,
+                        height: 44,
+                        '&:hover': {
+                          backgroundColor: isRecording ? '#ff3333' : '#45a049'
+                        },
+                        '&:disabled': {
+                          backgroundColor: '#666',
+                          color: '#999'
+                        },
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                        mb: 0.5
+                      }}
+                    >
+                      {isRecording ? <StopIcon fontSize="small" /> : <MicIcon fontSize="small" />}
+                    </IconButton>
+                  </span>
                 </Tooltip>
               </>
             )}
@@ -661,27 +1008,29 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
                 />
 
                 <Tooltip title="Send message">
-                  <IconButton
-                    onClick={handleSendMessage}
-                    disabled={!inputText.trim() || isProcessing}
-                    sx={{
-                      backgroundColor: '#007bff',
-                      color: 'white',
-                      width: 44,
-                      height: 44,
-                      '&:hover': {
-                        backgroundColor: '#0056b3'
-                      },
-                      '&:disabled': {
-                        backgroundColor: '#666',
-                        color: '#999'
-                      },
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                      mb: 0.5
-                    }}
-                  >
-                    <SendIcon fontSize="small" />
-                  </IconButton>
+                  <span>
+                    <IconButton
+                      onClick={handleSendMessage}
+                      disabled={!inputText.trim() || isProcessing}
+                      sx={{
+                        backgroundColor: '#007bff',
+                        color: 'white',
+                        width: 44,
+                        height: 44,
+                        '&:hover': {
+                          backgroundColor: '#0056b3'
+                        },
+                        '&:disabled': {
+                          backgroundColor: '#666',
+                          color: '#999'
+                        },
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                        mb: 0.5
+                      }}
+                    >
+                      <SendIcon fontSize="small" />
+                    </IconButton>
+                  </span>
                 </Tooltip>
               </>
             )}

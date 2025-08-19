@@ -26,17 +26,37 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
   const nodeConfig = useNodeConfiguration(nodeType?.id || 'chat_input');
   const executionData = useExecutionData(nodeData);
   
-  // Initialize node status based on lastExecution data
+  // Debug execution data
+  console.log(`🔍 ChatInput Node ${id} execution data:`, {
+    hasFreshResults: executionData.hasFreshResults,
+    status: executionData.status,
+    outputs: executionData.outputs,
+    displayData: executionData.displayData
+  });
+  
+  // Initialize node status based on execution data
   useEffect(() => {
-    // Check if the node has lastExecution data with success status
-    if (instance?.data?.lastExecution?.status === 'success') {
+    // Check execution data from store first (fresh results)
+    if (executionData.hasFreshResults) {
+      if (executionData.status === 'success') {
+        setNodeStatus(NodeExecutionStatus.SUCCESS);
+        setStatusMessage('Execution completed successfully');
+      } else if (executionData.status === 'error') {
+        setNodeStatus(NodeExecutionStatus.ERROR);
+        setStatusMessage('Execution failed');
+      }
+    } else if (instance?.data?.lastExecution?.status === 'success') {
       setNodeStatus(NodeExecutionStatus.SUCCESS);
       setStatusMessage('Execution completed successfully');
     } else if (instance?.data?.lastExecution?.status === 'error') {
       setNodeStatus(NodeExecutionStatus.ERROR);
       setStatusMessage('Execution failed');
+    } else {
+      // Reset to pending if no execution data
+      setNodeStatus(NodeExecutionStatus.PENDING);
+      setStatusMessage('Ready to execute');
     }
-  }, [instance?.data?.lastExecution]);
+  }, [executionData.hasFreshResults, executionData.status, instance?.data?.lastExecution]);
   
   const handleExecute = async () => {
     setDialogOpen(true);
@@ -152,7 +172,7 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
   const customContent = (
     <>
       {/* Execution Results Display */}
-      {executionData.isExecuted && executionData.displayData && (
+      {(executionData.hasFreshResults || executionData.isExecuted) && (
         <Box sx={{ mt: 0.5, py: 0.75, px: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
         <Typography variant="caption" sx={{ color: '#666', fontWeight: 600, mb: 0.25, display: 'block' }}>
           Message:
@@ -194,9 +214,25 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
               whiteSpace: 'pre-wrap'
             }}
           >
-            {executionData.displayData.type === 'message_data' ? 
-              executionData.displayData.inputText : 
-              JSON.stringify(executionData.displayData)}
+            {(() => {
+              const displayData = executionData.displayData;
+              const outputs = executionData.outputs;
+              
+              // Try to get message data from different locations
+              if (displayData?.type === 'message_data' && displayData?.inputText) {
+                return displayData.inputText;
+              } else if (outputs?.message_data?.input_text) {
+                return outputs.message_data.input_text;
+              } else if (outputs?.message_data?.chat_input) {
+                return outputs.message_data.chat_input;
+              } else if (displayData?.data) {
+                return JSON.stringify(displayData.data);
+              } else if (outputs) {
+                return JSON.stringify(outputs);
+              } else {
+                return 'No message data available';
+              }
+            })()}
           </Typography>
         </Box>
       </Box>

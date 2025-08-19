@@ -320,22 +320,27 @@ export const useFlowBuilderStore = create<FlowBuilderState>()(
             const nodeId = node.id;
             const executionResult = results[nodeId];
             
-            if (executionResult && executionResult.outputs) {
-              console.log(`📝 Updating node ${nodeId} with outputs in store:`, executionResult.outputs);
+            if (executionResult) {
+              console.log(`📝 Updating node ${nodeId} with execution result:`, executionResult);
               
               const currentData = (node.data as any) || {};
               
+              // Create new data object to force React re-render
+              const newData = {
+                ...currentData,
+                executionResult: executionResult,
+                outputs: executionResult.outputs || {},
+                status: executionResult.status,
+                executionTime: executionResult.execution_time_ms,
+                lastExecuted: executionResult.completed_at,
+                instance: currentData.instance,
+                // Add timestamp to force re-render
+                _lastUpdated: Date.now()
+              };
+              
               return {
                 ...node,
-                data: {
-                  ...currentData,
-                  executionResult: executionResult,
-                  outputs: executionResult.outputs,
-                  status: executionResult.status,
-                  executionTime: executionResult.execution_time_ms,
-                  lastExecuted: executionResult.completed_at,
-                  instance: currentData.instance
-                }
+                data: newData
               };
             }
             

@@ -63,33 +63,50 @@ import { NodeDataWithHandlers } from '../registry';
  */
 export const useExecutionData = (data: NodeDataWithHandlers) => {
   return useMemo(() => {
-    // Get execution results from the updated node data (set by syncNodeStatesWithExecutionResults)
+    // Debug: Log the raw data being passed to the hook
+    console.log('🔧 useExecutionData raw data:', {
+      executionResult: (data as any)?.executionResult,
+      outputs: (data as any)?.outputs,
+      status: (data as any)?.status,
+      executionTime: (data as any)?.executionTime,
+      lastExecuted: (data as any)?.lastExecuted,
+      _lastUpdated: (data as any)?._lastUpdated
+    });
+    
+    // Get execution results from the updated node data (set by syncExecutionResults)
     const executionResult = (data as any)?.executionResult;
-    const outputs = (data as any)?.outputs;
-    const status = (data as any)?.status;
-    const executionTime = (data as any)?.executionTime;
+    const outputs = (data as any)?.outputs || executionResult?.outputs;
+    const status = (data as any)?.status || executionResult?.status;
+    const executionTime = (data as any)?.executionTime || executionResult?.execution_time_ms;
+    const lastExecuted = (data as any)?.lastExecuted || executionResult?.completed_at;
+    // Force re-evaluation when data changes (accessing _lastUpdated triggers useMemo recalculation)
+    (data as any)?._lastUpdated;
     
     // Get static instance data as fallback
     const instance = data?.instance;
     const instanceData = instance?.data || {};
     
     // Determine if we have fresh execution results
-    const hasFreshResults = Boolean(executionResult || outputs);
+    const hasFreshResults = Boolean(executionResult || outputs || status === 'success');
     
     // Get the most recent output data (execution results take priority over instance data)
-    // For Telegram webhook results, also check lastExecution.outputs
-    let currentOutputs = hasFreshResults ? outputs : (instanceData.outputs || {});
+    let currentOutputs = outputs || {};
     
-    // If no outputs found, check lastExecution data (for webhook-triggered executions)
+    // If no outputs from fresh execution, check instance data
     if (!currentOutputs || Object.keys(currentOutputs).length === 0) {
-      const lastExecution = instanceData?.lastExecution;
-      if (lastExecution && lastExecution.outputs) {
-        currentOutputs = lastExecution.outputs;
+      currentOutputs = instanceData.outputs || {};
+      
+      // If still no outputs, check lastExecution data (for webhook-triggered executions)
+      if (Object.keys(currentOutputs).length === 0) {
+        const lastExecution = instanceData?.lastExecution;
+        if (lastExecution && lastExecution.outputs) {
+          currentOutputs = lastExecution.outputs;
+        }
       }
     }
     
     // Resolve last executed timestamp from either root-level data or instance lastExecution
-    const resolvedLastExecuted = (data as any)?.lastExecuted 
+    const resolvedLastExecuted = lastExecuted 
       || instanceData?.lastExecution?.completedAt 
       || instanceData?.lastExecution?.startedAt;
     

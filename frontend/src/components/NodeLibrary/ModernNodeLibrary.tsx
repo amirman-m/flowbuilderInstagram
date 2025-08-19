@@ -103,8 +103,7 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
         {
           component: 'ModernNodeLibrary',
           action: 'loadNodeTypes',
-          retryCount,
-          nodeTypesCount: availableNodeTypes.length
+          retryCount
         }
       );
       
@@ -122,7 +121,7 @@ export const ModernNodeLibrary: React.FC<ModernNodeLibraryProps> = ({ onNodeDrag
     } finally {
       setLoading(false);
     }
-  }, [showSnackbar, retryCount, availableNodeTypes.length]);
+  }, [showSnackbar, retryCount]);
 
   // Load node types on component mount
   useEffect(() => {

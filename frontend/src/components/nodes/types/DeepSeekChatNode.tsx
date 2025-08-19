@@ -60,40 +60,62 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
   // Use hooks
   const nodeConfig = useNodeConfiguration(nodeType?.id || 'deepseek_chat');
   const executionData = useExecutionData(nodeData);
-  const { collectInputs, inputs: collectedInputs, isCollecting, inputSources } = useNodeInputs(id);
+  const { collectInputs } = useNodeInputs(id);
+  
+  // Debug execution data
+  console.log(`🔍 DeepSeek Node ${id} execution data:`, {
+    hasFreshResults: executionData.hasFreshResults,
+    status: executionData.status,
+    outputs: executionData.outputs,
+    displayData: executionData.displayData
+  });
   
   // Get current settings from instance
   const currentSettings = instance?.data?.settings || {};
-  const { model = '', system_prompt = '', temperature = 0.7, max_tokens = 1000 } = currentSettings;
+  const { model = '', system_prompt = '' } = currentSettings;
 
   // Keep localSettings in sync with instance settings continuously
   useEffect(() => {
     setLocalSettings(currentSettings);
   }, [currentSettings]);
 
-  // Initialize node status based on lastExecution data
+  // Initialize node status based on execution data
   useEffect(() => {
-    // Check if the node has lastExecution data with success status
-    if (instance?.data?.lastExecution?.status === 'success') {
+    // Check execution data from store first (fresh results)
+    if (executionData.hasFreshResults) {
+      if (executionData.status === 'success') {
+        setNodeStatus(NodeExecutionStatus.SUCCESS);
+        setStatusMessage('Execution completed successfully');
+      } else if (executionData.status === 'error') {
+        setNodeStatus(NodeExecutionStatus.ERROR);
+        setStatusMessage('Execution failed');
+      }
+    } else if (instance?.data?.lastExecution?.status === 'success') {
       setNodeStatus(NodeExecutionStatus.SUCCESS);
       setStatusMessage('Execution completed successfully');
     } else if (instance?.data?.lastExecution?.status === 'error') {
       setNodeStatus(NodeExecutionStatus.ERROR);
       setStatusMessage('Execution failed');
-    }
-  }, [instance?.data?.lastExecution]);
-
-  // Status validation effect
-  useEffect(() => {
-    const hasRequiredSettings = model && system_prompt;
-    if (!hasRequiredSettings) {
-      setNodeStatus(NodeExecutionStatus.SKIPPED);
-      setStatusMessage('Settings not configured');
     } else {
+      // Reset to pending if no execution data
       setNodeStatus(NodeExecutionStatus.PENDING);
       setStatusMessage('Ready to execute');
     }
-  }, [model, system_prompt]);
+  }, [executionData.hasFreshResults, executionData.status, instance?.data?.lastExecution]);
+
+  // Status validation effect - only run if no fresh execution results
+  useEffect(() => {
+    if (!executionData.hasFreshResults) {
+      const hasRequiredSettings = model && system_prompt;
+      if (!hasRequiredSettings) {
+        setNodeStatus(NodeExecutionStatus.SKIPPED);
+        setStatusMessage('Settings not configured');
+      } else {
+        setNodeStatus(NodeExecutionStatus.PENDING);
+        setStatusMessage('Ready to execute');
+      }
+    }
+  }, [model, system_prompt, executionData.hasFreshResults]);
 
 
 
@@ -336,7 +358,7 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
       )}
 
       {/* Execution Results Display */}
-      {executionData.isExecuted && executionData.displayData && (
+      {(executionData.hasFreshResults || executionData.isExecuted) && (
         <Box sx={{ mt: 0.5, py: 0.75, px: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
           <Typography variant="caption" sx={{ color: '#666', fontWeight: 600, mb: 0.25, display: 'block' }}>
             Latest Execution:
@@ -354,7 +376,30 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
               whiteSpace: 'normal'
             }}
           >
-            {toPlainText((executionData.displayData as any).aiResponse ?? executionData.displayData)}
+            {(() => {
+              // Try to get AI response from different possible locations
+              const displayData = executionData.displayData;
+              const outputs = executionData.outputs;
+              
+              let responseText = '';
+              
+              // Check displayData first
+              if (displayData?.aiResponse) {
+                responseText = displayData.aiResponse;
+              } else if ((displayData as any)?.ai_response) {
+                responseText = (displayData as any).ai_response;
+              } else if (outputs?.ai_response?.ai_response) {
+                responseText = outputs.ai_response.ai_response;
+              } else if (outputs?.ai_response) {
+                responseText = typeof outputs.ai_response === 'string' ? outputs.ai_response : JSON.stringify(outputs.ai_response);
+              } else if (displayData?.data) {
+                responseText = JSON.stringify(displayData.data);
+              } else {
+                responseText = 'No response data available';
+              }
+              
+              return toPlainText(responseText) || 'No response';
+            })()}
           </Typography>
         </Box>
       )}
