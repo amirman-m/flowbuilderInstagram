@@ -10,11 +10,13 @@ import { JSONSchema7 } from 'json-schema';
  * - TRIGGER: Nodes that start a flow execution (e.g., Instagram comment received)
  * - PROCESSOR: Nodes that process data (e.g., LLM response generation, text transformation)
  * - ACTION: Nodes that perform actions (e.g., send reply, call webhook)
+ * - MY_MODEL: Custom model nodes
  */
 export enum NodeCategory {
   TRIGGER = 'trigger',
   PROCESSOR = 'processor',
-  ACTION = 'action'
+  ACTION = 'action',
+  MY_MODEL = 'my_model'
 }
 
 /**

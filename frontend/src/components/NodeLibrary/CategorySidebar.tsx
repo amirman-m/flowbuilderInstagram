@@ -167,7 +167,7 @@ export const CategorySidebar: React.FC<CategorySidebarProps> = ({
             `CategorySidebar for category ${category.id}`
           );
           return (
-            <Tooltip key={category.id} title={`${category.name} (${nodeCount})`} placement="right">
+            <Tooltip key={category.key || category.id} title={`${category.name} (${nodeCount})`} placement="right">
               <IconButton
                 onClick={() => safeCategorySelect(category.id)}
                 sx={{

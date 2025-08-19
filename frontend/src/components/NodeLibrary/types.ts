@@ -10,6 +10,7 @@
 import { NodeCategory, NodeType } from '../../types/nodes';
 import { CategoryItem } from '../../config/categories';
 import { SvgIconProps } from '@mui/material';
+import React from 'react';
 
 // =============================================================================
 // CORE TYPE DEFINITIONS
@@ -246,19 +247,56 @@ export const isValidCategoryItem = (item: unknown): item is ValidatedCategoryIte
   
   // Validate required fields
   if (!categoryItem.id || !Object.values(NodeCategory).includes(categoryItem.id)) {
+    console.warn('CategoryItem validation failed - invalid id:', categoryItem.id, 'Available values:', Object.values(NodeCategory));
     return false;
   }
   
   if (!categoryItem.name || typeof categoryItem.name !== 'string' || categoryItem.name.trim().length === 0) {
+    console.warn('CategoryItem validation failed - invalid name:', categoryItem.name);
     return false;
   }
   
   if (!categoryItem.color || typeof categoryItem.color !== 'string' || !/^#[0-9A-Fa-f]{6}$/.test(categoryItem.color)) {
+    console.warn('CategoryItem validation failed - invalid color:', categoryItem.color);
     return false;
   }
   
-  if (!categoryItem.icon || typeof categoryItem.icon !== 'function') {
+  if (!categoryItem.icon || (typeof categoryItem.icon !== 'function' && typeof categoryItem.icon !== 'object')) {
+    console.warn('CategoryItem validation failed - invalid icon:', typeof categoryItem.icon, categoryItem.icon);
     return false;
+  }
+  
+  // Additional check for React components (they can be functions or valid React component types)
+  if (typeof categoryItem.icon === 'object') {
+    // For object icons, we check if it's a valid React component type
+    // React components can be functions or objects with a type property that is a function
+    const iconObj = categoryItem.icon as any;
+    
+    // Check if it's a valid React component type
+    // This can be a function component or a styled component
+    if (typeof iconObj !== 'function' && typeof iconObj !== 'object') {
+      console.warn('CategoryItem validation failed - icon is not a valid React component type:', categoryItem.icon);
+      return false;
+    }
+    
+    // If it's an object, check if it has the characteristics of a React component
+    if (typeof iconObj === 'object' && iconObj !== null) {
+      // Check for common React component patterns:
+      // 1. Function components (already handled above)
+      // 2. React.memo wrapped components ($$typeof: Symbol(react.memo))
+      // 3. Styled components or other wrapped components with $$typeof property
+      // 4. Components with a render function
+      const hasReactMemoType = iconObj.$$typeof && iconObj.$$typeof.toString().includes('react.memo');
+      const hasReactElementType = iconObj.$$typeof && iconObj.$$typeof.toString().includes('react.element');
+      const hasReactForwardRefType = iconObj.$$typeof && iconObj.$$typeof.toString().includes('react.forward_ref');
+      const hasTypeFunction = typeof iconObj.type === 'function';
+      const hasRenderFunction = typeof iconObj.render === 'function';
+      
+      if (!hasReactMemoType && !hasReactElementType && !hasReactForwardRefType && !hasTypeFunction && !hasRenderFunction) {
+        console.warn('CategoryItem validation failed - icon object is not a recognized React component pattern:', categoryItem.icon);
+        return false;
+      }
+    }
   }
   
   return true;

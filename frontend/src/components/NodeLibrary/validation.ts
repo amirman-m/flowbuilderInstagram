@@ -57,11 +57,28 @@ export const validateCategorySidebarProps = (props: {
     warnings.push('categories array is empty - no categories will be displayed');
   } else {
     // Validate individual category items
-    props.categories.forEach((category, index) => {
-      if (!isValidCategoryItem(category)) {
-        errors.push(`categories[${index}] is not a valid CategoryItem`);
-      }
-    });
+    const invalidCategories = props.categories.filter(category => !isValidCategoryItem(category));
+    
+    if (invalidCategories.length > 0) {
+      const errorMessages = invalidCategories.map(cat => {
+        const validationErrors = [];
+        if (!cat.id || !Object.values(NodeCategory).includes(cat.id as NodeCategory)) {
+          validationErrors.push(`Invalid id: ${cat.id}`);
+        }
+        if (!cat.name || typeof cat.name !== 'string' || cat.name.trim().length === 0) {
+          validationErrors.push(`Invalid name: ${cat.name}`);
+        }
+        if (!cat.color || typeof cat.color !== 'string' || !/^#[0-9A-Fa-f]{6}$/.test(cat.color)) {
+          validationErrors.push(`Invalid color: ${cat.color}`);
+        }
+        if (!cat.icon) {
+          validationErrors.push(`Missing icon`);
+        }
+        return `Category '${cat.id}': ${validationErrors.join(', ')}`;
+      });
+      
+      throw new Error(`Invalid categories found in sidebar: ${errorMessages.join('; ')}`);
+    }
   }
   
   // Validate selectedCategory

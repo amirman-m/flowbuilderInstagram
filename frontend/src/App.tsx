@@ -91,7 +91,7 @@ const App: React.FC = () => {
     <SnackbarProvider>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <Router>
+        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           {/* Header removed as requested */}
           <Routes>
             <Route

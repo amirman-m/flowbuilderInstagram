@@ -75,22 +75,24 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
         </Tabs>
         <Box sx={{ display: 'flex', gap: 1.5, pr: 1 }}>
           <Tooltip title="Refresh flows">
-            <IconButton 
-              onClick={onRefresh} 
-              disabled={loading}
-              sx={{ 
-                color: white,
-                bgcolor: alpha(white, 0.12),
-                backdropFilter: 'blur(6px)',
-                transition: 'all 0.3s ease',
-                '&:hover': { 
-                  bgcolor: alpha(white, 0.2),
-                  transform: 'scale(1.05)',
-                }
-              }}
-            >
-              <RefreshIcon />
-            </IconButton>
+            <span>
+              <IconButton 
+                onClick={onRefresh} 
+                disabled={loading}
+                sx={{ 
+                  color: white,
+                  bgcolor: alpha(white, 0.12),
+                  backdropFilter: 'blur(6px)',
+                  transition: 'all 0.3s ease',
+                  '&:hover': { 
+                    bgcolor: alpha(white, 0.2),
+                    transform: 'scale(1.05)',
+                  }
+                }}
+              >
+                <RefreshIcon />
+              </IconButton>
+            </span>
           </Tooltip>
           <Tooltip title={createDisabled ? 'Flow limit reached. Upgrade your plan to create more.' : ''}>
             <span>

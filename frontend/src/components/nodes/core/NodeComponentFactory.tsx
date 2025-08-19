@@ -109,7 +109,6 @@ export const NodeComponentFactory: React.FC<NodeProps> = (props) => {
   switch (renderingStrategy) {
     case RenderingStrategy.CUSTOM_COMPONENT: {
       const CustomNodeComponent = getNodeComponent(nodeTypeId);
-      console.log(`NodeComponentFactory[${id}]: Rendering custom component for ${nodeTypeId}`);
       
       // Inject configuration into custom component props
       const nodeComponentProps: NodeComponentProps = {
@@ -133,7 +132,6 @@ export const NodeComponentFactory: React.FC<NodeProps> = (props) => {
     }
     
     case RenderingStrategy.BASE_NODE_WITH_CONFIG: {
-      console.log(`NodeComponentFactory[${id}]: Rendering BaseNode with config for ${nodeTypeId}`);
       
       return (
         <BaseNode
@@ -147,7 +145,7 @@ export const NodeComponentFactory: React.FC<NodeProps> = (props) => {
     
     case RenderingStrategy.FALLBACK_DEFAULT:
     default: {
-      console.warn(`NodeComponentFactory[${id}]: Falling back to DefaultNode for ${nodeTypeId}`);
+      
       return <DefaultNode data={createNodeData(nodeData)} selected={props.selected || false} id={id} />;
     }
   }
