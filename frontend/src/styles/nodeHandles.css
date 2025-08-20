@@ -62,7 +62,6 @@
 .react-flow__handle-left,
 .react-flow__handle-right {
   z-index: 9999 !important;
-  position: relative !important;
 }
 
 /* Ensure node container doesn't interfere with handle positioning */

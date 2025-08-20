@@ -1,30 +1,15 @@
 // src/components/nodes/node-types/DeepSeekChatNode.tsx
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { 
   Box, 
   Typography, 
-  TextField, 
-  Button, 
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Tooltip
+  Alert
 } from '@mui/material';
-import { 
-  ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon,
-  InfoOutlined as InfoOutlinedIcon
-} from '@mui/icons-material';
-import BaseNodeRefactored from '../core/BaseNodeRefactored';
-import { NodeComponentProps } from '../registry';
-import { NodeInstance, NodeType } from '../../../types/nodes';
-import { useExecutionData } from '../hooks/useExecutionData';
+import { CheckCircle as CheckCircleIcon } from '@mui/icons-material';
+import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
+import { CompactNodeContainer } from '../core/CompactNodeContainer';
+import { useExecutionData } from '../hooks';
+import { NodeResultDisplay } from '../core/NodeResultDisplay';
 
 // DeepSeek Logo SVG Component
 const DeepSeekLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
@@ -42,60 +27,23 @@ const DeepSeekLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
 );
 
 export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
-  const { data, id } = props;
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [localSettings, setLocalSettings] = useState<any>({});
-  const [expandedPrompt, setExpandedPrompt] = useState(false);
+  const { data } = props;
+  const nodeData = data as NodeDataWithHandlers;
+  const { nodeType, instance } = nodeData;
   
-  // Extract data from props
-  const nodeType = data.nodeType as NodeType;
-  const instance = data.instance as NodeInstance;
-  const onNodeUpdate = data.onNodeUpdate;
-  const onExecutionComplete = data.onExecutionComplete;
-  
-  // Use hooks with proper data structure
-  const executionData = useExecutionData({ nodeType, instance, onNodeUpdate, onExecutionComplete });
+  // Use hooks for execution data
+  const executionData = useExecutionData({
+    nodeType,
+    instance,
+    onNodeUpdate: nodeData.onNodeUpdate,
+    onExecutionComplete: nodeData.onExecutionComplete
+  });
   
   // Get current settings from instance
   const currentSettings = instance?.data?.settings || {};
   const { model = '', system_prompt = '', temperature = 0.7, max_tokens = 1000 } = currentSettings;
-  
-  // Keep localSettings in sync with instance settings continuously
-  useEffect(() => {
-    setLocalSettings(currentSettings);
-  }, [currentSettings]);
 
-
-
-
-  const handleSettingsClick = () => {
-    setSettingsOpen(true);
-  };
-
-  const handleSettingsClose = () => {
-    setSettingsOpen(false);
-    setExpandedPrompt(false);
-  };
-
-  const handleSettingsSave = () => {
-    // Settings are already persisted on every field change; just close
-    setSettingsOpen(false);
-  };
-
-  const handleLocalSettingChange = (key: string, value: any) => {
-    const next = { ...(localSettings || {}), [key]: value };
-    setLocalSettings(next);
-    // Persist immediately so external editors stay in sync
-    if (onNodeUpdate && id) {
-      onNodeUpdate(id, {
-        data: {
-          ...instance?.data,
-          settings: next
-        },
-        updatedAt: new Date()
-      });
-    }
-  };
+  // Execution handlers will be managed by CompactNodeContainer
 
   // Convert any AI response payload to plain text, removing emojis/HTML/markdown
   const toPlainText = (input: any): string => {
@@ -126,11 +74,12 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
     return text.replace(/\s+/g, ' ').trim();
   };
 
-  // Custom content for DeepSeek node
-  const renderCustomContent = () => (
-    <Box sx={{ mt: 0.5 }}>
+  // Custom content for the DeepSeekChatNode
+  const customContent = (
+    <>
+      {/* Configuration Display */}
       {!executionData.isExecuted && (
-        <>
+        <Box sx={{ mt: 0.5 }}>
           <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>
             Model: {model || 'Not configured'}
           </Typography>
@@ -150,147 +99,52 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
               Prompt: {system_prompt}
             </Typography>
           )}
-        </>
+        </Box>
       )}
 
       {/* Execution Results Display */}
-      {executionData.isExecuted && executionData.displayData && (
-        <Box sx={{ mt: 0.5, py: 0.75, px: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
-          <Typography variant="caption" sx={{ color: '#666', fontWeight: 600, mb: 0.25, display: 'block' }}>
-            Latest Execution:
-          </Typography>
-          <Typography 
-            variant="caption" 
-            sx={{ 
-              display: 'block',
-              color: '#333',
-              fontSize: '0.8rem',
-              lineHeight: 1.25,
-              maxHeight: '180px',
-              overflowY: 'auto',
-              wordBreak: 'break-word',
-              whiteSpace: 'normal'
-            }}
-          >
-            {toPlainText((executionData.displayData as any).aiResponse ?? executionData.displayData)}
-          </Typography>
-        </Box>
+      {(executionData.hasFreshResults || executionData.isExecuted) && (
+        <NodeResultDisplay
+          title="AI Response:"
+          content={(() => {
+            const displayData = executionData.displayData;
+            const outputs = executionData.outputs;
+            
+            // Try to get AI response from different locations
+            if (displayData?.aiResponse) {
+              return toPlainText(displayData.aiResponse);
+            } else if (outputs?.ai_response) {
+              return toPlainText(outputs.ai_response);
+            } else if (outputs?.aiResponse) {
+              return toPlainText(outputs.aiResponse);
+            } else if (displayData && typeof displayData === 'object') {
+              return toPlainText(displayData);
+            } else {
+              return 'No AI response available';
+            }
+          })()} 
+        />
       )}
-    </Box>
+      
+      {/* Success indicator for fresh execution */}
+      {executionData.isSuccess && (
+        <Alert 
+          severity="success" 
+          icon={<CheckCircleIcon />}
+          sx={{ mt: 1, fontSize: '0.75rem' }}
+        >
+          <Typography variant="caption">
+            AI response generated successfully
+          </Typography>
+        </Alert>
+      )}
+    </>
   );
 
   return (
-    <>
-      <BaseNodeRefactored
-        {...props}
-        instance={instance}
-        nodeType={nodeType}
-        customContent={renderCustomContent()}
-        customHeader={
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <DeepSeekLogo size={20} />
-            <Typography variant="body2" sx={{ fontWeight: 500 }}>
-              DeepSeek Chat
-            </Typography>
-          </Box>
-        }
-        onSettingsClick={handleSettingsClick}
-      />
-
-      {/* Settings Dialog */}
-      <Dialog open={settingsOpen} onClose={handleSettingsClose} maxWidth="md" fullWidth>
-        <DialogTitle>DeepSeek Chat Settings</DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-            <FormControl fullWidth>
-              <InputLabel>
-                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
-                  Model
-                  <Tooltip
-                    title="Which DeepSeek brain to use. 'deepseek-chat' is fast and cheaper. 'deepseek-reasoner' thinks deeper but is slower and costlier."
-                    placement="right"
-                    arrow
-                  >
-                    <InfoOutlinedIcon sx={{ fontSize: 16, color: 'action.active' }} />
-                  </Tooltip>
-                </Box>
-              </InputLabel>
-              <Select
-                value={localSettings.model || ''}
-                label="Model"
-                onChange={(e: any) => handleLocalSettingChange('model', e.target.value)}
-              >
-                <MenuItem value="deepseek-chat">deepseek-chat</MenuItem>
-                <MenuItem value="deepseek-reasoner">deepseek-reasoner</MenuItem>
-              </Select>
-            </FormControl>
-
-            <TextField
-              label={
-                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
-                  System Prompt
-                  <Tooltip
-                    title="Tell the AI how to act. Example: 'You are a helpful assistant. Answer briefly.'"
-                    placement="right"
-                    arrow
-                  >
-                    <InfoOutlinedIcon sx={{ fontSize: 16, color: 'action.active' }} />
-                  </Tooltip>
-                </Box>
-              }
-              multiline
-              rows={expandedPrompt ? 8 : 4}
-              value={localSettings.system_prompt || ''}
-              onChange={(e) => handleLocalSettingChange('system_prompt', e.target.value)}
-              placeholder="Enter system prompt for the AI assistant..."
-              InputProps={
-                expandedPrompt ? {
-                  endAdornment: (
-                    <IconButton onClick={() => setExpandedPrompt(false)}>
-                      <ExpandLessIcon />
-                    </IconButton>
-                  )
-                } : {
-                  endAdornment: (
-                    <IconButton onClick={() => setExpandedPrompt(true)}>
-                      <ExpandMoreIcon />
-                    </IconButton>
-                  )
-                }
-              }
-            />
-
-            <TextField
-              label={
-                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
-                  Temperature
-                  <Tooltip
-                    title="Creativity level. Lower = safer and more exact. Higher = more creative and random."
-                    placement="right"
-                    arrow
-                  >
-                    <InfoOutlinedIcon sx={{ fontSize: 16, color: 'action.active' }} />
-                  </Tooltip>
-                </Box>
-              }
-              type="number"
-              value={localSettings.temperature || 0.7}
-              onChange={(e) => handleLocalSettingChange('temperature', parseFloat(e.target.value))}
-              inputProps={{ min: 0, max: 2, step: 0.1 }}
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleSettingsClose}>Cancel</Button>
-          <Button 
-            onClick={handleSettingsSave} 
-            variant="contained"
-            disabled={false}
-          >
-            Save
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </>
+    <CompactNodeContainer
+      {...props}
+      customColorName="pink"
+    />
   );
 };

@@ -258,25 +258,25 @@ export const CompactNodePresentation: React.FC<CompactNodePresentationProps> = (
       </Box>
 
       {/* Dynamic Input Handles */}
-      {inputPorts.map((port, index) => (
+      {inputPorts.map((port) => (
         <Handle
           key={`input-${port.id}`}
           type="target"
           position={Position.Left}
           id={port.id}
           style={{
-            left: -8,
-            top: inputPorts.length === 1 ? '50%' : `${20 + (index * 60 / Math.max(1, inputPorts.length - 1))}%`,
+            left: '-6px',
+            top: '50%',
+            transform: 'translateY(-50%)',
             width: 12,
             height: 12,
             background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
             border: '2px solid white',
             borderRadius: '50%',
-            zIndex: '9999 !important' as any,
+            zIndex: 10000,
             opacity: 1,
             visibility: 'visible',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0, 0, 0, 0.1)',
-            position: 'absolute'
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0, 0, 0, 0.1)'
           }}
           className="react-flow__handle-left"
           isConnectable={true}
@@ -284,25 +284,25 @@ export const CompactNodePresentation: React.FC<CompactNodePresentationProps> = (
       ))}
       
       {/* Dynamic Output Handles */}
-      {outputPorts.map((port, index) => (
+      {outputPorts.map((port) => (
         <Handle
           key={`output-${port.id}`}
           type="source"
           position={Position.Right}
           id={port.id}
           style={{
-            right: -8,
-            top: outputPorts.length === 1 ? '50%' : `${20 + (index * 60 / Math.max(1, outputPorts.length - 1))}%`,
+            right: '-6px',
+            top: '50%',
+            transform: 'translateY(-50%)',
             width: 12,
             height: 12,
             background: 'linear-gradient(135deg, #10b981, #059669)',
             border: '2px solid white',
             borderRadius: '50%',
-            zIndex: '9999 !important' as any,
+            zIndex: 10000,
             opacity: 1,
             visibility: 'visible',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0, 0, 0, 0.1)',
-            position: 'absolute'
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0, 0, 0, 0.1)'
           }}
           className="react-flow__handle-right"
           isConnectable={true}
