@@ -176,7 +176,10 @@ export const CompactNodePresentation: React.FC<CompactNodePresentationProps> = (
             <span>
               <IconButton
                 size="small"
-                onClick={onExecute}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onExecute();
+                }}
                 disabled={disabled || isExecuting}
                 sx={{
                   width: 20,
@@ -204,7 +207,10 @@ export const CompactNodePresentation: React.FC<CompactNodePresentationProps> = (
             <span>
               <IconButton
                 size="small"
-                onClick={onDelete}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
                 disabled={disabled}
                 sx={{
                   width: 20,

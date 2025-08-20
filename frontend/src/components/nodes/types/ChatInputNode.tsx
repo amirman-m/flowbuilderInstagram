@@ -11,6 +11,7 @@ import { useParams } from 'react-router-dom';
 import { CompactNodeContainer } from '../core/CompactNodeContainer';
 import { useNodeConfiguration, useExecutionData } from '../hooks';
 import { NodeExecutionManager } from '../core/NodeExecutionManager';
+import { NodeResultDisplay } from '../core/NodeResultDisplay';
 
 export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
   const { data, id } = props;
@@ -198,70 +199,27 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
     <>
       {/* Execution Results Display */}
       {(executionData.hasFreshResults || executionData.isExecuted) && (
-        <Box sx={{ mt: 0.5, py: 0.75, px: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
-        <Typography variant="caption" sx={{ color: '#666', fontWeight: 600, mb: 0.25, display: 'block' }}>
-          Message:
-        </Typography>
-        <Box
-          sx={{
-            maxHeight: '80px',
-            overflowY: 'auto',
-            p: 1,
-            backgroundColor: '#f5f5f5',
-            '&::-webkit-scrollbar': {
-              width: '8px',
-            },
-            '&::-webkit-scrollbar-track': {
-              background: '#f1f1f1',
-              borderRadius: '4px',
-            },
-            '&::-webkit-scrollbar-thumb': {
-              background: '#c1c1c1',
-              borderRadius: '4px',
-              border: '2px solid #f1f1f1',
-            },
-            '&::-webkit-scrollbar-thumb:hover': {
-              background: '#a8a8a8',
-            },
-            // Firefox scrollbar styles
-            scrollbarWidth: 'thin',
-            scrollbarColor: '#c1c1c1 #f1f1f1',
-          }}
-        >
-          <Typography 
-            variant="caption" 
-            sx={{ 
-              display: 'block',
-              color: '#333',
-              fontSize: '0.8rem',
-              lineHeight: 1.25,
-              wordBreak: 'break-word',
-              whiteSpace: 'pre-wrap'
-            }}
-          >
-            {(() => {
-              const displayData = executionData.displayData;
-              const outputs = executionData.outputs;
-              
-              // Try to get message data from different locations
-              if (displayData?.type === 'message_data' && displayData?.inputText) {
-                return displayData.inputText;
-              } else if (outputs?.message_data?.input_text) {
-                return outputs.message_data.input_text;
-              } else if (outputs?.message_data?.chat_input) {
-                return outputs.message_data.chat_input;
-              } else if (displayData?.data) {
-                return JSON.stringify(displayData.data);
-              } else if (outputs) {
-                return JSON.stringify(outputs);
-              } else {
-                return 'No message data available';
-              }
-            })()}
-          </Typography>
-        </Box>
-      </Box>
-    )}
+        <NodeResultDisplay
+          title="Message:"
+          content={(() => {
+            const displayData = executionData.displayData;
+            const outputs = executionData.outputs;
+            
+            // Try to get message data from different locations
+            if (displayData?.type === 'message_data' && displayData?.inputText) {
+              return displayData.inputText;
+            } else if (outputs?.message_data?.input_text) {
+              return outputs.message_data.input_text;
+            } else if (outputs?.message_data && typeof outputs.message_data === 'string') {
+              return outputs.message_data;
+            } else if (outputs?.message_data && typeof outputs.message_data === 'object') {
+              return JSON.stringify(outputs.message_data, null, 2);
+            } else {
+              return 'No message data available';
+            }
+          })()}
+        />
+      )}
       
       {/* Success indicator for fresh execution */}
       {executionData.isSuccess && (
