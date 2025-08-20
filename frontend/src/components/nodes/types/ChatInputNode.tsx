@@ -8,8 +8,9 @@ import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
 import { NodeExecutionStatus } from '../../../types/nodes';
 import { nodeService } from '../../../services/nodeService';
 import { useParams } from 'react-router-dom';
-import { BaseNode } from '../core/BaseNode';
+import { CompactNodeContainer } from '../core/CompactNodeContainer';
 import { useNodeConfiguration, useExecutionData } from '../hooks';
+import { NodeExecutionManager } from '../core/NodeExecutionManager';
 
 export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
   const { data, id } = props;
@@ -19,7 +20,7 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
   const [isExecuting, setIsExecuting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const nodeData = data as NodeDataWithHandlers;
-  const { nodeType, instance, onNodeUpdate } = nodeData;
+  const { nodeType, instance } = nodeData;
   const [nodeStatus, setNodeStatus] = useState<NodeExecutionStatus>(NodeExecutionStatus.PENDING);
   
   // Use hooks
@@ -34,29 +35,36 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
     displayData: executionData.displayData
   });
   
-  // Initialize node status based on execution data
+  // Initialize node status based on execution data and sync with NodeExecutionManager
   useEffect(() => {
+    const executionManager = NodeExecutionManager.getInstance();
+    
     // Check execution data from store first (fresh results)
     if (executionData.hasFreshResults) {
       if (executionData.status === 'success') {
         setNodeStatus(NodeExecutionStatus.SUCCESS);
         setStatusMessage('Execution completed successfully');
+        executionManager.setStatus(id, NodeExecutionStatus.SUCCESS, 'Execution completed successfully');
       } else if (executionData.status === 'error') {
         setNodeStatus(NodeExecutionStatus.ERROR);
         setStatusMessage('Execution failed');
+        executionManager.setStatus(id, NodeExecutionStatus.ERROR, 'Execution failed');
       }
     } else if (instance?.data?.lastExecution?.status === 'success') {
       setNodeStatus(NodeExecutionStatus.SUCCESS);
       setStatusMessage('Execution completed successfully');
+      executionManager.setStatus(id, NodeExecutionStatus.SUCCESS, 'Execution completed successfully');
     } else if (instance?.data?.lastExecution?.status === 'error') {
       setNodeStatus(NodeExecutionStatus.ERROR);
       setStatusMessage('Execution failed');
+      executionManager.setStatus(id, NodeExecutionStatus.ERROR, 'Execution failed');
     } else {
       // Reset to pending if no execution data
       setNodeStatus(NodeExecutionStatus.PENDING);
       setStatusMessage('Ready to execute');
+      executionManager.setStatus(id, NodeExecutionStatus.PENDING, 'Ready to execute');
     }
-  }, [executionData.hasFreshResults, executionData.status, instance?.data?.lastExecution]);
+  }, [id, executionData.hasFreshResults, executionData.status, instance?.data?.lastExecution]);
   
   const handleExecute = async () => {
     setDialogOpen(true);
@@ -70,6 +78,10 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
       console.log(' Executing Chat Input node via backend API...');
       setNodeStatus(NodeExecutionStatus.RUNNING);
       setStatusMessage('Executing...');
+      
+      // Update NodeExecutionManager for visual feedback
+      const executionManager = NodeExecutionManager.getInstance();
+      executionManager.setStatus(id, NodeExecutionStatus.RUNNING, 'Executing...');
       try {
         await new Promise((resolve, reject) => {
           const saveFlowEvent = new CustomEvent('autoSaveFlow', {
@@ -107,18 +119,26 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
       console.log(' Backend execution result:', result);
       
       setDialogOpen(false);
-      setInputText('');
-      
       // Update node state with execution results
       if (result && result.outputs) {
         setNodeStatus(NodeExecutionStatus.SUCCESS);
         setStatusMessage('Execution completed successfully');
+        setDialogOpen(false);
+        setInputText('');
+        
+        // Update NodeExecutionManager for visual feedback
+        const executionManager = NodeExecutionManager.getInstance();
+        executionManager.setStatus(id, NodeExecutionStatus.SUCCESS, 'Execution completed successfully');
+        
+        // Update node data with execution results
         if (nodeData.onNodeUpdate && id) {
           nodeData.onNodeUpdate(id, {
             data: {
               ...(instance?.data || {}),
               lastExecution: {
-                ...(result as any)
+                status: NodeExecutionStatus.SUCCESS,
+                outputs: result.outputs || {},
+                startedAt: new Date(),
               },
               outputs: result.outputs || {}
             },
@@ -135,6 +155,11 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
       console.error(' Backend execution failed:', error);
       setNodeStatus(NodeExecutionStatus.ERROR);
       setStatusMessage('Execution failed - no outputs');
+      
+      // Update NodeExecutionManager for visual feedback
+      const executionManager = NodeExecutionManager.getInstance();
+      executionManager.setStatus(id, NodeExecutionStatus.ERROR, 'Execution failed');
+      
       // Keep dialog open on error so user can retry
     } finally {
       setIsExecuting(false);
@@ -293,17 +318,15 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
   );
 
   return (
-    <BaseNode
-      {...props}
-      nodeTypeId="chat_input"
-      nodeConfig={nodeConfig}
-      status={nodeStatus}
-      statusMessage={statusMessage}
-      isExecuting={isExecuting}
-      onExecute={handleExecute}
-      onRefresh={handleRefresh}
-      customContent={customContent}
-      hideDefaultContent={executionData.isExecuted}
-    />
+    <>
+      <CompactNodeContainer
+        {...props}
+        customColorName="emerald"
+        onCustomExecute={handleExecute}
+      />
+      
+      {/* Input Dialog */}
+      {customContent}
+    </>
   );
 };

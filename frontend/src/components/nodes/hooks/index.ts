@@ -1,10 +1,15 @@
-// Barrel export for node hooks
+// Barrel export for easy importing
 export { useExecutionData } from './useExecutionData';
-export { useNodeConfiguration } from './useNodeConfiguration';
-export { useNodeStyles } from './useNodeStyles';
 export { useNodeActions } from './useNodeActions';
-export { useNodeValidation } from './useNodeValidation';
+export { useNodeConfiguration } from './useNodeConfiguration';
 export { useNodeInputs } from './useNodeInputs';
+export { useNodeStyles } from './useNodeStyles';
+export { useNodeValidation } from './useNodeValidation';
+export { 
+  useNodeExecutionStatus, 
+  useMultipleNodeExecutionStatus, 
+  useGlobalExecutionStatus 
+} from './useNodeExecutionStatus';
 
 // Re-export types
 export type { UseNodeStylesOptions } from './useNodeStyles';

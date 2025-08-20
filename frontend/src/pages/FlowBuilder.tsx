@@ -48,6 +48,7 @@ import { ModernNodeLibrary } from '../components/NodeLibrary';
 import { useFlowBuilderStore } from '../store/flowBuilderStore';
 import '../styles/connectionValidation.css';
 import '../styles/flowBuilder.css';
+import '../styles/nodeHandles.css';
 
 // Define nodeTypes using our NodeComponentFactory for all node types
 const nodeTypes = {
@@ -166,25 +167,40 @@ const FlowBuilderInner: React.FC = () => {
   
   // Initialize connection validation
   const {
-    validateConnection,
-    getValidatedEdges,
-    isValidConnection
+    getValidatedEdges
   } = useConnectionValidation(nodes, nodeTypesMap, {
-    realTimeValidation: true,
-    preventInvalidConnections: true
+    realTimeValidation: false,
+    preventInvalidConnections: false
   });
   
-  // Handle new connections with validation
+  // Handle new connections with simplified validation
   const onConnect = useCallback((connection: Connection) => {
     console.log('🔗 Attempting to create connection:', connection);
     
-    // Validate the connection
-    const validationResult = validateConnection(connection);
+    // Basic validation: prevent self-connections and duplicate connections
+    if (connection.source === connection.target) {
+      console.warn('❌ Cannot connect node to itself');
+      showSnackbar({
+        message: 'Cannot connect a node to itself',
+        severity: 'warning',
+      });
+      return;
+    }
     
-    if (!validationResult.isValid) {
-      console.warn('❌ Connection blocked:', validationResult.errorMessage);
-      // Show user-friendly error message
-      alert(validationResult.errorMessage || 'Invalid connection');
+    // Check for existing connection between same nodes and handles
+    const existingConnection = edges.find(edge => 
+      edge.source === connection.source && 
+      edge.target === connection.target &&
+      edge.sourceHandle === connection.sourceHandle &&
+      edge.targetHandle === connection.targetHandle
+    );
+    
+    if (existingConnection) {
+      console.warn('❌ Connection already exists');
+      showSnackbar({
+        message: 'Connection already exists between these ports',
+        severity: 'warning',
+      });
       return;
     }
     
@@ -202,7 +218,12 @@ const FlowBuilderInner: React.FC = () => {
     
     // Add the edge to the flow
     setEdges((eds) => addEdge(newEdge, eds));
-  }, [validateConnection, setEdges]);
+    
+    showSnackbar({
+      message: 'Nodes connected successfully',
+      severity: 'success',
+    });
+  }, [edges, setEdges, attachEdgeHandlers, showSnackbar]);
   
   // Apply validation styling to edges
   const validatedEdges = useMemo(() => {
@@ -839,7 +860,7 @@ const FlowBuilderInner: React.FC = () => {
             deleteKeyCode={null}
             fitView
             attributionPosition="bottom-left"
-            isValidConnection={(connection) => isValidConnection(connection as Connection)}
+            isValidConnection={() => true}
           >
             <Controls 
               position="bottom-right" 

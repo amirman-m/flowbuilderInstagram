@@ -1,32 +1,30 @@
 // src/components/nodes/node-types/DeepSeekChatNode.tsx
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import {
+import { 
+  Box, 
+  Typography, 
+  TextField, 
+  Button, 
+  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Button,
-  TextField,
-  Select,
-  MenuItem,
   FormControl,
   InputLabel,
-  Typography,
-  Box,
+  Select,
+  MenuItem,
   Tooltip
 } from '@mui/material';
-import {
+import { 
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
   InfoOutlined as InfoOutlinedIcon
 } from '@mui/icons-material';
-import { IconButton } from '@mui/material';
-import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
-import { BaseNode } from '../core/BaseNode';
-import { nodeService } from '../../../services/nodeService';
-import { useNodeConfiguration, useExecutionData, useNodeInputs } from '../hooks';
-import { NodeExecutionStatus } from '../../../types/nodes';
+import BaseNodeRefactored from '../core/BaseNodeRefactored';
+import { NodeComponentProps } from '../registry';
+import { NodeInstance, NodeType } from '../../../types/nodes';
+import { useExecutionData } from '../hooks/useExecutionData';
 
 // DeepSeek Logo SVG Component
 const DeepSeekLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
@@ -45,232 +43,30 @@ const DeepSeekLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
 
 export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
   const { data, id } = props;
-  const [nodeStatus, setNodeStatus] = useState<NodeExecutionStatus>(NodeExecutionStatus.PENDING);
-  const [statusMessage, setStatusMessage] = useState<string>('');
-  const [isExecuting, setIsExecuting] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [localSettings, setLocalSettings] = useState<any>({});
   const [expandedPrompt, setExpandedPrompt] = useState(false);
   
-  const { flowId } = useParams<{ flowId: string }>();
+  // Extract data from props
+  const nodeType = data.nodeType as NodeType;
+  const instance = data.instance as NodeInstance;
+  const onNodeUpdate = data.onNodeUpdate;
+  const onExecutionComplete = data.onExecutionComplete;
   
-  const nodeData = data as NodeDataWithHandlers;
-  const { nodeType, instance } = nodeData;
-  
-  // Use hooks
-  const nodeConfig = useNodeConfiguration(nodeType?.id || 'deepseek_chat');
-  const executionData = useExecutionData(nodeData);
-  const { collectInputs } = useNodeInputs(id);
-  
-  // Debug execution data
-  console.log(`🔍 DeepSeek Node ${id} execution data:`, {
-    hasFreshResults: executionData.hasFreshResults,
-    status: executionData.status,
-    outputs: executionData.outputs,
-    displayData: executionData.displayData
-  });
+  // Use hooks with proper data structure
+  const executionData = useExecutionData({ nodeType, instance, onNodeUpdate, onExecutionComplete });
   
   // Get current settings from instance
   const currentSettings = instance?.data?.settings || {};
-  const { model = '', system_prompt = '' } = currentSettings;
-
+  const { model = '', system_prompt = '', temperature = 0.7, max_tokens = 1000 } = currentSettings;
+  
   // Keep localSettings in sync with instance settings continuously
   useEffect(() => {
     setLocalSettings(currentSettings);
   }, [currentSettings]);
 
-  // Initialize node status based on execution data
-  useEffect(() => {
-    // Check execution data from store first (fresh results)
-    if (executionData.hasFreshResults) {
-      if (executionData.status === 'success') {
-        setNodeStatus(NodeExecutionStatus.SUCCESS);
-        setStatusMessage('Execution completed successfully');
-      } else if (executionData.status === 'error') {
-        setNodeStatus(NodeExecutionStatus.ERROR);
-        setStatusMessage('Execution failed');
-      }
-    } else if (instance?.data?.lastExecution?.status === 'success') {
-      setNodeStatus(NodeExecutionStatus.SUCCESS);
-      setStatusMessage('Execution completed successfully');
-    } else if (instance?.data?.lastExecution?.status === 'error') {
-      setNodeStatus(NodeExecutionStatus.ERROR);
-      setStatusMessage('Execution failed');
-    } else {
-      // Reset to pending if no execution data
-      setNodeStatus(NodeExecutionStatus.PENDING);
-      setStatusMessage('Ready to execute');
-    }
-  }, [executionData.hasFreshResults, executionData.status, instance?.data?.lastExecution]);
-
-  // Status validation effect - only run if no fresh execution results
-  useEffect(() => {
-    if (!executionData.hasFreshResults) {
-      const hasRequiredSettings = model && system_prompt;
-      if (!hasRequiredSettings) {
-        setNodeStatus(NodeExecutionStatus.SKIPPED);
-        setStatusMessage('Settings not configured');
-      } else {
-        setNodeStatus(NodeExecutionStatus.PENDING);
-        setStatusMessage('Ready to execute');
-      }
-    }
-  }, [model, system_prompt, executionData.hasFreshResults]);
 
 
-
-  const handleExecute = async () => {
-    if (!model || !system_prompt) {
-      setNodeStatus(NodeExecutionStatus.ERROR);
-      setStatusMessage('Please configure settings first');
-      return;
-    }
-
-    setIsExecuting(true);
-    setNodeStatus(NodeExecutionStatus.RUNNING);
-    setStatusMessage('Executing...');
-
-    try {
-      // Mark node as running so UI shows loading and status indicator updates
-      if (nodeData.onNodeUpdate && id) {
-        nodeData.onNodeUpdate(id, {
-          data: {
-            ...(instance?.data || {}),
-            lastExecution: {
-              status: NodeExecutionStatus.RUNNING as NodeExecutionStatus,
-              outputs: {},
-              startedAt: new Date().toISOString()
-            },
-            outputs: {}
-          },
-          updatedAt: new Date()
-        });
-      }
-
-      // 1) Collect inputs from connected upstream nodes (modular and reusable)
-      const inputs = await collectInputs();
-      // Persist collected inputs immediately so Data tab can show them (even before execution completes)
-      if (nodeData.onNodeUpdate && id) {
-        nodeData.onNodeUpdate(id, {
-          data: {
-            ...(instance?.data || {}),
-            inputs: inputs
-          },
-          updatedAt: new Date()
-        });
-      }
-
-      // 2) Execute node with collected inputs and current settings
-      const result = await nodeService.execution.executeNode(
-        parseInt(flowId || '1'),
-        id,
-        inputs,
-        currentSettings
-      );
-
-      if (result && result.outputs) {
-        // Success status
-        setNodeStatus(NodeExecutionStatus.SUCCESS);
-        setStatusMessage('Execution completed successfully');
-        
-        // Persist fresh results under instance.data for downstream nodes
-        if (nodeData.onNodeUpdate && id) {
-          nodeData.onNodeUpdate(id, {
-            data: {
-              ...(instance?.data || {}),
-              lastExecution: {
-                ...(result as any)
-              },
-              // Keep both outputs and the most recent collected inputs
-              outputs: result.outputs || {},
-              inputs: inputs
-            },
-            updatedAt: new Date()
-          });
-        }
-        // Also emit root-level execution event for UI hooks (fresh results)
-        if (nodeData.onExecutionComplete) {
-          nodeData.onExecutionComplete(id, {
-            status: (result.status as any) || NodeExecutionStatus.SUCCESS,
-            outputs: result.outputs || {},
-            error: (result as any).error,
-            startedAt: (result as any).startedAt || new Date().toISOString(),
-            completedAt: (result as any).completedAt || new Date().toISOString(),
-            metadata: (result as any).metadata,
-            success: ((result as any).status || 'success') === NodeExecutionStatus.SUCCESS,
-            timestamp: new Date().toISOString()
-          });
-        }
-      } else {
-        // Explicit failure path
-        setNodeStatus(NodeExecutionStatus.ERROR);
-        setStatusMessage('Execution failed - no outputs');
-        
-        if (nodeData.onNodeUpdate && id) {
-          nodeData.onNodeUpdate(id, {
-            data: {
-              ...(instance?.data || {}),
-              lastExecution: {
-                status: NodeExecutionStatus.ERROR,
-                outputs: {},
-                error: (result as any)?.error || 'Execution returned no outputs',
-                startedAt: new Date().toISOString(),
-                completedAt: new Date().toISOString()
-              }
-            },
-            updatedAt: new Date()
-          });
-        }
-        if (nodeData.onExecutionComplete) {
-          nodeData.onExecutionComplete(id, {
-            status: NodeExecutionStatus.ERROR,
-            outputs: {},
-            error: (result as any)?.error || 'Execution returned no outputs',
-            startedAt: new Date().toISOString(),
-            completedAt: new Date().toISOString(),
-            success: false,
-            timestamp: new Date().toISOString()
-          });
-        }
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
-      
-      // Error status
-      setNodeStatus(NodeExecutionStatus.ERROR);
-      setStatusMessage(`Error: ${errorMsg}`);
-      
-      // Update node state with error so UI reflects failure
-      if (nodeData.onNodeUpdate && id) {
-        nodeData.onNodeUpdate(id, {
-          data: {
-            ...(instance?.data || {}),
-            lastExecution: {
-              status: NodeExecutionStatus.ERROR,
-              outputs: {},
-              error: errorMsg,
-              startedAt: new Date().toISOString(),
-              completedAt: new Date().toISOString()
-            }
-          },
-          updatedAt: new Date()
-        });
-      }
-      if (nodeData.onExecutionComplete) {
-        nodeData.onExecutionComplete(id, {
-          status: NodeExecutionStatus.ERROR,
-          outputs: {},
-          error: errorMsg,
-          startedAt: new Date().toISOString(),
-          completedAt: new Date().toISOString(),
-          success: false,
-          timestamp: new Date().toISOString()
-        });
-      }
-    } finally {
-      setIsExecuting(false);
-    }
-  };
 
   const handleSettingsClick = () => {
     setSettingsOpen(true);
@@ -290,8 +86,8 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
     const next = { ...(localSettings || {}), [key]: value };
     setLocalSettings(next);
     // Persist immediately so external editors stay in sync
-    if (nodeData.onNodeUpdate && id) {
-      nodeData.onNodeUpdate(id, {
+    if (onNodeUpdate && id) {
+      onNodeUpdate(id, {
         data: {
           ...instance?.data,
           settings: next
@@ -358,7 +154,7 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
       )}
 
       {/* Execution Results Display */}
-      {(executionData.hasFreshResults || executionData.isExecuted) && (
+      {executionData.isExecuted && executionData.displayData && (
         <Box sx={{ mt: 0.5, py: 0.75, px: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
           <Typography variant="caption" sx={{ color: '#666', fontWeight: 600, mb: 0.25, display: 'block' }}>
             Latest Execution:
@@ -376,30 +172,7 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
               whiteSpace: 'normal'
             }}
           >
-            {(() => {
-              // Try to get AI response from different possible locations
-              const displayData = executionData.displayData;
-              const outputs = executionData.outputs;
-              
-              let responseText = '';
-              
-              // Check displayData first
-              if (displayData?.aiResponse) {
-                responseText = displayData.aiResponse;
-              } else if ((displayData as any)?.ai_response) {
-                responseText = (displayData as any).ai_response;
-              } else if (outputs?.ai_response?.ai_response) {
-                responseText = outputs.ai_response.ai_response;
-              } else if (outputs?.ai_response) {
-                responseText = typeof outputs.ai_response === 'string' ? outputs.ai_response : JSON.stringify(outputs.ai_response);
-              } else if (displayData?.data) {
-                responseText = JSON.stringify(displayData.data);
-              } else {
-                responseText = 'No response data available';
-              }
-              
-              return toPlainText(responseText) || 'No response';
-            })()}
+            {toPlainText((executionData.displayData as any).aiResponse ?? executionData.displayData)}
           </Typography>
         </Box>
       )}
@@ -408,17 +181,20 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
 
   return (
     <>
-      <BaseNode
+      <BaseNodeRefactored
         {...props}
-        nodeTypeId="simple-deepseek-chat"
-        nodeConfig={nodeConfig}
-        status={nodeStatus}
-        statusMessage={statusMessage}
-        isExecuting={isExecuting}
-        onExecute={handleExecute}
-        onSettingsClick={handleSettingsClick}
+        instance={instance}
+        nodeType={nodeType}
         customContent={renderCustomContent()}
-        icon={<DeepSeekLogo />}
+        customHeader={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <DeepSeekLogo size={20} />
+            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+              DeepSeek Chat
+            </Typography>
+          </Box>
+        }
+        onSettingsClick={handleSettingsClick}
       />
 
       {/* Settings Dialog */}
@@ -442,7 +218,7 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
               <Select
                 value={localSettings.model || ''}
                 label="Model"
-                onChange={(e) => handleLocalSettingChange('model', e.target.value)}
+                onChange={(e: any) => handleLocalSettingChange('model', e.target.value)}
               >
                 <MenuItem value="deepseek-chat">deepseek-chat</MenuItem>
                 <MenuItem value="deepseek-reasoner">deepseek-reasoner</MenuItem>

@@ -1,6 +1,5 @@
 // src/components/nodes/node-types/OpenAIChatNode.tsx
 import React, { useState, useEffect } from 'react';
-import { useReactFlow } from '@xyflow/react';
 import {
   Dialog,
   DialogTitle,
@@ -20,10 +19,9 @@ import {
   ExpandLess as ExpandLessIcon
 } from '@mui/icons-material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
-import { NodeExecutionStatus } from '../../../types/nodes';
 import { BaseNode } from '../core/BaseNode';
-import { nodeService } from '../../../services/nodeService';
 import { useNodeConfiguration, useExecutionData } from '../hooks';
+import { useNodeExecution } from '../hooks/useNodeExecution';
 
 // OpenAI Logo SVG Component
 const OpenAILogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
@@ -39,229 +37,47 @@ const OpenAILogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
 
 export const OpenAIChatNode: React.FC<NodeComponentProps> = (props) => {
   const { data, id } = props;
-  const [settingsValidationState, setSettingsValidationState] = useState<'error' | 'success' | 'none'>('none');
-  const [isExecuting, setIsExecuting] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [localSettings, setLocalSettings] = useState<any>({});
   const [expandedPrompt, setExpandedPrompt] = useState(false);
   
-  // Access React Flow instance to get nodes and edges
-  const { getNodes, getEdges } = useReactFlow();
-  
   const nodeData = data as NodeDataWithHandlers;
-  const { nodeType, instance } = nodeData;
+  const { nodeType, instance, onNodeUpdate, onExecutionComplete } = nodeData;
   
-  // Use our new modular hooks
+  // Use hooks
   const nodeConfig = useNodeConfiguration(nodeType?.id || 'openai_chat');
   const executionData = useExecutionData(nodeData);
   
   // Get current settings from instance
   const currentSettings = instance?.data?.settings || {};
-  const { model = '', system_prompt = '', temperature = 0.7, max_tokens = 1000, stop = '\n\n' } = currentSettings;
+  const { model = '', system_prompt = '', temperature = 0.7 } = currentSettings;
+  
+  // Use centralized execution service
+  const {
+    executeNode,
+    status: nodeStatus,
+    message: statusMessage,
+    isExecuting,
+    isReadyForExecution
+  } = useNodeExecution({
+    nodeId: id,
+    settings: currentSettings,
+    requiredSettings: ['model', 'system_prompt'],
+    onNodeUpdate,
+    onExecutionComplete
+  });
   
 
 
-  // Validate settings on mount and when settings change
+  // Keep localSettings in sync with instance settings
   useEffect(() => {
-    const validateSettings = () => {
-      const hasModel = currentSettings.model && currentSettings.model.trim() !== '';
-      const hasSystemPrompt = currentSettings.system_prompt && currentSettings.system_prompt.trim() !== '';
-      
-      console.log('✅ OpenAI Node - Validation Check:', {
-        hasModel,
-        hasSystemPrompt,
-        model: currentSettings.model || 'NOT SET',
-        system_prompt: currentSettings.system_prompt || 'NOT SET',
-        settingsObject: currentSettings,
-        validationState: !hasModel || !hasSystemPrompt ? 'ERROR' : 'SUCCESS'
-      });
-      
-      if (!hasModel || !hasSystemPrompt) {
-        console.log('❌ Setting validation state to ERROR');
-        setSettingsValidationState('error');
-      } else {
-        console.log('✅ Setting validation state to SUCCESS');
-        setSettingsValidationState('success');
-      }
-    };
-    
-    validateSettings();
-  }, [currentSettings, instance]);
-
-  const handleDelete = (event: React.MouseEvent) => {
-    event.stopPropagation();
-    const onNodeDelete = data?.onNodeDelete;
-    if (onNodeDelete && id) {
-      onNodeDelete(id);
-    }
-  };
-
-  // Function to collect input data from connected nodes
-  const collectInputsFromConnectedNodes = async (): Promise<Record<string, any>> => {
-    const inputs: Record<string, any> = {};
-    
-    try {
-      // Get current nodes and edges from React Flow
-      const nodes = getNodes();
-      const edges = getEdges();
-      
-      if (!nodes || !edges) {
-        console.log('⚠️ No flow data available for input collection');
-        return inputs;
-      }
-      
-      // Find all edges that connect TO this node (incoming connections)
-      const incomingEdges = edges.filter((edge: any) => edge.target === id);
-      console.log('🔗 Found incoming edges:', incomingEdges);
-      
-      // For each incoming edge, get the output data from the source node
-      for (const edge of incomingEdges) {
-        const sourceNodeId = edge.source;
-        const sourcePortId = edge.sourceHandle;
-        const targetPortId = edge.targetHandle;
-        
-        // Find the source node
-        const sourceNode = nodes.find((node: any) => node.id === sourceNodeId);
-        if (!sourceNode) {
-          console.log(`⚠️ Source node ${sourceNodeId} not found`);
-          continue;
-        }
-        
-        console.log(`📤 Collecting output from node ${sourceNodeId} (${(sourceNode.data as any)?.instance?.label || 'Unknown'})`);
-        
-        // Get the output data from the source node's last execution
-        const sourceInstance = (sourceNode.data as any)?.instance;
-        const lastExecution = sourceInstance?.data?.lastExecution;
-        
-        if (lastExecution && lastExecution.outputs) {
-          // If there's a specific source port, get data from that port
-          if (sourcePortId && lastExecution.outputs[sourcePortId]) {
-            let portData = lastExecution.outputs[sourcePortId];
-            
-            // Special handling for Chat Input node's message_data structure
-            if (typeof portData === 'object' && portData.input_text) {
-              portData = portData.input_text; // Extract the actual text
-              console.log(`🔄 Extracted text from message_data:`, portData);
-            }
-            
-            inputs[targetPortId || sourcePortId] = portData;
-            console.log(`✅ Collected from port ${sourcePortId}:`, portData);
-          } else {
-            // Otherwise, collect all outputs from the source node
-            Object.keys(lastExecution.outputs).forEach(outputPort => {
-              let portData = lastExecution.outputs[outputPort];
-              
-              // Special handling for Chat Input node's message_data structure
-              if (typeof portData === 'object' && portData.input_text) {
-                portData = portData.input_text; // Extract the actual text
-                console.log(`🔄 Extracted text from message_data:`, portData);
-              }
-              
-              const portKey = targetPortId || `${sourceNodeId}_${outputPort}`;
-              inputs[portKey] = portData;
-              console.log(`✅ Collected from ${outputPort}:`, portData);
-            });
-          }
-        } else {
-          console.log(`⚠️ No execution results found for source node ${sourceNodeId}`);
-          
-          // Fallback: try to get any available data from the source node
-          if (sourceInstance?.data) {
-            // Look for common data fields
-            const fallbackData = sourceInstance.data.output || 
-                                sourceInstance.data.result || 
-                                sourceInstance.data.value || 
-                                sourceInstance.data.text;
-            
-            if (fallbackData) {
-              inputs[targetPortId || 'fallback'] = fallbackData;
-              console.log(`🔄 Using fallback data:`, fallbackData);
-            }
-          }
-        }
-      }
-      
-      console.log('📋 Final collected inputs:', inputs);
-      return inputs;
-      
-    } catch (error) {
-      console.error('❌ Error collecting inputs from connected nodes:', error);
-      return inputs;
-    }
-  };
+    setLocalSettings(currentSettings);
+  }, [currentSettings]);
 
   const handleExecute = async () => {
-    if (!model || !system_prompt) {
-      alert('Please configure the model and system prompt first.');
-      return;
-    }
-
-    setIsExecuting(true);
-
-    try {
-      // Collect inputs from connected nodes if needed
-      // const inputs = await collectInputsFromConnectedNodes();
-      
-      // Execute the node with the correct parameter structure
-      const result = await nodeService.execution.executeNode(
-        parseInt(nodeData.flowId || '1'), // flowId as number
-        id, // nodeId
-        currentSettings // inputs
-      );
-
-      console.log('OpenAI execution result:', result);
-      
-      if (result && result.outputs) {
-        // Handle successful execution
-        const output = result.outputs.ai_response || result.outputs.output || 'Execution completed successfully';
-        console.log('OpenAI output:', output);
-        
-        // Update the node's execution result
-        if (nodeData.onExecutionComplete) {
-          nodeData.onExecutionComplete(id, {
-            status: NodeExecutionStatus.SUCCESS,
-            outputs: output,
-            success: true,
-            timestamp: new Date().toISOString(),
-            startedAt: new Date().toISOString(),
-            completedAt: new Date().toISOString()
-          });
-        }
-      } else {
-        const errorMsg = result?.error || 'Execution failed';
-        console.error('OpenAI execution failed:', errorMsg);
-        
-        if (nodeData.onExecutionComplete) {
-          nodeData.onExecutionComplete(id, {
-            status: NodeExecutionStatus.ERROR,
-            outputs: {},
-            success: false,
-            error: errorMsg,
-            timestamp: new Date().toISOString(),
-            startedAt: new Date().toISOString(),
-            completedAt: new Date().toISOString()
-          });
-        }
-      }
-    } catch (error) {
-      console.error('OpenAI execution error:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
-      
-      if (nodeData.onExecutionComplete) {
-        nodeData.onExecutionComplete(id, {
-          status: NodeExecutionStatus.ERROR,
-          outputs: {},
-          success: false,
-          error: errorMsg,
-          timestamp: new Date().toISOString(),
-          startedAt: new Date().toISOString(),
-          completedAt: new Date().toISOString()
-        });
-      }
-    } finally {
-      setIsExecuting(false);
-    }
+    await executeNode();
   };
+
 
   const handleSettingsClick = () => {
     setSettingsOpen(true);
@@ -271,24 +87,23 @@ export const OpenAIChatNode: React.FC<NodeComponentProps> = (props) => {
     setSettingsOpen(false);
   };
 
-  const handleLocalSettingChange = (key: string, value: any) => {
-    setLocalSettings((prevSettings: Record<string, any>) => ({ ...prevSettings, [key]: value }));
+  const handleSettingsSave = () => {
+    setSettingsOpen(false);
   };
 
-  const handleSettingsSave = () => {
-    // Update node settings
-    if (nodeData.onNodeUpdate && id) {
-      nodeData.onNodeUpdate(id, {
+  const handleLocalSettingChange = (key: string, value: any) => {
+    const next = { ...(localSettings || {}), [key]: value };
+    setLocalSettings(next);
+    // Persist immediately so external editors stay in sync
+    if (onNodeUpdate && id) {
+      onNodeUpdate(id, {
         data: {
           ...instance?.data,
-          settings: {
-            ...currentSettings,
-            ...localSettings
-          }
-        }
+          settings: next
+        },
+        updatedAt: new Date()
       });
     }
-    setSettingsOpen(false);
   };
 
   // Initialize local settings when dialog opens
@@ -298,11 +113,6 @@ export const OpenAIChatNode: React.FC<NodeComponentProps> = (props) => {
     }
   }, [settingsOpen, currentSettings]);
 
-  // Validation effect
-  useEffect(() => {
-    const hasRequiredSettings = model && system_prompt;
-    setSettingsValidationState(hasRequiredSettings ? 'success' : 'error');
-  }, [model, system_prompt]);
 
 
 
@@ -371,9 +181,10 @@ export const OpenAIChatNode: React.FC<NodeComponentProps> = (props) => {
     <>
       <BaseNode
         {...props}
-        nodeTypeId="simple-openai-chat"
+        nodeTypeId="openai-chat"
         nodeConfig={nodeConfig}
-        validationState={settingsValidationState}
+        status={nodeStatus}
+        statusMessage={statusMessage || (isReadyForExecution ? 'Ready to execute' : 'Configure settings')}
         isExecuting={isExecuting}
         onExecute={handleExecute}
         onSettingsClick={handleSettingsClick}

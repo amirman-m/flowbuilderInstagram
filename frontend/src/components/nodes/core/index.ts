@@ -1,13 +1,12 @@
-// Barrel export for shared node components
-export { NodeHeader } from './NodeHeader';
-export type { NodeHeaderProps } from './NodeHeader';
-
-export { NodeHandles } from './NodeHandles';
-export type { NodeHandlesProps } from './NodeHandles';
-
-export { NodeStatusIndicator } from './NodeStatusIndicator';
-export { NodeExecutionStatus } from '../../../types/nodes';
-export type { NodeStatusIndicatorProps } from './NodeStatusIndicator';
-
+// Barrel export for core node components
+export { BaseNode } from './BaseNode';
 export { NodeActionButtons } from './NodeActionButtons';
-export type { NodeActionButtonsProps } from './NodeActionButtons';
+export { NodeComponentFactory } from './NodeComponentFactory';
+export { NodeHandles } from './NodeHandles';
+export { NodeHeader } from './NodeHeader';
+export { NodeStatusIndicator } from './NodeStatusIndicator';
+
+// Export new centralized execution management
+export { NodeExecutionManager, nodeExecutionManager } from './NodeExecutionManager';
+export { EnhancedNodeStatusIndicator, CompactNodeStatusIndicator } from './EnhancedNodeStatusIndicator';
+export type { NodeExecutionState } from './NodeExecutionManager';
