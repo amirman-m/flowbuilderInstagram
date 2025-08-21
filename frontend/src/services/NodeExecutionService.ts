@@ -2,6 +2,9 @@
 import { nodeService } from './nodeService';
 import { NodeExecutionManager } from '../components/nodes/core/NodeExecutionManager';
 import { NodeExecutionStatus } from '../types/nodes';
+import type { AxiosError } from 'axios';
+import { showAppSnackbar } from '../components/SnackbarProvider';
+import { API_BASE_URL } from './api';
 
 export interface ExecutionContext {
   nodeId: string;
@@ -161,6 +164,31 @@ export class NodeExecutionService {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
       const completedAt = new Date().toISOString();
       const executionTime = Date.now() - startTime;
+
+      // Build informative error message for the user via snackbar
+      const axErr = error as AxiosError<any>;
+      const status = axErr?.response?.status;
+      const statusText = axErr?.response?.statusText;
+      const method = (axErr as any)?.config?.method?.toUpperCase?.() || 'POST';
+      const cfgUrl = (axErr as any)?.config?.url as string | undefined;
+      const cfgBase = (axErr as any)?.config?.baseURL as string | undefined;
+      const urlPath = cfgUrl || `/flows/${flowId}/nodes/${nodeId}/execute`;
+      const base = cfgBase || API_BASE_URL;
+      const fullUrl = urlPath?.startsWith('http') ? urlPath : `${base}${urlPath}`;
+      const backendReason = axErr?.response?.data?.detail || axErr?.response?.data?.message;
+
+      // Status-specific hints (concise)
+      let hint = '';
+      if (status === 404) {
+        hint = 'Possible causes: flow or node not found. please save the flow then try again';
+      } else if (status === 401 || status === 403) {
+        hint = 'Authentication/authorization required. Please log in again.';
+      } else if (!status) {
+        hint = 'Network error or server unavailable.';
+      }
+
+      const snackbarMessage = `Execution failed${status ? ` (${status}${statusText ? ' ' + statusText : ''})` : ''}: ${method} ${fullUrl}. ${backendReason || errorMsg}${hint ? ` — ${hint}` : ''}`;
+      showAppSnackbar({ message: snackbarMessage, severity: 'error', duration: 8000 });
 
       const executionResult: ExecutionResult = {
         success: false,

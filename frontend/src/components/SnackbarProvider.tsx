@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { Snackbar, Alert, AlertColor } from '@mui/material';
 
 /**
@@ -9,7 +9,7 @@ import { Snackbar, Alert, AlertColor } from '@mui/material';
  * @property {AlertColor} [severity='info'] - The severity level determining the color and icon ('success' | 'info' | 'warning' | 'error')
  * @property {number} [duration=6000] - How long the snackbar should be visible in milliseconds
  */
-interface SnackbarOptions {
+export interface SnackbarOptions {
   message: string;
   severity?: AlertColor;
   duration?: number;
@@ -26,6 +26,22 @@ interface SnackbarContextType {
 }
 
 const SnackbarContext = createContext<SnackbarContextType | undefined>(undefined);
+
+// Allow triggering snackbar from non-React code (e.g., services)
+let externalShowSnackbar: ((options: SnackbarOptions) => void) | null = null;
+
+/**
+ * Show a snackbar globally from anywhere (services, utilities, etc.).
+ * Requires that the app is wrapped with SnackbarProvider.
+ */
+export const showAppSnackbar = (options: SnackbarOptions) => {
+  if (externalShowSnackbar) {
+    externalShowSnackbar(options);
+  } else {
+    // Fallback: provider not mounted yet
+    console.warn('SnackbarProvider not initialized. Message:', options);
+  }
+};
 
 /**
  * Custom React hook to access snackbar functionality.
@@ -163,6 +179,14 @@ export const SnackbarProvider: React.FC<SnackbarProviderProps> = ({ children }) 
     setDuration(duration);
     setOpen(true);
   }, []);
+
+  // Register global handler while provider is mounted
+  useEffect(() => {
+    externalShowSnackbar = showSnackbar;
+    return () => {
+      if (externalShowSnackbar === showSnackbar) externalShowSnackbar = null;
+    };
+  }, [showSnackbar]);
 
   /**
    * Handles closing the snackbar when user clicks the close button or it auto-dismisses.
