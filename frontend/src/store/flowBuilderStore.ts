@@ -249,16 +249,40 @@ export const useFlowBuilderStore = create<FlowBuilderState>()(
               }
               
               // Handle other updates
-              return {
-                ...node,
-                data: {
-                  ...nodeData,
-                  instance: {
-                    ...(nodeData.instance || {}),
-                    ...updates
-                  }
+              {
+                // For generic updates (e.g., inputs), ensure we DO NOT overwrite existing instance.data
+                // Deep-merge updates.data into instance.data, and only shallow-merge non-data fields into instance
+                const prevInstance = (nodeData.instance || {}) as any;
+                const prevInstanceData = (prevInstance.data || {}) as any;
+
+                const updatesClone = { ...(updates as any) };
+                const updatesData = updatesClone.data || {};
+                delete updatesClone.data;
+
+                const mergedInstance = {
+                  ...prevInstance,
+                  ...updatesClone,
+                  data: {
+                    ...prevInstanceData,
+                    ...updatesData,
+                  },
+                } as any;
+
+                const updatedNode = {
+                  ...node,
+                  data: {
+                    ...nodeData,
+                    instance: mergedInstance,
+                  },
+                };
+
+                // Keep inspector state in sync if this node is selected
+                if (state.selectedNode?.id === nodeId) {
+                  set({ selectedNode: mergedInstance as NodeInstance });
                 }
-              };
+
+                return updatedNode;
+              }
             }
             return node;
           })

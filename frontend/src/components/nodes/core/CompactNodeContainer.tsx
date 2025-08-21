@@ -9,6 +9,8 @@ import { NodeExecutionService, ExecutionContext } from '../../../services/NodeEx
 import type { ExecutionResult } from '../../../services/NodeExecutionService';
 import { useParams } from 'react-router-dom';
 import { useNodeInputs } from '../hooks/useNodeInputs';
+import { NodeExecutionStatus } from '../../../types/nodes';
+import { NodeExecutionManager } from './NodeExecutionManager';
 
 export interface CompactNodeContainerProps extends NodeComponentProps {
   customColorName?: string;
@@ -34,6 +36,46 @@ export const CompactNodeContainer: React.FC<CompactNodeContainerProps> = ({
 
   // Inputs collector from connected upstream nodes
   const { collectInputs } = useNodeInputs(id);
+
+  // Initialize execution status from backend-provided data when node mounts or data updates
+  React.useEffect(() => {
+    const mgr = NodeExecutionManager.getInstance();
+
+    // Prefer instance.data.lastExecution.status if available
+    const beLastExec = (instance?.data as any)?.lastExecution as
+      | { status?: string | NodeExecutionStatus }
+      | undefined;
+
+    // Fallbacks occasionally present on data for legacy nodes
+    const beStatus = (data as any)?.executionStatus || (data as any)?.status;
+
+    let initialStatus: NodeExecutionStatus | null = null;
+
+    const normalize = (s: any): NodeExecutionStatus | null => {
+      if (!s) return null;
+      if (typeof s !== 'string') return s as NodeExecutionStatus;
+      switch (s.toLowerCase()) {
+        case 'success':
+          return NodeExecutionStatus.SUCCESS;
+        case 'running':
+          return NodeExecutionStatus.RUNNING;
+        case 'error':
+        case 'failed':
+          return NodeExecutionStatus.ERROR;
+        case 'skipped':
+          return NodeExecutionStatus.SKIPPED;
+        case 'pending':
+        default:
+          return NodeExecutionStatus.PENDING;
+      }
+    };
+
+    initialStatus = normalize(beLastExec?.status) || normalize(beStatus);
+
+    if (initialStatus && mgr.getStatus(id) === NodeExecutionStatus.PENDING && initialStatus !== NodeExecutionStatus.PENDING) {
+      mgr.setStatus(id, initialStatus, 'Initialized from backend');
+    }
+  }, [id, instance?.data?.lastExecution?.status, (data as any)?.executionStatus, (data as any)?.status]);
 
   // Bridge to adapt ExecutionResult -> NodeData.NodeExecutionResult
   const onExecCompleteBridge = data?.onExecutionComplete
