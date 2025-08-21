@@ -396,6 +396,37 @@ const FlowBuilderInner: React.FC = () => {
     }
   };
 
+  // Sanitize NodeInstance before saving to backend to prevent recursive nesting
+  const sanitizeNodeInstanceForSave = useCallback((ni: NodeInstance): NodeInstance => {
+    const stripInstanceDeep = (val: any): any => {
+      if (Array.isArray(val)) {
+        return val.map(stripInstanceDeep);
+      }
+      if (val && typeof val === 'object') {
+        const out: Record<string, any> = {};
+        for (const [k, v] of Object.entries(val)) {
+          if (k === 'instance') continue; // remove any nested instance refs
+          if (typeof v === 'function') continue; // strip functions (UI callbacks)
+          out[k] = stripInstanceDeep(v);
+        }
+        return out;
+      }
+      return val;
+    };
+
+    const cleaned: NodeInstance = {
+      ...ni,
+      data: stripInstanceDeep(ni?.data ?? {})
+    } as NodeInstance;
+
+    // Optional: warn during development if anything was removed
+    if ((ni as any)?.data && 'instance' in (ni as any).data) {
+      console.warn(`Sanitized nested instance from node ${ni.id}`);
+    }
+
+    return cleaned;
+  }, []);
+
   const handleSave = async () => {
     if (!flowId) {
       const error = new Error("No flow ID available to save.");
@@ -408,13 +439,14 @@ const FlowBuilderInner: React.FC = () => {
 
     try {
       setSaving(true);
-      // Prepare node instances with current position & settings
+      // Prepare node instances with current position & settings (sanitized)
       const nodeInstances = nodes.map((node) => {
         const nodeData = node.data as any;
-        return {
-          ...nodeData.instance,
+        const rawInstance: NodeInstance = {
+          ...(nodeData.instance as NodeInstance),
           position: node.position,
         };
+        return sanitizeNodeInstanceForSave(rawInstance);
       });
 
       // Prepare connections derived from React Flow edges
@@ -637,11 +669,9 @@ const FlowBuilderInner: React.FC = () => {
               position,
               data: {
                 settings: {},
-                inputs: {}
+                inputs: {},
+                disabled: false
               },
-              settings: {},
-              inputs: {},
-              disabled: false,
               createdAt: new Date(),
               updatedAt: new Date(),
             } as NodeInstance,

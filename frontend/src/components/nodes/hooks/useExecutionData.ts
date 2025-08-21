@@ -63,15 +63,9 @@ import { NodeDataWithHandlers } from '../registry';
  */
 export const useExecutionData = (data: NodeDataWithHandlers) => {
   return useMemo(() => {
-    // Debug: Log the raw data being passed to the hook
-    console.log('🔧 useExecutionData raw data:', {
-      executionResult: (data as any)?.executionResult,
-      outputs: (data as any)?.outputs,
-      status: (data as any)?.status,
-      executionTime: (data as any)?.executionTime,
-      lastExecuted: (data as any)?.lastExecuted,
-      _lastUpdated: (data as any)?._lastUpdated
-    });
+    // Get static instance data as primary source
+    const instance = data?.instance;
+    const instanceData = instance?.data || {};
     
     // Get execution results from the updated node data (set by syncExecutionResults)
     const executionResult = (data as any)?.executionResult;
@@ -82,26 +76,30 @@ export const useExecutionData = (data: NodeDataWithHandlers) => {
     // Force re-evaluation when data changes (accessing _lastUpdated triggers useMemo recalculation)
     (data as any)?._lastUpdated;
     
-    // Get static instance data as fallback
-    const instance = data?.instance;
-    const instanceData = instance?.data || {};
+    // Debug: Log the raw data being passed to the hook
+    console.log('🔧 useExecutionData raw data:', {
+      executionResult,
+      outputs,
+      status,
+      executionTime,
+      lastExecuted,
+      _lastUpdated: (data as any)?._lastUpdated,
+      instanceLastExecution: instanceData?.lastExecution
+    });
     
-    // Determine if we have fresh execution results
-    const hasFreshResults = Boolean(executionResult || outputs || status === 'success');
+    // Determine if we have fresh execution results (prioritize instance data)
+    const lastExecution = instanceData?.lastExecution;
+    const hasFreshResults = Boolean(executionResult || outputs || status === 'success' || lastExecution);
     
-    // Get the most recent output data (execution results take priority over instance data)
+    // Get the most recent output data (prioritize fresh execution, then instance lastExecution)
     let currentOutputs = outputs || {};
     
-    // If no outputs from fresh execution, check instance data
+    // If no outputs from fresh execution, check instance lastExecution data first
     if (!currentOutputs || Object.keys(currentOutputs).length === 0) {
-      currentOutputs = instanceData.outputs || {};
-      
-      // If still no outputs, check lastExecution data (for webhook-triggered executions)
-      if (Object.keys(currentOutputs).length === 0) {
-        const lastExecution = instanceData?.lastExecution;
-        if (lastExecution && lastExecution.outputs) {
-          currentOutputs = lastExecution.outputs;
-        }
+      if (lastExecution && lastExecution.outputs) {
+        currentOutputs = lastExecution.outputs;
+      } else {
+        currentOutputs = instanceData.outputs || {};
       }
     }
     
@@ -152,8 +150,8 @@ export const useExecutionData = (data: NodeDataWithHandlers) => {
     return {
       // Execution status
       hasFreshResults,
-      status: status || 'idle',
-      executionTime,
+      status: status || lastExecution?.status || 'idle',
+      executionTime: executionTime || (lastExecution as any)?.executionTime,
       lastExecuted: resolvedLastExecuted,
       
       // Output data
@@ -166,9 +164,9 @@ export const useExecutionData = (data: NodeDataWithHandlers) => {
       instanceData,
       
       // Utility functions
-      isExecuted: hasFreshResults || Boolean(instanceData.lastExecution),
-      isSuccess: status === 'success',
-      isError: status === 'error'
+      isExecuted: hasFreshResults || Boolean(lastExecution),
+      isSuccess: (status === 'success') || (lastExecution?.status === 'success'),
+      isError: (status === 'error') || (lastExecution?.status === 'error')
     };
   }, [data]);
 };

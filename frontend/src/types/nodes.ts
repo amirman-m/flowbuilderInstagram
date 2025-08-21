@@ -27,7 +27,8 @@ export enum NodeExecutionStatus {
   RUNNING = 'running',
   SUCCESS = 'success',
   ERROR = 'error',
-  SKIPPED = 'skipped'
+  SKIPPED = 'skipped',
+  WARNING = 'warning'
 }
 
 /**

@@ -181,8 +181,8 @@ export const useFlowBuilderStore = create<FlowBuilderState>()(
             if (node.id === nodeId) {
               const nodeData = node.data as any;
               
-              // Handle execution results update
-              if (updates.data?.lastExecution) {
+              // Handle execution results update (only for new execution data, not settings updates)
+              if (updates.data?.lastExecution && updates.data.lastExecution !== nodeData.instance?.data?.lastExecution) {
                 console.log('📊 Updating node execution results in store:', updates.data.lastExecution);
                 
                 const updatedNode = {
@@ -211,16 +211,11 @@ export const useFlowBuilderStore = create<FlowBuilderState>()(
                     }
                   };
                   
-                  // Update selected node and open inspector if not already open
-                  if (!state.inspectorOpen) {
-                    set({
-                      selectedNode: updatedInstance,
-                      selectedNodeType: (updatedNode.data as any).nodeType,
-                      inspectorOpen: true
-                    });
-                  } else {
-                    set({ selectedNode: updatedInstance });
-                  }
+                  // Update selected node without auto-opening inspector
+                  set({ 
+                    selectedNode: updatedInstance,
+                    selectedNodeType: (updatedNode.data as any).nodeType
+                  });
                 }
                 
                 return updatedNode;

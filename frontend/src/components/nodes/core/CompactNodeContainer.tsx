@@ -6,6 +6,9 @@ import { NodeComponentProps } from '../registry';
 import { CompactNodePresentation } from './CompactNodePresentation';
 import { useCompactNodePresenter } from '../hooks/useCompactNodePresenter';
 import { NodeExecutionService, ExecutionContext } from '../../../services/NodeExecutionService';
+import type { ExecutionResult } from '../../../services/NodeExecutionService';
+import { useParams } from 'react-router-dom';
+import { useNodeInputs } from '../hooks/useNodeInputs';
 
 export interface CompactNodeContainerProps extends NodeComponentProps {
   customColorName?: string;
@@ -24,6 +27,31 @@ export const CompactNodeContainer: React.FC<CompactNodeContainerProps> = ({
 }) => {
   const { nodeType, instance, onNodeUpdate, onNodeDelete } = data;
 
+  // Derive flowId: prefer provided data.flowId, fallback to URL param
+  const { flowId: routeFlowId } = useParams<{ flowId: string }>();
+  const parsedFlowId = Number(data?.flowId ?? routeFlowId);
+  const effectiveFlowId = Number.isFinite(parsedFlowId) && parsedFlowId > 0 ? parsedFlowId : 1;
+
+  // Inputs collector from connected upstream nodes
+  const { collectInputs } = useNodeInputs(id);
+
+  // Bridge to adapt ExecutionResult -> NodeData.NodeExecutionResult
+  const onExecCompleteBridge = data?.onExecutionComplete
+    ? (nodeId: string, result: ExecutionResult) => {
+        const mapped = {
+          status: result.status,
+          outputs: (result.outputs ?? {}) as Record<string, unknown>,
+          error: result.error,
+          startedAt: result.startedAt,
+          completedAt: result.completedAt,
+          metadata: result.metadata,
+          success: result.success,
+          timestamp: result.completedAt,
+        };
+        data.onExecutionComplete?.(nodeId, mapped as any);
+      }
+    : undefined;
+
   // Use compact node presenter hook
   const { presentationData, handleExecute, handleDelete } = useCompactNodePresenter({
     nodeId: id,
@@ -37,11 +65,16 @@ export const CompactNodeContainer: React.FC<CompactNodeContainerProps> = ({
         const executionService = NodeExecutionService.getInstance();
         const executionContext: ExecutionContext = {
           nodeId: id,
-          flowId: 0, // TODO: Get actual flow ID
+          flowId: effectiveFlowId,
           settings: instance?.data?.settings || {},
           inputs: instance?.data?.inputs || {}
         };
-        await executionService.executeNode(executionContext, onNodeUpdate);
+        await executionService.executeNode(
+          executionContext,
+          onNodeUpdate,
+          onExecCompleteBridge,
+          collectInputs
+        );
       }
     },
     onDelete: () => {
