@@ -10,6 +10,9 @@ import { NodeInstance, NodeType } from '../../../types/nodes';
  */
 export class DeepSeekChatNodeExecutor extends NodeExecutor {
   
+  // Stores the inputs used for the last execution so UI/inspector can show fresh values
+  private lastInputs?: Record<string, any>;
+
   constructor(
     nodeId: string,
     instance: NodeInstance,
@@ -25,10 +28,13 @@ export class DeepSeekChatNodeExecutor extends NodeExecutor {
    * @returns Execution result with AI response
    */
   async executeWithMessageInput(messageInput: any, flowId: number): Promise<NodeExecutionResult> {
+    const preparedInputs = this.prepareInputsFromMessage(messageInput);
+    this.lastInputs = preparedInputs;
+
     const context: NodeExecutionContext = {
       nodeId: this.nodeId,
       flowId,
-      inputs: this.prepareInputsFromMessage(messageInput)
+      inputs: preparedInputs
     };
 
     return await this.execute(context);
@@ -39,12 +45,25 @@ export class DeepSeekChatNodeExecutor extends NodeExecutor {
    */
   private prepareInputsFromMessage(messageInput: any): Record<string, any> {
     let inputText = '';
-    
-    // Handle different input formats
+
+    // If upstream provided a rich message_data object, preserve it fully
+    if (messageInput?.message_data) {
+      const md = messageInput.message_data;
+      if (md && typeof md === 'object') {
+        inputText = md.input_text ?? '';
+        return {
+          message_data: md,
+          user_input: inputText || (typeof messageInput === 'string' ? messageInput : '')
+        };
+      }
+      // If message_data is a primitive, treat as text
+      inputText = String(md);
+      return { message_data: md, user_input: inputText };
+    }
+
+    // Handle other input formats
     if (typeof messageInput === 'string') {
       inputText = messageInput;
-    } else if (messageInput?.message_data?.input_text) {
-      inputText = messageInput.message_data.input_text;
     } else if (messageInput?.input_text) {
       inputText = messageInput.input_text;
     } else if (messageInput?.user_input) {
@@ -55,7 +74,7 @@ export class DeepSeekChatNodeExecutor extends NodeExecutor {
     }
 
     return {
-      message_data: inputText,
+      message_data: { input_text: String(inputText), input_type: 'string' },
       user_input: inputText
     };
   }
@@ -221,5 +240,35 @@ export class DeepSeekChatNodeExecutor extends NodeExecutor {
       maxTokens: settings.max_tokens,
       isConfigured: this.isConfigured()
     };
+  }
+
+  /**
+   * Persist inputs alongside outputs so inspector 'Data' tab shows fresh input
+   */
+  protected async updateNodeState(result: any): Promise<void> {
+    if (!this.onNodeUpdate) return;
+
+    const nowIso = new Date().toISOString();
+    const existingData: any = this.instance?.data || {};
+
+    this.onNodeUpdate(this.nodeId, {
+      data: {
+        ...existingData,
+        // persist last used inputs for UI/inspector
+        inputs: {
+          ...(existingData.inputs || {}),
+          ...(this.lastInputs || {})
+        },
+        lastExecution: {
+          status: result.status,
+          outputs: result.outputs || {},
+          startedAt: nowIso,
+          completedAt: nowIso,
+          executionTime: result.executionTime
+        },
+        outputs: result.outputs || {}
+      },
+      updatedAt: new Date()
+    });
   }
 }

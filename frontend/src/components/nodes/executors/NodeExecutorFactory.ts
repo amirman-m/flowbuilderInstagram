@@ -23,8 +23,6 @@ export class NodeExecutorFactory {
   static {
     // Register built-in executors
     NodeExecutorFactory.registerExecutor('chat_input', ChatInputNodeExecutor);
-    NodeExecutorFactory.registerExecutor('deepseek_chat', DeepSeekChatNodeExecutor);
-    // Register aliases/actual ids used in the app's node registry
     NodeExecutorFactory.registerExecutor('simple-deepseek-chat', DeepSeekChatNodeExecutor);
   }
 
