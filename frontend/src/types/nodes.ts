@@ -154,11 +154,11 @@ export interface NodeExecutionResult {
   /** Error message if execution failed */
   error?: string;
   
-  /** Execution start time (can be Date object or ISO string) */
-  startedAt: Date | string;
+  /** Execution start time (ISO string) */
+  startedAt: string;
   
-  /** Execution completion time */
-  completedAt?: Date | string;
+  /** Execution completion time (ISO string) */
+  completedAt?: string;
   
   /** Additional metadata about execution */
   metadata?: Record<string, any>;
@@ -168,6 +168,9 @@ export interface NodeExecutionResult {
   
   /** Timestamp string used in some components */
   timestamp?: string;
+
+  /** Total execution time in milliseconds */
+  executionTime?: number;
 }
 
 /**

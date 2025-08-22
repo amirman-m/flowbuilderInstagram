@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Box,
   Paper,
@@ -24,6 +24,10 @@ import { useSnackbar } from '../SnackbarProvider';
 import useFlowBuilderStore from '../../store/flowBuilderStore';
 import { NodeExecutionStatus } from '../../types/nodes';
 import nodeService from '../../services/nodeService';
+import { NodeExecutorFactory } from '../nodes/executors/NodeExecutorFactory';
+import { ChatInputNodeExecutor } from '../nodes/executors/ChatInputNodeExecutor';
+import { DeepSeekChatNodeExecutor } from '../nodes/executors/DeepSeekChatNodeExecutor';
+import { NodeExecutor } from '../nodes/core/NodeExecutor';
 
 // Define custom node type that matches the actual structure
 type CustomNode = {
@@ -182,7 +186,7 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
   };
 
 
-  // Initialize node execution order and reset all nodes to PENDING when dialog opens
+  // Initialize node execution order when dialog opens (no reset here)
   useEffect(() => {
     if (open && triggerNodeId) {
       // Get current nodes and edges from store to avoid dependency loop
@@ -221,47 +225,45 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
 
       setNodeExecutionOrder(executionOrder);
       setCurrentExecutingNodeIndex(-1); // Reset execution index
-      
-      // Reset all nodes in the execution order to PENDING status and clear last execution
-      const { setNodes } = useFlowBuilderStore.getState();
-      setNodes((nodes) =>
-        nodes.map((node) => {
-          if (executionOrder.includes(node.id)) {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                // Clear last execution result and set to PENDING
-                instance: {
-                  ...((node.data as any)?.instance || {}),
-                  data: {
-                    ...((node.data as any)?.instance?.data || {}),
-                    lastExecution: {
-                      status: NodeExecutionStatus.PENDING,
-                      outputs: {},
-                      startedAt: new Date(),
-                      metadata: {}
-                    }
-                  }
-                },
-                // Also set execution status at node level
-                executionStatus: NodeExecutionStatus.PENDING,
-                executionResult: null
-              }
-            };
-          }
-          return node;
-        })
-      );
-      
       console.log('📋 Node execution order:', executionOrder);
-      console.log('🔄 Reset all nodes to PENDING status');
     }
   }, [open, triggerNodeId]);
 
-  // Execute a single node and update its status
-  // Using the imported FlowNode interface
+  // Helper: reset nodes to PENDING just-in-time when user starts execution
+  const resetNodesToPending = useCallback(() => {
+    if (!nodeExecutionOrder.length) return;
+    const { setNodes } = useFlowBuilderStore.getState();
+    setNodes((nodes) =>
+      nodes.map((node) => {
+        if (nodeExecutionOrder.includes(node.id)) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              instance: {
+                ...((node.data as any)?.instance || {}),
+                data: {
+                  ...((node.data as any)?.instance?.data || {}),
+                  lastExecution: {
+                    status: NodeExecutionStatus.PENDING,
+                    outputs: {},
+                    startedAt: new Date(),
+                    metadata: {}
+                  }
+                }
+              },
+              executionStatus: NodeExecutionStatus.PENDING,
+              executionResult: null
+            }
+          };
+        }
+        return node;
+      })
+    );
+    console.log('🔄 Reset nodes to PENDING status (on user execution)');
+  }, [nodeExecutionOrder]);
 
+  // Execute a single node using NodeExecutor classes for orchestrated execution
   const executeNode = async (nodeId: string, inputs: Record<string, any> = {}): Promise<any> => {
     if (!nodeId) throw new Error('No node ID provided');
     
@@ -273,8 +275,11 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
     const flowId = parseInt(node.data?.flowId?.toString() || '0');
     if (!flowId) throw new Error('No flow ID available');
     
-    // Get node label with proper typing
-    const nodeLabel = node.data?.instance?.label || node.data?.nodeType?.name || 'Node';
+    // Get node data
+    const nodeData = node.data as any;
+    const instance = nodeData?.instance;
+    const nodeType = nodeData?.nodeType;
+    const nodeLabel = instance?.label || nodeType?.name || 'Node';
     
     // Add node status message
     const statusMessageId = addMessage({
@@ -285,12 +290,54 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
     });
     
     try {
-      // Execute the node
       console.log(`🔄 Executing node ${nodeId} with inputs:`, inputs);
-      const result = await withTimeout(
-        nodeService.execution.executeNode(flowId, nodeId, inputs),
-        NODE_EXECUTION_TIMEOUT_MS
+      
+      // Create executor for this node type
+      const executor = NodeExecutorFactory.createExecutor(
+        nodeId,
+        instance,
+        nodeType,
+        nodeData?.onNodeUpdate
       );
+      
+      let result;
+      
+      if (executor) {
+        // Use NodeExecutor for orchestrated execution (preserves all rendering/status)
+        console.log(`📋 Using NodeExecutor for ${nodeType?.id} node`);
+        
+        if (executor instanceof ChatInputNodeExecutor) {
+          // Handle ChatInput node with user input
+          const userInput = inputs.user_input || inputs.message_data || '';
+          result = await withTimeout(
+            executor.executeWithUserInput(userInput, flowId),
+            NODE_EXECUTION_TIMEOUT_MS
+          );
+        } else if (executor instanceof DeepSeekChatNodeExecutor) {
+          // Handle DeepSeek node with message input from previous nodes
+          result = await withTimeout(
+            executor.executeWithMessageInput(inputs, flowId),
+            NODE_EXECUTION_TIMEOUT_MS
+          );
+        } else {
+          // Generic executor execution
+          result = await withTimeout(
+            executor.execute({
+              nodeId,
+              flowId,
+              inputs
+            }),
+            NODE_EXECUTION_TIMEOUT_MS
+          );
+        }
+      } else {
+        // Fallback to direct API execution for unsupported node types
+        console.log(`⚠️ No executor found for ${nodeType?.id}, using direct API`);
+        result = await withTimeout(
+          nodeService.execution.executeNode(flowId, nodeId, inputs),
+          NODE_EXECUTION_TIMEOUT_MS
+        );
+      }
       
       // Update status message to success
       updateMessage(statusMessageId, {
@@ -370,25 +417,56 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
     // Find all edges where this node is the target
     const incomingEdges = flowEdges.filter(edge => edge.target === nodeId);
     
+    console.log(`🔗 Preparing inputs for node ${nodeId}, found ${incomingEdges.length} incoming edges`);
+    
     for (const edge of incomingEdges) {
       const sourceNodeId = edge.source;
       const sourcePortId = edge.sourceHandle || '';
       const targetPortId = edge.targetHandle || '';
       
+      console.log(`🔗 Processing edge: ${sourceNodeId}[${sourcePortId}] -> ${nodeId}[${targetPortId}]`);
+      
       // If we have results for the source node
       if (results[sourceNodeId] && results[sourceNodeId].outputs) {
-        // Extract the output from the source node's results
-        const sourceOutput = results[sourceNodeId].outputs[sourcePortId.split('__')[1]] || 
-                            results[sourceNodeId].outputs.default;
+        const sourceOutputs = results[sourceNodeId].outputs;
+        console.log(`📤 Source node ${sourceNodeId} outputs:`, sourceOutputs);
+        
+        // Extract the specific output port or use common output names
+        let sourceOutput;
+        
+        // Try to get specific port output first
+        if (sourcePortId && sourcePortId.includes('__')) {
+          const portName = sourcePortId.split('__')[1];
+          sourceOutput = sourceOutputs[portName];
+        }
+        
+        // Fallback to common output names for ChatInput -> DeepSeek flow
+        if (!sourceOutput) {
+          sourceOutput = sourceOutputs.message_data || 
+                        sourceOutputs.user_input || 
+                        sourceOutputs.default ||
+                        sourceOutputs;
+        }
         
         if (sourceOutput !== undefined) {
           // Map to the target node's input
-          const inputKey = targetPortId.split('__')[1] || 'default';
+          let inputKey = 'message_data'; // Default for DeepSeek nodes
+          
+          if (targetPortId && targetPortId.includes('__')) {
+            inputKey = targetPortId.split('__')[1];
+          }
+          
           inputs[inputKey] = sourceOutput;
+          console.log(`📥 Mapped to input[${inputKey}]:`, sourceOutput);
+        } else {
+          console.warn(`⚠️ No output found for port ${sourcePortId} from node ${sourceNodeId}`);
         }
+      } else {
+        console.warn(`⚠️ No results found for source node ${sourceNodeId}`);
       }
     }
     
+    console.log(`📋 Final inputs for node ${nodeId}:`, inputs);
     return inputs;
   };
 
@@ -412,6 +490,8 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
     });
 
     try {
+      // Reset nodes to PENDING only when user explicitly starts execution
+      resetNodesToPending();
       setIsProcessing(true);
 
       // Execute nodes sequentially
@@ -513,6 +593,8 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
         });
 
         try {
+          // Reset nodes to PENDING only when user explicitly starts execution (voice)
+          resetNodesToPending();
           setIsProcessing(true);
           
           // Convert to base64
