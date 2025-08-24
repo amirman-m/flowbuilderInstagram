@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import { NodeInstance, NodeConnection } from '../types/nodes';
+
 
 // ============================================================================
 // EDITOR UI STATE TYPES

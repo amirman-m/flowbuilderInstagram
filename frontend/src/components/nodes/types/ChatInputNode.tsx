@@ -1,0 +1,290 @@
+// src/components/nodes/node-types/ChatInputNode.tsx
+import React, { useState, useEffect } from 'react';
+import { 
+  Box, Typography, Dialog, TextField, Button, Alert
+} from '@mui/material';
+import { CheckCircle as CheckCircleIcon } from '@mui/icons-material';
+import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
+import { NodeExecutionStatus } from '../../../types/nodes';
+import { nodeService } from '../../../services/nodeService';
+import { useParams } from 'react-router-dom';
+import { CompactNodeContainer } from '../core/CompactNodeContainer';
+import { useNodeConfiguration, useExecutionData } from '../hooks';
+import { NodeExecutionManager } from '../core/NodeExecutionManager';
+import { NodeResultDisplay } from '../core/NodeResultDisplay';
+
+export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
+  const { data, id } = props;
+  const { flowId } = useParams<{ flowId: string }>();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [inputText, setInputText] = useState('');
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string>('');
+  const nodeData = data as NodeDataWithHandlers;
+  const { nodeType, instance } = nodeData;
+  const [nodeStatus, setNodeStatus] = useState<NodeExecutionStatus>(NodeExecutionStatus.PENDING);
+  
+  // Use hooks
+  const nodeConfig = useNodeConfiguration(nodeType?.id || 'chat_input');
+  const executionData = useExecutionData(nodeData);
+  
+  // Debug execution data
+  console.log(`🔍 ChatInput Node ${id} execution data:`, {
+    hasFreshResults: executionData.hasFreshResults,
+    status: executionData.status,
+    outputs: executionData.outputs,
+    displayData: executionData.displayData
+  });
+  
+  // Initialize node status based on execution data and sync with NodeExecutionManager
+  useEffect(() => {
+    const executionManager = NodeExecutionManager.getInstance();
+    
+    // Check execution data from store first (fresh results)
+    if (executionData.hasFreshResults) {
+      if (executionData.status === 'success') {
+        setNodeStatus(NodeExecutionStatus.SUCCESS);
+        setStatusMessage('Execution completed successfully');
+        executionManager.setStatus(id, NodeExecutionStatus.SUCCESS, 'Execution completed successfully');
+      } else if (executionData.status === 'error') {
+        setNodeStatus(NodeExecutionStatus.ERROR);
+        setStatusMessage('Execution failed');
+        executionManager.setStatus(id, NodeExecutionStatus.ERROR, 'Execution failed');
+      }
+    } else if (instance?.data?.lastExecution?.status === 'success') {
+      setNodeStatus(NodeExecutionStatus.SUCCESS);
+      setStatusMessage('Execution completed successfully');
+      executionManager.setStatus(id, NodeExecutionStatus.SUCCESS, 'Execution completed successfully');
+    } else if (instance?.data?.lastExecution?.status === 'error') {
+      setNodeStatus(NodeExecutionStatus.ERROR);
+      setStatusMessage('Execution failed');
+      executionManager.setStatus(id, NodeExecutionStatus.ERROR, 'Execution failed');
+    } else {
+      // Reset to pending if no execution data
+      setNodeStatus(NodeExecutionStatus.PENDING);
+      setStatusMessage('Ready to execute');
+      executionManager.setStatus(id, NodeExecutionStatus.PENDING, 'Ready to execute');
+    }
+  }, [id, executionData.hasFreshResults, executionData.status, instance?.data?.lastExecution]);
+  
+  const handleExecute = async () => {
+    setDialogOpen(true);
+  };
+  
+  const handleSubmit = async () => {
+    if (!inputText.trim() || !flowId || !id) return;
+    
+    try {
+      setIsExecuting(true);
+      console.log(' Executing Chat Input node via backend API...');
+      setNodeStatus(NodeExecutionStatus.RUNNING);
+      setStatusMessage('Executing...');
+      
+      // Update NodeExecutionManager for visual feedback
+      const executionManager = NodeExecutionManager.getInstance();
+      executionManager.setStatus(id, NodeExecutionStatus.RUNNING, 'Executing...');
+      try {
+        await new Promise((resolve, reject) => {
+          const saveFlowEvent = new CustomEvent('autoSaveFlow', {
+            detail: { 
+              nodeId: id, 
+              reason: 'pre-execution',
+              callback: (error?: Error) => {
+                if (error) {
+                  reject(error);
+                } else {
+                  resolve(null);
+                }
+              }
+            }
+          });
+          window.dispatchEvent(saveFlowEvent);
+        });
+        console.log(' Auto-save completed');
+      } catch (saveError) {
+        console.warn(' Auto-save failed, continuing with execution:', saveError);
+      }
+      
+      // Call backend API to execute the Chat Input node
+      const executionContext = {
+        user_input: inputText.trim()
+      };
+      
+      // Execute the node through the backend
+      const result = await nodeService.execution.executeNode(
+        parseInt(flowId), 
+        id,
+        executionContext
+      );
+      
+      console.log(' Backend execution result:', result);
+      
+      setDialogOpen(false);
+      // Update node state with execution results
+      if (result && result.outputs) {
+        setNodeStatus(NodeExecutionStatus.SUCCESS);
+        setStatusMessage('Execution completed successfully');
+        setDialogOpen(false);
+        setInputText('');
+        
+        // Update NodeExecutionManager for visual feedback
+        const executionManager = NodeExecutionManager.getInstance();
+        executionManager.setStatus(id, NodeExecutionStatus.SUCCESS, 'Execution completed successfully');
+        
+        // Update node data with execution results
+        if (nodeData.onNodeUpdate && id) {
+          nodeData.onNodeUpdate(id, {
+            data: {
+              ...(instance?.data || {}),
+              lastExecution: {
+                status: NodeExecutionStatus.SUCCESS,
+                outputs: result.outputs || {},
+                startedAt: new Date().toISOString(),
+              },
+              outputs: result.outputs || {}
+            },
+            updatedAt: new Date()
+          });
+          
+          console.log(' Node state updated with execution results:');
+        } else {
+          console.warn(' Could not update node state: onNodeUpdate function not available');
+        }
+      }
+      
+    } catch (error: any) {
+      console.error(' Backend execution failed:', error);
+      setNodeStatus(NodeExecutionStatus.ERROR);
+      setStatusMessage('Execution failed - no outputs');
+      
+      // Update NodeExecutionManager for visual feedback
+      const executionManager = NodeExecutionManager.getInstance();
+      executionManager.setStatus(id, NodeExecutionStatus.ERROR, 'Execution failed');
+      
+      // Keep dialog open on error so user can retry
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    // Reset node status to pending
+    setNodeStatus(NodeExecutionStatus.PENDING);
+    setStatusMessage('');
+    
+    // Clear input text
+    setInputText('');
+    
+    // Update node data to clear execution results
+    if (nodeData.onNodeUpdate && id) {
+      nodeData.onNodeUpdate(id, {
+        data: {
+          ...(instance?.data || {}),
+          lastExecution: {
+            status: NodeExecutionStatus.PENDING,
+            outputs: {},
+            startedAt: new Date().toISOString(),
+          },
+          outputs: {},
+        },
+        updatedAt: new Date()
+      });
+      
+      console.log('Node execution data reset');
+    }
+  };
+
+  // Custom content for the ChatInputNode
+  const customContent = (
+    <>
+      {/* Execution Results Display */}
+      {(executionData.hasFreshResults || executionData.isExecuted) && (
+        <NodeResultDisplay
+          title="Message:"
+          content={(() => {
+            const displayData = executionData.displayData;
+            const outputs = executionData.outputs;
+            
+            // Try to get message data from different locations
+            if (displayData?.type === 'message_data' && displayData?.inputText) {
+              return displayData.inputText;
+            } else if (outputs?.message_data?.input_text) {
+              return outputs.message_data.input_text;
+            } else if (outputs?.message_data && typeof outputs.message_data === 'string') {
+              return outputs.message_data;
+            } else if (outputs?.message_data && typeof outputs.message_data === 'object') {
+              return JSON.stringify(outputs.message_data, null, 2);
+            } else {
+              return 'No message data available';
+            }
+          })()}
+        />
+      )}
+      
+      {/* Success indicator for fresh execution */}
+      {executionData.isSuccess && (
+        <Alert 
+          severity="success" 
+          icon={<CheckCircleIcon />}
+          sx={{ mt: 1, fontSize: '0.75rem' }}
+        >
+          <Typography variant="caption">
+            Input processed successfully
+          </Typography>
+        </Alert>
+      )}
+      
+      {/* Node-specific dialog */}
+      <Dialog 
+        open={dialogOpen} 
+        onClose={(e: React.MouseEvent<HTMLElement>) => {
+          e.stopPropagation();
+          setDialogOpen(false);
+        }}
+        onClick={(e: React.MouseEvent<HTMLElement>) => e.stopPropagation()}
+      >
+        <Box sx={{ p: 3, width: 400 }} onClick={(e: React.MouseEvent<HTMLElement>) => e.stopPropagation()}>
+          <Typography variant="h6">Enter Message Input</Typography>
+          <TextField
+            fullWidth
+            multiline
+            rows={4}
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            placeholder="Type your message here..."
+            sx={{ my: 2 }}
+          />
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+            <Button onClick={(e) => {
+              e.stopPropagation();
+              setDialogOpen(false);
+            }}>Cancel</Button>
+            <Button 
+              variant="contained" 
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSubmit();
+              }}
+              disabled={!inputText.trim() || isExecuting}
+            >
+              {isExecuting ? 'Executing...' : 'Submit'}
+            </Button>
+          </Box>
+        </Box>
+      </Dialog>
+    </>
+  );
+
+  return (
+    <>
+      <CompactNodeContainer
+        {...props}
+        customColorName="emerald"
+        onCustomExecute={handleExecute}
+      />
+      
+      {/* Input Dialog */}
+      {customContent}
+    </>
+  );
+};

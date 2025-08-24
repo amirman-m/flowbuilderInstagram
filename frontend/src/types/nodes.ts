@@ -10,11 +10,13 @@ import { JSONSchema7 } from 'json-schema';
  * - TRIGGER: Nodes that start a flow execution (e.g., Instagram comment received)
  * - PROCESSOR: Nodes that process data (e.g., LLM response generation, text transformation)
  * - ACTION: Nodes that perform actions (e.g., send reply, call webhook)
+ * - MY_MODEL: Custom model nodes
  */
 export enum NodeCategory {
   TRIGGER = 'trigger',
   PROCESSOR = 'processor',
-  ACTION = 'action'
+  ACTION = 'action',
+  MY_MODEL = 'my_model'
 }
 
 /**
@@ -25,7 +27,8 @@ export enum NodeExecutionStatus {
   RUNNING = 'running',
   SUCCESS = 'success',
   ERROR = 'error',
-  SKIPPED = 'skipped'
+  SKIPPED = 'skipped',
+  WARNING = 'warning'
 }
 
 /**
@@ -151,14 +154,23 @@ export interface NodeExecutionResult {
   /** Error message if execution failed */
   error?: string;
   
-  /** Execution start time */
-  startedAt: Date;
+  /** Execution start time (ISO string) */
+  startedAt: string;
   
-  /** Execution completion time */
-  completedAt?: Date;
+  /** Execution completion time (ISO string) */
+  completedAt?: string;
   
   /** Additional metadata about execution */
   metadata?: Record<string, any>;
+  
+  /** Legacy success flag used in some components */
+  success?: boolean;
+  
+  /** Timestamp string used in some components */
+  timestamp?: string;
+
+  /** Total execution time in milliseconds */
+  executionTime?: number;
 }
 
 /**
@@ -169,10 +181,12 @@ export interface NodeInstance {
   /** Unique identifier for this node instance */
   id: string;
   /** Reference to the node type this instance is based on */
-  typeId: string;
+  typeId?: string;
+  /** Alternative reference to node type (used in some components) */
+  type?: string;
   
   /** Human-readable label for this instance */
-  label: string;
+  label?: string;
   
   /** Position on the flow canvas */
   position: {
@@ -196,13 +210,16 @@ export interface NodeInstance {
     
     /** Custom styling overrides */
     style?: Record<string, any>;
+    
+    /** Output values produced by this node (used in some components) */
+    outputs?: Record<string, any>;
   };
   
   /** Timestamp when this instance was created */
-  createdAt: Date;
+  createdAt?: Date;
   
   /** Timestamp when this instance was last modified */
-  updatedAt: Date;
+  updatedAt?: Date;
 }
 
 // ============================================================================

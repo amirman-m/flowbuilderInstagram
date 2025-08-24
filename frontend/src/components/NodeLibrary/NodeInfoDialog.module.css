@@ -1,0 +1,74 @@
+/* NodeInfoDialog styles */
+.dialogPaper {
+  background-color: #1e1e1e;
+  border: 1px solid #404040;
+  border-radius: 8px;
+}
+
+.dialogTitle {
+  color: #f1f5f9;
+  border-bottom: 1px solid #404040;
+}
+
+.dialogTitleContent {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.dialogIconWrapper {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialogContent {
+  color: #f1f5f9;
+}
+
+.dialogContentText {
+  margin-bottom: 16px;
+  color: #d1d5db;
+}
+
+.dialogSection {
+  margin-bottom: 16px;
+}
+
+.dialogSectionTitle {
+  margin-bottom: 8px;
+  color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dialogSectionTitle svg {
+  font-size: 16px;
+}
+
+.dialogChip {
+  margin-right: 8px;
+  margin-bottom: 8px;
+  background-color: #404040 !important;
+  color: #f1f5f9 !important;
+}
+
+.dialogActions {
+  border-top: 1px solid #404040;
+}
+
+.dialogCloseButton {
+  color: #9ca3af;
+}
+
+.dialogNodeName {
+  color: #f1f5f9;
+}
+
+.dialogNodeCategory {
+  color: #9ca3af;
+}

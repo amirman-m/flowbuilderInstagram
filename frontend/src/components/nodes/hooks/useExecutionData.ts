@@ -3,36 +3,110 @@ import { useMemo } from 'react';
 import { NodeDataWithHandlers } from '../registry';
 
 /**
- * Custom hook to extract and format execution data from node data
- * This provides a modular way for all node components to access fresh execution results
+ * Custom React hook to extract and format execution data from node data.
+ * 
+ * This hook provides a modular way for all node components to access fresh execution results
+ * from flow execution or webhook triggers. It prioritizes fresh execution data over cached
+ * instance data and provides utility functions for common data access patterns.
+ * 
+ * The hook handles different types of node outputs:
+ * - message_data: For input nodes (ChatInput, TelegramInput)
+ * - ai_response: For AI processing nodes (OpenAI, DeepSeek)
+ * - raw: For other node types with custom output formats
+ * 
+ * @hook
+ * @example
+ * ```tsx
+ * import { useExecutionData } from './hooks/useExecutionData';
+ * 
+ * function MyNodeComponent({ data }: NodeComponentProps) {
+ *   const {
+ *     hasFreshResults,
+ *     status,
+ *     displayData,
+ *     getOutputValue,
+ *     isSuccess,
+ *     isError
+ *   } = useExecutionData(data);
+ * 
+ *   if (isSuccess && displayData.type === 'message_data') {
+ *     return (
+ *       <div>
+ *         <p>Input: {displayData.inputText}</p>
+ *         <p>Chat ID: {displayData.chatId}</p>
+ *         <p>Status: {status}</p>
+ *       </div>
+ *     );
+ *   }
+ * 
+ *   return <div>No execution data available</div>;
+ * }
+ * ```
+ * 
+ * @param data - The node data object containing instance data and execution results
+ * @returns Object containing execution status, outputs, and utility functions
+ * @returns returns.hasFreshResults - Boolean indicating if fresh execution results are available
+ * @returns returns.status - Current execution status ('idle' | 'success' | 'error' | 'running')
+ * @returns returns.executionTime - Time taken for execution in milliseconds
+ * @returns returns.lastExecuted - Timestamp of last execution
+ * @returns returns.outputs - Raw output data from node execution
+ * @returns returns.getOutputValue - Function to get specific output value by port ID
+ * @returns returns.displayData - Formatted display data with type-specific structure
+ * @returns returns.instance - Original node instance data
+ * @returns returns.instanceData - Node instance data object
+ * @returns returns.isExecuted - Boolean indicating if node has been executed
+ * @returns returns.isSuccess - Boolean indicating if last execution was successful
+ * @returns returns.isError - Boolean indicating if last execution had an error
+ * 
+ * @since 1.0.0
+ * @author Social Media Flow Builder Team
  */
 export const useExecutionData = (data: NodeDataWithHandlers) => {
   return useMemo(() => {
-    // Get execution results from the updated node data (set by syncNodeStatesWithExecutionResults)
-    const executionResult = (data as any)?.executionResult;
-    const outputs = (data as any)?.outputs;
-    const status = (data as any)?.status;
-    const executionTime = (data as any)?.executionTime;
-    const lastExecuted = (data as any)?.lastExecuted;
-    
-    // Get static instance data as fallback
+    // Get static instance data as primary source
     const instance = data?.instance;
     const instanceData = instance?.data || {};
     
-    // Determine if we have fresh execution results
-    const hasFreshResults = Boolean(executionResult && outputs);
+    // Get execution results from the updated node data (set by syncExecutionResults)
+    const executionResult = (data as any)?.executionResult;
+    const outputs = (data as any)?.outputs || executionResult?.outputs;
+    const status = (data as any)?.status || executionResult?.status;
+    const executionTime = (data as any)?.executionTime || executionResult?.execution_time_ms;
+    const lastExecuted = (data as any)?.lastExecuted || executionResult?.completed_at;
+    // Force re-evaluation when data changes (accessing _lastUpdated triggers useMemo recalculation)
+    (data as any)?._lastUpdated;
     
-    // Get the most recent output data (execution results take priority over instance data)
-    // For Telegram webhook results, also check lastExecution.outputs
-    let currentOutputs = hasFreshResults ? outputs : (instanceData.outputs || {});
+    // Debug: Log the raw data being passed to the hook
+    console.log('🔧 useExecutionData raw data:', {
+      executionResult,
+      outputs,
+      status,
+      executionTime,
+      lastExecuted,
+      _lastUpdated: (data as any)?._lastUpdated,
+      instanceLastExecution: instanceData?.lastExecution
+    });
     
-    // If no outputs found, check lastExecution data (for webhook-triggered executions)
+    // Determine if we have fresh execution results (prioritize instance data)
+    const lastExecution = instanceData?.lastExecution;
+    const hasFreshResults = Boolean(executionResult || outputs || status === 'success' || lastExecution);
+    
+    // Get the most recent output data (prioritize fresh execution, then instance lastExecution)
+    let currentOutputs = outputs || {};
+    
+    // If no outputs from fresh execution, check instance lastExecution data first
     if (!currentOutputs || Object.keys(currentOutputs).length === 0) {
-      const lastExecution = (instance as any)?.lastExecution;
       if (lastExecution && lastExecution.outputs) {
         currentOutputs = lastExecution.outputs;
+      } else {
+        currentOutputs = instanceData.outputs || {};
       }
     }
+    
+    // Resolve last executed timestamp from either root-level data or instance lastExecution
+    const resolvedLastExecuted = lastExecuted 
+      || instanceData?.lastExecution?.completedAt 
+      || instanceData?.lastExecution?.startedAt;
     
     // Extract specific output values based on node type
     const getOutputValue = (portId: string) => {
@@ -76,9 +150,9 @@ export const useExecutionData = (data: NodeDataWithHandlers) => {
     return {
       // Execution status
       hasFreshResults,
-      status: status || 'idle',
-      executionTime,
-      lastExecuted,
+      status: status || lastExecution?.status || 'idle',
+      executionTime: executionTime || (lastExecution as any)?.executionTime,
+      lastExecuted: resolvedLastExecuted,
       
       // Output data
       outputs: currentOutputs,
@@ -90,9 +164,9 @@ export const useExecutionData = (data: NodeDataWithHandlers) => {
       instanceData,
       
       // Utility functions
-      isExecuted: hasFreshResults || Boolean(instanceData.lastExecution),
-      isSuccess: status === 'success',
-      isError: status === 'error'
+      isExecuted: hasFreshResults || Boolean(lastExecution),
+      isSuccess: (status === 'success') || (lastExecution?.status === 'success'),
+      isError: (status === 'error') || (lastExecution?.status === 'error')
     };
   }, [data]);
 };

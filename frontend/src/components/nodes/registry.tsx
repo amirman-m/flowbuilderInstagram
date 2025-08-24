@@ -10,34 +10,52 @@ import {
   Schedule
 } from '@mui/icons-material';
 import { NodeInstance, NodeExecutionStatus, NodeType, NodeCategory } from '../../types/nodes';
-import { ChatInputNode, VoiceInputNode, OpenAIChatNode, DeepSeekChatNode } from './node-types';
-import { TranscriptionNode } from './node-types/TranscriptionNode';
-import { TelegramInputNode } from './node-types/TelegramInputNode';
-import { TelegramMessageActionNode } from './node-types/TelegramMessageActionNode';
-import { baseNodeStyles, getCategoryColor } from './styles';
+import { ChatInputNode, VoiceInputNode, OpenAIChatNode, DeepSeekChatNode } from './types';
+import { TranscriptionNode } from './types/TranscriptionNode';
+import { TelegramInputNode } from './types/TelegramInputNode';
+import { TelegramMessageActionNode } from './types/TelegramMessageActionNode';
+import { getCategoryColor } from '../../styles/nodeTheme';
 
 // Import other node components
 
 // Type for node component props
 export interface NodeComponentProps {
-  data: any;
+  data: NodeData;
   selected: boolean;
   id: string;
 }
 
-// Extended node data type with handlers
-export interface NodeDataWithHandlers {
-  nodeType: any;
-  instance: any;
+// Node data interface
+export interface NodeData {
+  nodeType: NodeType;
+  instance: NodeInstance;
   flowId?: string;
   selected?: boolean;
   executing?: boolean;
   errors?: string[];
+  executionResult?: NodeExecutionResult;
+  // Additional properties for specific node types
   onNodeDelete?: (nodeId: string) => void;
-  onNodeUpdate?: (nodeId: string, updates: any) => void;
-  onDelete?: (nodeId: string) => void;
-  onExecute?: (nodeId: string, data: any) => Promise<void>;
-  executionResult?: any;
+  onNodeUpdate?: (nodeId: string, updates: Partial<NodeInstance>) => void;
+  onExecute?: (nodeId: string, executionData?: Record<string, unknown>) => Promise<void>;
+  onExecutionComplete?: (nodeId: string, result: NodeExecutionResult) => void;
+}
+
+// Node execution result interface (simplified version of the one in nodes.ts)
+export interface NodeExecutionResult {
+  status: NodeExecutionStatus;
+  outputs: Record<string, unknown>;
+  error?: string;
+  startedAt: Date | string;
+  completedAt?: Date | string;
+  metadata?: Record<string, unknown>;
+  success?: boolean;
+  timestamp?: string;
+}
+
+// Extended node data type with handlers
+export interface NodeDataWithHandlers extends NodeData {
+  onDelete?: (nodeId: string) => void; // Alias for onNodeDelete for backward compatibility
 }
 
 // Helper function to get status icon
@@ -76,9 +94,8 @@ export const nodeComponentRegistry: Record<string, React.FC<NodeComponentProps>>
 
 // Default/fallback node component
 export const DefaultNode: React.FC<NodeComponentProps> = ({ data, selected, id }) => {
-  const nodeData = data as any;
-  const nodeType = nodeData?.nodeType as NodeType | undefined;
-  const instance = nodeData?.instance as NodeInstance | undefined;
+  const nodeType = data?.nodeType;
+  const instance = data?.instance;
 
   // Fallback values when nodeType is unavailable (e.g., node types not loaded yet)
   const safeNodeType: NodeType = nodeType ?? {
@@ -87,25 +104,31 @@ export const DefaultNode: React.FC<NodeComponentProps> = ({ data, selected, id }
     description: 'Unknown node type',
     category: NodeCategory.PROCESSOR,
     version: '0.0.0',
-    ports: { inputs: [], outputs: [] } as any,
+    ports: { inputs: [], outputs: [] },
     settingsSchema: { type: 'object', properties: {} },
-  } as NodeType;
+  };
 
   const categoryColor = getCategoryColor(safeNodeType.category);
-  const typedInstance = instance as NodeInstance | undefined;
-  const statusIcon = typedInstance?.data?.lastExecution ? getStatusIcon(typedInstance.data.lastExecution?.status) : null;
+  const statusIcon = instance?.data?.lastExecution ? getStatusIcon(instance.data.lastExecution?.status) : null;
 
   return (
     <Paper
       sx={{
-        ...baseNodeStyles,
+        position: 'relative',
+        padding: 2,
+        minWidth: 200,
+        minHeight: 80,
+        border: '2px solid',
+        borderRadius: 2,
+        cursor: 'pointer',
+        userSelect: 'none',
         borderColor: selected ? categoryColor : `${categoryColor}80`,
         borderWidth: selected ? 3 : 2,
         backgroundColor: selected ? `${categoryColor}10` : 'white'
       }}
     >
       {/* Input Handles */}
-      {safeNodeType.ports.inputs.map((port: any, index: number) => (
+      {safeNodeType.ports.inputs.map((port: { id: string; name: string; required?: boolean; description?: string }, index: number) => (
         <Handle
           key={port.id}
           type="target"
@@ -133,7 +156,7 @@ export const DefaultNode: React.FC<NodeComponentProps> = ({ data, selected, id }
           sx={{ ml: 0.5 }}
           onClick={(event) => {
             event.stopPropagation();
-            const onNodeDelete = (data as any)?.onNodeDelete;
+            const onNodeDelete = data?.onNodeDelete;
             if (onNodeDelete && id) {
               onNodeDelete(id);
             }
@@ -156,7 +179,7 @@ export const DefaultNode: React.FC<NodeComponentProps> = ({ data, selected, id }
       />
 
       {/* Output Handles */}
-      {safeNodeType.ports.outputs.map((port: any, index: number) => (
+      {safeNodeType.ports.outputs.map((port: { id: string; name: string; description?: string }, index: number) => (
         <Handle
           key={port.id}
           type="source"

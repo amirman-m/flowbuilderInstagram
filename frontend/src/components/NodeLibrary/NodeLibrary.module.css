@@ -1,0 +1,279 @@
+.modernNodeLibrary {
+  height: 100%;
+  display: flex;
+  background-color: #2a2a2a;
+}
+
+.header {
+  padding: 16px;
+  border-bottom: 1px solid #404040;
+  background-color: #2a2a2a;
+}
+
+.title {
+  margin-bottom: 12px;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.searchField {
+  background-color: #1e1e1e;
+  border: 1px solid #404040;
+  border-radius: 8px;
+  color: #f1f5f9;
+}
+
+.searchField:hover {
+  background-color: #252525;
+  border-color: #525252;
+}
+
+.searchField:focus {
+  background-color: #1e1e1e;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+  outline: none;
+}
+
+.searchField input::placeholder {
+  color: #6b7280;
+}
+
+.searchIcon {
+  color: #9ca3af;
+  font-size: 20px;
+}
+
+.clearIcon {
+  font-size: 16px;
+  color: #9ca3af;
+}
+
+.contentArea {
+  flex-grow: 1;
+  overflow: auto;
+  background-color: #2a2a2a;
+}
+
+.contentArea::-webkit-scrollbar {
+  width: 6px;
+}
+
+.contentArea::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.contentArea::-webkit-scrollbar-thumb {
+  background: #525252;
+  border-radius: 3px;
+}
+
+.contentArea::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+.welcomeMessage {
+  padding: 32px;
+  text-align: center;
+  color: #9ca3af;
+}
+
+.welcomeTitle {
+  margin-bottom: 4px;
+  color: #d1d5db;
+}
+
+.emptyState {
+  padding: 32px;
+  text-align: center;
+  color: #9ca3af;
+}
+
+/* NodeList styles */
+.nodeListContainer {
+  padding: 8px;
+}
+
+.subcategoryContainer {
+  margin-bottom: 8px;
+}
+
+.subcategoryHeader {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  background-color: #1e1e1e;
+  border: 1px solid #404040;
+  margin-bottom: 8px;
+}
+
+.subcategoryHeader:hover {
+  background-color: #252525;
+  border-color: #525252;
+}
+
+.subcategoryTitle {
+  flex-grow: 1;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.subcategoryChip {
+  margin-right: 8px;
+  min-width: 24px;
+  height: 20px;
+  background-color: #404040 !important;
+  color: #f1f5f9 !important;
+}
+
+.expandIcon {
+  color: #9ca3af;
+}
+
+.nodePaper {
+  padding: 12px;
+  margin-bottom: 8px;
+  cursor: grab;
+  background-color: #1e1e1e;
+  border: 1px solid #404040;
+  border-radius: 4px;
+  transition: all 0.2s ease-in-out;
+}
+
+.nodePaper:hover {
+  background-color: #252525;
+  border-color: #525252;
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.nodePaper:active {
+  cursor: grabbing;
+  transform: scale(0.98) translateX(4px);
+}
+
+.nodeContent {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nodeIcon {
+  color: inherit;
+}
+
+.nodeIconWrapper {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nodeDetails {
+  flex-grow: 1;
+}
+
+.nodeName {
+  color: #f1f5f9;
+}
+
+.nodeCategory {
+  color: #9ca3af;
+}
+
+.infoIcon {
+  font-size: 18px;
+  color: #9ca3af;
+}
+
+.emptyState {
+  padding: 32px;
+  text-align: center;
+  color: #9ca3af;
+}
+
+/* NodeInfoDialog styles */
+.dialogPaper {
+  background-color: #1e1e1e;
+  border: 1px solid #404040;
+  border-radius: 8px;
+}
+
+.dialogTitle {
+  color: #f1f5f9;
+  border-bottom: 1px solid #404040;
+}
+
+.dialogTitleContent {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.dialogIconWrapper {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialogContent {
+  color: #f1f5f9;
+}
+
+.dialogContentText {
+  margin-bottom: 16px;
+  color: #d1d5db;
+}
+
+.dialogSection {
+  margin-bottom: 16px;
+}
+
+.dialogSectionTitle {
+  margin-bottom: 8px;
+  color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dialogSectionTitle svg {
+  font-size: 16px;
+}
+
+.dialogChip {
+  margin-right: 8px;
+  margin-bottom: 8px;
+  background-color: #404040 !important;
+  color: #f1f5f9 !important;
+}
+
+.dialogActions {
+  border-top: 1px solid #404040;
+}
+
+.dialogCloseButton {
+  color: #9ca3af;
+}
+
+.dialogNodeName {
+  color: #f1f5f9;
+}
+
+.dialogNodeCategory {
+  color: #9ca3af;
+}
+
+.loadingSpinner {
+  color: #3b82f6;
+  margin-bottom: 8px;
+}
+
+/* Styles for category sidebar are handled by CategorySidebar component */

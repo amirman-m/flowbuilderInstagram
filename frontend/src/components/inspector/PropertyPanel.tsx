@@ -386,10 +386,13 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
   const [localSettings, setLocalSettings] = useState(settings);
   const [validationResult, setValidationResult] = useState<any>(null);
 
-  // Update local settings when props change
+  // Update local settings when props change (but avoid infinite loops)
   useEffect(() => {
-    setLocalSettings(settings);
-  }, [settings]);
+    // Only update if settings actually changed (deep comparison for objects)
+    if (JSON.stringify(localSettings) !== JSON.stringify(settings)) {
+      setLocalSettings(settings);
+    }
+  }, [settings]); // Remove localSettings from dependency to prevent loop
 
   // Validate settings whenever they change
   useEffect(() => {

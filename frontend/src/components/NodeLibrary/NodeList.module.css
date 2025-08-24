@@ -1,0 +1,114 @@
+/* NodeList styles */
+.nodeListContainer {
+  padding: 8px;
+}
+
+.subcategoryContainer {
+  margin-bottom: 8px;
+}
+
+.subcategoryHeader {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  background-color: #1e1e1e;
+  border: 1px solid #404040;
+  margin-bottom: 8px;
+}
+
+.subcategoryHeader:hover {
+  background-color: #252525;
+  border-color: #525252;
+}
+
+.subcategoryTitle {
+  flex-grow: 1;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.subcategoryChip {
+  margin-right: 8px;
+  min-width: 24px;
+  height: 20px;
+  background-color: #404040 !important;
+  color: #f1f5f9 !important;
+}
+
+.expandIcon {
+  color: #9ca3af;
+}
+
+.nodePaper {
+  padding: 12px;
+  margin-bottom: 8px;
+  cursor: grab;
+  background-color: #1e1e1e;
+  border: 1px solid #404040;
+  border-radius: 4px;
+  transition: all 0.2s ease-in-out;
+}
+
+.nodePaper:hover {
+  background-color: #252525;
+  border-color: #525252;
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.nodePaper:active {
+  cursor: grabbing;
+  transform: scale(0.98) translateX(4px);
+}
+
+.nodeContent {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nodeIcon {
+  color: inherit;
+}
+
+.nodeIconWrapper {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nodeDetails {
+  flex-grow: 1;
+}
+
+.nodeName {
+  color: #f1f5f9;
+}
+
+.nodeCategory {
+  color: #9ca3af;
+}
+
+.infoIcon {
+  font-size: 18px;
+  color: #9ca3af;
+}
+
+.emptyState {
+  padding: 32px;
+  text-align: center;
+  color: #9ca3af;
+}
+
+.nodeDescription {
+  color: #9ca3af;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+}

@@ -18,7 +18,6 @@ import {
   IconButton,
   Tooltip,
   Paper,
-
   Badge,
   Stack,
   Alert,
@@ -34,6 +33,7 @@ import {
   AccordionSummary,
   AccordionDetails
 } from '@mui/material';
+import { useSnackbar } from '../components/SnackbarProvider';
 import {
   Search as SearchIcon,
   FilterList as FilterIcon,
@@ -52,6 +52,7 @@ import { NodeType, NodeCategory } from '../types/nodes';
 import { nodeService } from '../services/nodeService';
 import { NODE_REGISTRY } from '../config/nodeRegistry';
 const NodeLibrary: React.FC = () => {
+  const { showSnackbar } = useSnackbar();
   const [nodeTypes, setNodeTypes] = useState<NodeType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +91,12 @@ const NodeLibrary: React.FC = () => {
       });
       setNodeTypes(enhancedTypes);
     } catch (err) {
-      setError('Failed to load node types. Please try again.');
+      const errorMsg = 'Failed to load node types. Please try again.';
+      setError(errorMsg);
+      showSnackbar({
+        message: errorMsg,
+        severity: 'error',
+      });
       console.error('Error loading node types:', err);
     } finally {
       setLoading(false);

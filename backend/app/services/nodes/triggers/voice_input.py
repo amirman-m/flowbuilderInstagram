@@ -41,6 +41,8 @@ async def execute_voice_input_trigger(context: Dict[str, Any]) -> NodeExecutionR
     
     # Get the voice data from the execution context
     voice_data = context.get("voice_data")
+    content_type = context.get("content_type")
+    send_to_transcription = context.get("send_to_transcription", False)
     
     if not voice_data:
         return NodeExecutionResult(
@@ -58,8 +60,10 @@ async def execute_voice_input_trigger(context: Dict[str, Any]) -> NodeExecutionR
         "voice_input": voice_data,  # Changed from input_text to voice_input
         "input_type": "voice",
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "send_to_transcription": send_to_transcription,
         "metadata": {
             "file_size": len(voice_data) if isinstance(voice_data, bytes) else os.path.getsize(voice_data) if os.path.exists(voice_data) else 0,
+            "content_type": content_type
         }
     }
     

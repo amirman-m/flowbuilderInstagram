@@ -154,10 +154,12 @@ export const CustomEdge: React.FC<CustomEdgeProps> = ({
                 sx={{
                   width: 16,
                   height: 16,
-                  backgroundColor: 'white',
-                  border: '1px solid #ccc',
+                  backgroundColor: '#ff4d4f',
+                  color: 'white',
+                  border: '1px solid #ff4d4f',
                   '&:hover': {
-                    backgroundColor: '#f5f5f5'
+                    backgroundColor: '#ff7875',
+                    border: '1px solid #ff7875'
                   }
                 }}
                 onClick={(event) => {

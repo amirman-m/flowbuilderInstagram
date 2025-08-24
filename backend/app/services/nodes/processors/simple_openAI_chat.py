@@ -146,7 +146,7 @@ async def execute_simple_openai_chat(context: Dict[str, Any]) -> NodeExecutionRe
         # Print debug information
         print(f"Using OpenAI API with model: {model}")
         print(f"API Key (first 5 chars): {api_key[:5]}...")
-        
+        '''   
         # Initialize OpenAI client (v1.x API)
         llm = ChatOpenAI(
             model=model,  
@@ -183,7 +183,14 @@ async def execute_simple_openai_chat(context: Dict[str, Any]) -> NodeExecutionRe
             status="error",
             error=f"OpenAI API error: {str(e)}"
         )
+    '''  
+    except:
+        ai_response = "Error in OpenAI API"
     
+    ai_response = "Error in OpenAI API"
+    input_tokens = 5
+    output_tokens = 5
+    total_tokens = 5
     # Create comprehensive output structure
     timestamp = datetime.now(timezone.utc).isoformat()
     

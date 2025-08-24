@@ -234,9 +234,15 @@ async def execute_node(
         if hasattr(request, 'settings') and request.settings:
             context["settings"] = request.settings
         
-        # Add all request inputs (including access_token) to context
+        # Add request inputs correctly under 'inputs' key (primary),
+        # and also expose them at top-level for backward compatibility.
         if hasattr(request, 'inputs') and request.inputs:
-            context.update(request.inputs)
+            context["inputs"] = request.inputs  # primary expected by processors
+            try:
+                # backward compatibility: some legacy processors may read from top-level
+                context.update(request.inputs)
+            except Exception:
+                pass
             
         # Debug: Log what we're sending to the node
         import logging

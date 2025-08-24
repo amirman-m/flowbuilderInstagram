@@ -1,0 +1,97 @@
+/* Node Connection Handles Styling */
+.react-flow__handle {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  z-index: 9999 !important;
+  position: absolute;
+  pointer-events: all;
+  opacity: 1;
+  visibility: visible;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0, 0, 0, 0.1);
+  cursor: crosshair;
+}
+
+.react-flow__handle-left {
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.react-flow__handle-right {
+  right: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Enhanced hover effect for better UX */
+.react-flow__handle:hover {
+  transform: scale(1.5) translateY(-50%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 2px rgba(255, 255, 255, 0.6);
+  border-width: 2px;
+}
+
+/* Connection state styling */
+.react-flow__handle.connecting {
+  transform: scale(1.5) translateY(-50%);
+  box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.4);
+  border-color: #3b82f6;
+}
+
+/* Valid connection target */
+.react-flow__handle.valid {
+  border-color: #10b981;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.3);
+}
+
+/* Invalid connection target */
+.react-flow__handle.invalid {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.3);
+}
+
+/* Ensure handles are visible on top of other elements */
+.react-flow__node {
+  z-index: 1;
+}
+
+/* Force handles to appear above everything */
+.react-flow__handle,
+.react-flow__handle-left,
+.react-flow__handle-right {
+  z-index: 9999 !important;
+}
+
+/* Ensure node container doesn't interfere with handle positioning */
+.react-flow__node .MuiBox-root {
+  position: relative;
+  z-index: 1;
+}
+
+/* Handle type specific styling */
+.react-flow__handle[data-handleid="input"] {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+}
+
+.react-flow__handle[data-handleid="output"] {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+
+/* Pulse animation for better visibility */
+@keyframes handlePulse {
+  0% {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), 0 0 0 0 rgba(59, 130, 246, 0.7);
+  }
+  70% {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), 0 0 0 6px rgba(59, 130, 246, 0);
+  }
+  100% {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+.react-flow__handle.pulse {
+  animation: handlePulse 2s infinite;
+}

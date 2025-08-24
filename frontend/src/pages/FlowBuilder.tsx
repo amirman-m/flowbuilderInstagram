@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -10,28 +10,20 @@ import {
   Toolbar,
   IconButton,
   Tooltip,
-
-  Chip,
-  TextField,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails
+  TextField
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
   Save as SaveIcon,
   PlayArrow as PlayIcon,
-  ExpandMore as ExpandMoreIcon,
   Settings as SettingsIcon
 } from '@mui/icons-material';
 import {
   ReactFlow,
-  MiniMap,
   Controls,
   Background,
-  useNodesState,
-  useEdgesState,
   addEdge,
+  applyEdgeChanges,
   Connection,
   Edge,
   Node,
@@ -41,17 +33,22 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { Flow } from '../types';
 import { NodeType, NodeCategory, NodeInstance, NodeConnection, NodeDataType } from '../types/nodes';
 import { flowsAPI } from '../services/api';
 import { nodeService } from '../services/nodeService';
-import { NodeComponentFactory } from '../components/nodes/NodeComponentFactory';
+import { NodeComponentFactory } from '../components/nodes/core/NodeComponentFactory';
 import { edgeTypes } from '../components/edges/CustomEdge';
 import { NodeInspector } from '../components/inspector';
+import { ChatBotExecutionDialog } from '../components/dialogs/ChatBotExecutionDialog';
 import { FlowExecutionDialog } from '../components/dialogs/FlowExecutionDialog';
-import { NODE_REGISTRY } from '../config/nodeRegistry';
+import { loadNodeConfigurations } from '../config/nodeConfiguration';
 import { useConnectionValidation } from '../hooks/useConnectionValidation';
+import { useSnackbar } from '../components/SnackbarProvider';
+import { ModernNodeLibrary } from '../components/NodeLibrary';
+import { useFlowBuilderStore } from '../store/flowBuilderStore';
 import '../styles/connectionValidation.css';
+import '../styles/flowBuilder.css';
+import '../styles/nodeHandles.css';
 
 // Define nodeTypes using our NodeComponentFactory for all node types
 const nodeTypes = {
@@ -60,26 +57,55 @@ const nodeTypes = {
 
 // Inner FlowBuilder component that uses React Flow hooks
 const FlowBuilderInner: React.FC = () => {
-  // Local editable name state
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [flowName, setFlowName] = useState('');
-  const [nameSaving, setNameSaving] = useState(false);
-
+  const { showSnackbar } = useSnackbar();
   const { flowId } = useParams<{ flowId: string }>();
   const navigate = useNavigate();
   const reactFlowInstance = useReactFlow();
   
-  const [flow, setFlow] = useState<Flow | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Use centralized store
+  const {
+    // Flow state
+    flow, flowName, isEditingName, nameSaving, loading, saving,
+    // Node state
+    nodes, edges, availableNodeTypes,
+    // Inspector state
+    selectedNode, selectedNodeType, inspectorOpen,
+    // Execution state
+    executionDialogOpen, triggerNodeId, triggerNodeType,
+    // Actions
+    setFlow, setFlowName, setIsEditingName, setNameSaving, setLoading, setSaving,
+    setNodes, setEdges, setAvailableNodeTypes,
+    setSelectedNode, setSelectedNodeType, setInspectorOpen,
+    setExecutionDialogOpen, setTriggerNodeId, setTriggerNodeType,
+    updateNode, deleteNode, syncExecutionResults
+  } = useFlowBuilderStore();
 
-  const [saving, setSaving] = useState(false);
-  const [availableNodeTypes, setAvailableNodeTypes] = useState<NodeType[]>([]);
-  
-  // React Flow state
-  const [nodes, setNodes, onNodesChange] = useNodesState([] as Node[]);
+  // React Flow change handlers
+  const onNodesChange = useCallback((changes: any) => {
+    setNodes((nds) => {
+      const updatedNodes = [...nds];
+      changes.forEach((change: any) => {
+        const nodeIndex = updatedNodes.findIndex(n => n.id === change.id);
+        if (nodeIndex >= 0) {
+          if (change.type === 'position' && change.position) {
+            updatedNodes[nodeIndex] = {
+              ...updatedNodes[nodeIndex],
+              position: change.position
+            };
+          } else if (change.type === 'remove') {
+            updatedNodes.splice(nodeIndex, 1);
+          }
+        }
+      });
+      return updatedNodes;
+    });
+  }, [setNodes]);
+
+  const onEdgesChange = useCallback((changes: any) => {
+    setEdges((eds) => applyEdgeChanges(changes, eds));
+  }, [setEdges]);
 
   // When node types are loaded, ensure all existing nodes have their nodeType attached
-  // AND retry loading flow if it was waiting for node types
   useEffect(() => {
     if (availableNodeTypes.length === 0 || nodes.length === 0) return;
     let updated = false;
@@ -104,7 +130,7 @@ const FlowBuilderInner: React.FC = () => {
     if (updated) {
       setEdges((es) => es.map((e) => ({ ...e })));
     }
-  }, [availableNodeTypes, flowId, nodes.length, loading]);
+  }, [availableNodeTypes, flowId, nodes.length, loading, setNodes, setEdges]);
   
   // First declare the mapConnection without the onEdgeDelete handler
   const mapConnection = useCallback((c: NodeConnection): Edge => ({
@@ -116,9 +142,8 @@ const FlowBuilderInner: React.FC = () => {
     type: 'custom',
   }), []);
 
-  const [edges, setEdges, onEdgesChange] = useEdgesState([] as Edge[]);
   
-  // Now define onEdgeDelete after setEdges is available
+  // Define onEdgeDelete
   const onEdgeDelete = useCallback((edgeId: string) => {
     setEdges((eds) => eds.filter((edge) => edge.id !== edgeId));
   }, [setEdges]);
@@ -142,33 +167,53 @@ const FlowBuilderInner: React.FC = () => {
   
   // Initialize connection validation
   const {
-    validateConnection,
-    isConnectionValid,
     getValidatedEdges,
-    onConnect: handleConnect,
-    isValidConnection,
-    getConnectionError
+    onConnect: onConnectValidated,
+    isValidConnection
   } = useConnectionValidation(nodes, nodeTypesMap, {
     realTimeValidation: true,
     preventInvalidConnections: true
   });
   
-  // Handle new connections with validation
+  // Handle new connections with simplified validation
   const onConnect = useCallback((connection: Connection) => {
     console.log('🔗 Attempting to create connection:', connection);
     
-    // Validate the connection
-    const validationResult = validateConnection(connection);
+    // Basic validation: prevent self-connections and duplicate connections
+    if (connection.source === connection.target) {
+      console.warn('❌ Cannot connect node to itself');
+      showSnackbar({
+        message: 'Cannot connect a node to itself',
+        severity: 'warning',
+      });
+      return;
+    }
     
-    if (!validationResult.isValid) {
-      console.warn('❌ Connection blocked:', validationResult.errorMessage);
-      // Show user-friendly error message
-      alert(validationResult.errorMessage || 'Invalid connection');
+    // Check for existing connection between same nodes and handles
+    const existingConnection = edges.find(edge => 
+      edge.source === connection.source && 
+      edge.target === connection.target &&
+      edge.sourceHandle === connection.sourceHandle &&
+      edge.targetHandle === connection.targetHandle
+    );
+    
+    if (existingConnection) {
+      console.warn('❌ Connection already exists');
+      showSnackbar({
+        message: 'Connection already exists between these ports',
+        severity: 'warning',
+      });
       return;
     }
     
     console.log('✅ Connection validated, creating edge');
-    
+    if (!onConnectValidated(connection)) {
+      showSnackbar({
+        message: 'Connection to this node is not allowed',
+        severity: 'warning',
+      });
+      return;
+    }
     // Create the new edge and attach the delete handler
     const newEdge: Edge = attachEdgeHandlers({
       id: `edge_${Date.now()}`,
@@ -181,22 +226,16 @@ const FlowBuilderInner: React.FC = () => {
     
     // Add the edge to the flow
     setEdges((eds) => addEdge(newEdge, eds));
-  }, [validateConnection, setEdges]);
+    
+    showSnackbar({
+      message: 'Nodes connected successfully',
+      severity: 'success',
+    });
+  }, [edges, setEdges, attachEdgeHandlers, showSnackbar , onConnectValidated]);
   
   // Apply validation styling to edges
-  const validatedEdges = useMemo(() => {
-    return getValidatedEdges(edges);
-  }, [getValidatedEdges, edges]);
+  const validatedEdges = useMemo(() => getValidatedEdges(edges), [getValidatedEdges, edges]);
   
-  // Node Inspector state
-  const [selectedNode, setSelectedNode] = useState<NodeInstance | null>(null);
-  const [selectedNodeType, setSelectedNodeType] = useState<NodeType | null>(null);
-  const [inspectorOpen, setInspectorOpen] = useState(false);
-  
-  // Flow execution state
-  const [executionDialogOpen, setExecutionDialogOpen] = useState(false);
-  const [triggerNodeId, setTriggerNodeId] = useState<string | null>(null);
-  const [triggerNodeType, setTriggerNodeType] = useState<string | null>(null);
 
   // Load node types on mount, then load the flow
   useEffect(() => {
@@ -232,7 +271,6 @@ const FlowBuilderInner: React.FC = () => {
       setLoading(true);
       const flowData = await flowsAPI.getFlow(parseInt(flowId));
       setFlow(flowData);
-      setFlowName(flowData.name);
       
       // Fetch graph from backend
       const flowNodes = await flowsAPI.getFlowNodes(parseInt(flowId));
@@ -265,217 +303,22 @@ const FlowBuilderInner: React.FC = () => {
   const loadNodeTypes = async () => {
     try {
       // Load node types from the backend
-      const types = await nodeService.types.getNodeTypes(); 
-      if (types && types.length > 0) {
-        console.log('✅ Using backend node types:', types.map(t => t.name));
-        // Temporary subcategory mapping until backend provides it
-      const SUBCATEGORY_MAP: Record<string, string> = {
-        // Legacy or mock IDs
-        openAIChat: 'Chat Models',
-        deepSeekChat: 'Chat Models',
-        // Actual backend IDs
-        'simple-openai-chat': 'Chat Models',
-        'simple-deepseek-chat': 'Chat Models'
-      };
-
-      const enhancedTypes = types.map(t => {
-        const registryEntry = NODE_REGISTRY[t.id];
-        return registryEntry ? { ...t, subcategory: registryEntry.subcategory } : t;
-      });
-
-      setAvailableNodeTypes(enhancedTypes);
-        return; // Exit early - backend data loaded successfully
+      const backendNodeTypes = await nodeService.types.getNodeTypes(); 
+      
+      if (backendNodeTypes && backendNodeTypes.length > 0) {
+        console.log('✅ Loading backend node types:', backendNodeTypes.map(t => t.name));
+        
+        // Load dynamic node configurations from backend data
+        await loadNodeConfigurations(backendNodeTypes);
+        
+        // Set available node types for legacy compatibility
+        setAvailableNodeTypes(backendNodeTypes);
+        
+        console.log('✅ Dynamic node configurations loaded successfully');
+        return;
       } else {
-        // If no node types are returned from the backend, use default mock types for testing
-        console.warn('⚠️ No node types returned from backend, using mock types for testing');
-        
-        // Create properly typed mock nodes
-        const mockTriggerNode: NodeType = {
-          id: 'instagram-comment',
-          name: 'Instagram Comment',
-          description: 'Triggers when a new Instagram comment is received',
-          category: NodeCategory.TRIGGER,
-          version: '1.0.0',
-          icon: 'instagram',
-          color: '#E1306C',
-          ports: {
-            inputs: [],
-            outputs: [
-              {
-                id: 'comment',
-                name: 'comment',
-                label: 'Comment',
-                description: 'The received comment data',
-                dataType: NodeDataType.OBJECT,
-                required: true
-              }
-            ]
-          },
-          settingsSchema: {
-            type: 'object',
-            properties: {
-              accountId: {
-                type: 'string',
-                title: 'Instagram Account ID'
-              },
-              filterHashtags: {
-                type: 'array',
-                title: 'Filter Hashtags',
-                items: {
-                  type: 'string'
-                }
-              }
-            },
-            required: ['accountId']
-          }
-        };
-        
-        const mockProcessorNode: NodeType = {
-          id: 'ai-response',
-          name: 'AI Response Generator',
-          description: 'Generates AI responses based on input text',
-          category: NodeCategory.PROCESSOR,
-          version: '1.0.0',
-          icon: 'smart_toy',
-          color: '#2196F3',
-          ports: {
-            inputs: [
-              {
-                id: 'input',
-                name: 'input',
-                label: 'Input Text',
-                description: 'The text to process',
-                dataType: NodeDataType.STRING,
-                required: true
-              }
-            ],
-            outputs: [
-              {
-                id: 'response',
-                name: 'response',
-                label: 'AI Response',
-                description: 'Generated AI response',
-                dataType: NodeDataType.STRING,
-                required: true
-              }
-            ]
-          },
-          settingsSchema: {
-            type: 'object',
-            properties: {
-              model: {
-                type: 'string',
-                title: 'AI Model',
-                enum: ['gpt-3.5-turbo', 'gpt-4'],
-                default: 'gpt-3.5-turbo'
-              },
-              temperature: {
-                type: 'number',
-                title: 'Temperature',
-                minimum: 0,
-                maximum: 1,
-                default: 0.7
-              },
-              systemPrompt: {
-                type: 'string',
-                title: 'System Prompt',
-                format: 'textarea'
-              }
-            },
-            required: ['model']
-          }
-        };
-        
-        const mockActionNode: NodeType = {
-          id: 'instagram-reply',
-          name: 'Instagram Reply',
-          description: 'Sends a reply to an Instagram comment',
-          category: NodeCategory.ACTION,
-          version: '1.0.0',
-          icon: 'reply',
-          color: '#FF9800',
-          ports: {
-            inputs: [
-              {
-                id: 'comment',
-                name: 'comment',
-                label: 'Comment',
-                description: 'The original comment data',
-                dataType: NodeDataType.OBJECT,
-                required: true
-              },
-              {
-                id: 'replyText',
-                name: 'replyText',
-                label: 'Reply Text',
-                description: 'The text to reply with',
-                dataType: NodeDataType.STRING,
-                required: true
-              }
-            ],
-            outputs: [
-              {
-                id: 'result',
-                name: 'result',
-                label: 'Result',
-                description: 'Result of the reply operation',
-                dataType: NodeDataType.OBJECT,
-                required: true
-              }
-            ]
-          },
-          settingsSchema: {
-            type: 'object',
-            properties: {
-              accountId: {
-                type: 'string',
-                title: 'Instagram Account ID'
-              },
-              addHashtags: {
-                type: 'boolean',
-                title: 'Add Hashtags',
-                default: false
-              },
-              delay: {
-                type: 'number',
-                title: 'Delay (seconds)',
-                minimum: 0,
-                default: 0
-              }
-            },
-            required: ['accountId']
-          }
-        };
-        
-        // Create Chat Input trigger node
-        const chatInputNode: NodeType = {
-          id: 'chat_input',
-          name: 'Chat Input',
-          description: 'Manual text input trigger for chat conversations',
-          category: NodeCategory.TRIGGER,
-          version: '1.0.0',
-          icon: 'message',
-          color: '#4CAF50',
-          ports: {
-            inputs: [], // No inputs for trigger nodes
-            outputs: [
-              {
-                id: 'message_data',
-                name: 'message_data',
-                label: 'Message Data',
-                description: 'Structured message data with session info',
-                dataType: NodeDataType.OBJECT,
-                required: true
-              }
-            ]
-          },
-          settingsSchema: {
-            type: 'object',
-            properties: {} // No settings for this node
-          }
-        };
-        
-        setAvailableNodeTypes([mockTriggerNode, mockProcessorNode, mockActionNode, chatInputNode]);
+        console.warn('⚠️ No node types returned from backend, using empty configuration');
+        setAvailableNodeTypes([]);
       }
     } catch (err) {
       console.error('Failed to load node types:', err);
@@ -559,23 +402,57 @@ const FlowBuilderInner: React.FC = () => {
     }
   };
 
-  const handleSave = async (callback?: (error?: Error) => void) => {
+  // Sanitize NodeInstance before saving to backend to prevent recursive nesting
+  const sanitizeNodeInstanceForSave = useCallback((ni: NodeInstance): NodeInstance => {
+    const stripInstanceDeep = (val: any): any => {
+      if (Array.isArray(val)) {
+        return val.map(stripInstanceDeep);
+      }
+      if (val && typeof val === 'object') {
+        const out: Record<string, any> = {};
+        for (const [k, v] of Object.entries(val)) {
+          if (k === 'instance') continue; // remove any nested instance refs
+          if (typeof v === 'function') continue; // strip functions (UI callbacks)
+          out[k] = stripInstanceDeep(v);
+        }
+        return out;
+      }
+      return val;
+    };
+
+    const cleaned: NodeInstance = {
+      ...ni,
+      data: stripInstanceDeep(ni?.data ?? {})
+    } as NodeInstance;
+
+    // Optional: warn during development if anything was removed
+    if ((ni as any)?.data && 'instance' in (ni as any).data) {
+      console.warn(`Sanitized nested instance from node ${ni.id}`);
+    }
+
+    return cleaned;
+  }, []);
+
+  const handleSave = async () => {
     if (!flowId) {
-      callback?.(new Error("No flow ID available to save."));
+      const error = new Error("No flow ID available to save.");
+      showSnackbar({
+        message: `Failed to save flow: ${error.message}`,
+        severity: 'error',
+      });
       return;
     }
 
     try {
       setSaving(true);
-      // Get the current view state from React Flow
-      const currentViewport = reactFlowInstance.getViewport();
-      // Prepare node instances with current position & settings
+      // Prepare node instances with current position & settings (sanitized)
       const nodeInstances = nodes.map((node) => {
         const nodeData = node.data as any;
-        return {
-          ...nodeData.instance,
+        const rawInstance: NodeInstance = {
+          ...(nodeData.instance as NodeInstance),
           position: node.position,
         };
+        return sanitizeNodeInstanceForSave(rawInstance);
       });
 
       // Prepare connections derived from React Flow edges
@@ -594,16 +471,21 @@ const FlowBuilderInner: React.FC = () => {
       });
 
       // Re-fetch graph so canvas reflects latest saved state
-    const refreshedNodes = await flowsAPI.getFlowNodes(parseInt(flowId));
-    const refreshedConns = await flowsAPI.getFlowConnections(parseInt(flowId));
-    setNodes(refreshedNodes.map(mapNodeInstance));
-    setEdges(refreshedConns.map(mapConnection).map(attachEdgeHandlers));
-    
-    // TODO: toast/snackbar for success
-    callback?.(); // Signal success
+      const refreshedNodes = await flowsAPI.getFlowNodes(parseInt(flowId));
+      const refreshedConns = await flowsAPI.getFlowConnections(parseInt(flowId));
+      setNodes(refreshedNodes.map(mapNodeInstance));
+      setEdges(refreshedConns.map(mapConnection).map(attachEdgeHandlers));
+      
+      showSnackbar({
+        message: 'Flow saved successfully',
+        severity: 'success',
+      });
     } catch (err: any) {
       console.error('Error saving flow:', err);
-      callback?.(err); // Signal error
+      showSnackbar({
+        message: `Failed to save flow: ${err?.message || 'Unknown error'}`,
+        severity: 'error',
+      });
     } finally {
       setSaving(false);
     }
@@ -618,37 +500,53 @@ const FlowBuilderInner: React.FC = () => {
     console.log('📊 Current nodes:', nodes);
     console.log('📋 Available node types:', availableNodeTypes);
     
-    // Find trigger node before opening dialog
-    const triggerNode = nodes.find(node => {
+    // Find trigger node(s) before opening dialog
+    const triggerNodes = nodes.filter(node => {
       const nodeData = node.data as any;
       console.log('🔍 Checking node:', node.id, 'data:', nodeData);
       
-      // Check if nodeType is attached
+      // Prefer attached nodeType
       if (nodeData?.nodeType) {
-        console.log('📝 Node type found:', nodeData.nodeType.category);
-        return nodeData.nodeType.category === NodeCategory.TRIGGER;
+        const isTrigger = nodeData.nodeType.category === NodeCategory.TRIGGER;
+        if (isTrigger) console.log('📝 Node type found (attached): TRIGGER');
+        return isTrigger;
       }
       
-      // Fallback: check by instance.typeId if nodeType not attached
+      // Fallback: resolve via instance.typeId
       if (nodeData?.instance?.typeId) {
         const nodeType = availableNodeTypes.find(nt => nt.id === nodeData.instance.typeId);
-        if (nodeType) {
-          console.log('📝 Node type found via typeId:', nodeType.category);
-          return nodeType.category === NodeCategory.TRIGGER;
-        }
+        const isTrigger = !!nodeType && nodeType.category === NodeCategory.TRIGGER;
+        if (isTrigger) console.log('📝 Node type found via typeId: TRIGGER');
+        return isTrigger;
       }
       
       return false;
     });
     
-    console.log('🎯 Found trigger node:', triggerNode);
+    console.log('🎯 Found trigger nodes:', triggerNodes.map(n => n.id));
     
-    if (!triggerNode) {
+    if (triggerNodes.length === 0) {
       // Show error - no trigger node found
       console.error('❌ No trigger node found in flow');
-      alert('No trigger node found in this flow. Please add a Chat Input node to execute the flow.');
+      showSnackbar({
+        message: 'No trigger node found. Please add exactly one trigger node (e.g., Chat Input) to execute the flow.',
+        severity: 'error',
+      });
       return;
     }
+
+    if (triggerNodes.length > 1) {
+      // Show error - more than one trigger node found
+      console.error(`❌ Multiple trigger nodes found in flow: ${triggerNodes.map(n => n.id).join(', ')}`);
+      showSnackbar({
+        message: `Multiple trigger nodes found (${triggerNodes.length}). Only one trigger node is allowed. Keep exactly one trigger node.`,
+        severity: 'error',
+      });
+      return;
+    }
+
+    const triggerNode = triggerNodes[0];
+    console.log('🎯 Selected trigger node:', triggerNode);
     
     // Get trigger node type
     const nodeData = triggerNode.data as any;
@@ -666,49 +564,6 @@ const FlowBuilderInner: React.FC = () => {
     setExecutionDialogOpen(true);
   };
 
-  // Sync frontend node states with backend execution results
-  const syncNodeStatesWithExecutionResults = async (executionResults: Record<string, any>) => {
-    console.log('🔄 Syncing node states with execution results:', executionResults);
-    
-    // Update nodes state with execution results
-    setNodes((currentNodes) => 
-      currentNodes.map((node) => {
-        const nodeId = node.id;
-        const executionResult = executionResults[nodeId];
-        
-        if (executionResult && executionResult.outputs) {
-          console.log(`📝 Updating node ${nodeId} with outputs:`, executionResult.outputs);
-          
-          // Safely access and update node data
-          const currentData = (node.data as any) || {};
-          
-          // Update the node's data with the execution outputs
-          const updatedNode = {
-            ...node,
-            data: {
-              ...currentData,
-              // Store execution results in the node data
-              executionResult: executionResult,
-              // Update outputs for display in the node
-              outputs: executionResult.outputs,
-              // Update status and metadata
-              status: executionResult.status,
-              executionTime: executionResult.execution_time_ms,
-              lastExecuted: executionResult.completed_at,
-              // Ensure instance data is preserved
-              instance: currentData.instance
-            }
-          };
-          
-          return updatedNode;
-        }
-        
-        return node;
-      })
-    );
-    
-    console.log('✅ Frontend node states updated with execution results');
-  };
 
   const handleFlowExecution = async (triggerInputs: Record<string, any>) => {
     if (!flowId) {
@@ -725,7 +580,7 @@ const FlowBuilderInner: React.FC = () => {
       console.log('✅ Flow execution completed:', result);
       
       // Update frontend node states with execution results
-      await syncNodeStatesWithExecutionResults(result.execution_results);
+      syncExecutionResults(result.execution_results);
       
       // Close dialog after successful execution
       setExecutionDialogOpen(false);
@@ -744,15 +599,8 @@ const FlowBuilderInner: React.FC = () => {
 
   // Handle node deletion
   const onNodeDelete = useCallback((nodeId: string) => {
-    setNodes((nds) => nds.filter((node) => node.id !== nodeId));
-    setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
-    // Close inspector if deleted node was selected
-    if (selectedNode?.id === nodeId) {
-      setInspectorOpen(false);
-      setSelectedNode(null);
-      setSelectedNodeType(null);
-    }
-  }, [setNodes, setEdges, selectedNode]);
+    deleteNode(nodeId);
+  }, [deleteNode]);
 
 
 
@@ -761,7 +609,11 @@ const FlowBuilderInner: React.FC = () => {
     const handleAutoSave = (event: Event) => {
       const customEvent = event as CustomEvent;
       console.log(`💾 Auto-saving flow due to: ${customEvent.detail.reason}`);
-      handleSave(customEvent.detail.callback);
+      handleSave().then(() => {
+        customEvent.detail.callback?.();
+      }).catch((error) => {
+        customEvent.detail.callback?.(error);
+      });
     };
 
     window.addEventListener('autoSaveFlow', handleAutoSave);
@@ -782,116 +634,8 @@ const FlowBuilderInner: React.FC = () => {
 
   // Handle node updates from inspector and node execution results
   const handleNodeUpdate = useCallback((nodeId: string, updates: any) => {
-    console.log('🔄 Updating node:', nodeId, updates);
-    
-    setNodes((nds) => {
-      const updatedNodes = nds.map((node) => {
-        if (node.id === nodeId) {
-          // Type assertion for node.data to access its properties
-          const nodeData = node.data as any;
-          
-          // Check if this is a lastExecution update from a node component
-          if (updates.data?.lastExecution) {
-            console.log('📊 Updating node execution results:', updates.data.lastExecution);
-            
-            // Create a new node with updated execution results
-            const updatedNode = {
-              ...node,
-              data: {
-                ...nodeData,
-                instance: {
-                  ...(nodeData.instance || {}),
-                  data: {
-                    ...(nodeData.instance?.data || {}),
-                    lastExecution: updates.data.lastExecution,
-                    ...(updates.data.inputs ? { inputs: updates.data.inputs } : {})
-                  }
-                }
-              }
-            };
-            
-            // Only update selectedNode and open inspector if not already editing this node
-            const isCurrentlyEditingThisNode = selectedNode?.id === nodeId && inspectorOpen;
-            
-            // Find the updated node from the nodes array
-            const nodeInstance = (updatedNode.data as any).instance as NodeInstance;
-            
-            const updatedSelectedNode: NodeInstance = {
-              ...nodeInstance,
-              data: {
-                ...nodeInstance.data,
-                lastExecution: updates.data.lastExecution,
-                ...(updates.data.inputs ? { inputs: updates.data.inputs } : {})
-              }
-            };
-            
-            if (!isCurrentlyEditingThisNode) {
-              console.log('🔍 Updating selectedNode and opening inspector for execution results');
-              
-              // Update selectedNode and open inspector to show results
-              setSelectedNode(updatedSelectedNode);
-              setSelectedNodeType((updatedNode.data as any).instance.nodeType);
-              setInspectorOpen(true);
-              
-              console.log('🔄 Updated selectedNode and opened inspector with execution results:', updatedSelectedNode);
-            } else {
-              console.log('🔒 Node is currently being edited, not overriding inspector state');
-              // Still update the selectedNode data to reflect execution results, but don't change inspector state
-              if (selectedNode?.id === nodeId) {
-                setSelectedNode(updatedSelectedNode);
-              }
-            }
-            
-            return updatedNode;
-          }
-          
-          // Regular update from inspector
-          console.log('🔧 Processing regular update from inspector:', updates);
-          
-          // Handle settings updates properly
-          if (updates.data?.settings) {
-            console.log('⚙️ Updating node settings:', updates.data.settings);
-            
-            const updatedNode = {
-              ...node,
-              data: {
-                ...nodeData,
-                instance: {
-                  ...(nodeData.instance || {}),
-                  data: {
-                    ...(nodeData.instance?.data || {}),
-                    settings: updates.data.settings
-                  }
-                }
-              }
-            };
-            
-            // Update selectedNode to maintain inspector state
-            const updatedInstance = (updatedNode.data as any).instance as NodeInstance;
-            setSelectedNode(updatedInstance);
-            
-            console.log('✅ Node updated with settings:', updatedInstance.data?.settings);
-            return updatedNode;
-          }
-          
-          // Handle other updates
-          return {
-            ...node,
-            data: {
-              ...nodeData,
-              instance: {
-                ...(nodeData.instance || {}),
-                ...updates
-              }
-            }
-          };
-        }
-        return node;
-      });
-      
-      return updatedNodes;
-    });
-  }, [setNodes, selectedNode]);
+    updateNode(nodeId, updates);
+  }, [updateNode]);
 
   // Legacy handleChatInputExecution removed - now handled by individual node components
 
@@ -928,15 +672,12 @@ const FlowBuilderInner: React.FC = () => {
             instance: {
               id: `node_${Date.now()}`,
               typeId: nodeTypeData.nodeType.id,
-              label: nodeTypeData.nodeType.name,
               position,
               data: {
                 settings: {},
-                inputs: {}
+                inputs: {},
+                disabled: false
               },
-              settings: {},
-              inputs: {},
-              disabled: false,
               createdAt: new Date(),
               updatedAt: new Date(),
             } as NodeInstance,
@@ -972,88 +713,7 @@ const FlowBuilderInner: React.FC = () => {
     } as Node;
   }, [availableNodeTypes, onNodeDelete, handleNodeUpdate, flowId]);
 
-  // Category colors for node types
-  const getCategoryColor = (category: NodeCategory) => {
-    switch (category) {
-      case NodeCategory.TRIGGER:
-        return '#4CAF50';
-      case NodeCategory.PROCESSOR:
-        return '#2196F3';
-      case NodeCategory.ACTION:
-        return '#FF9800';
-      default:
-        return '#757575';
-    }
-  };
 
-  // Group node types by category and subcategory for sidebar rendering
-  const groupedNodeTypes = useMemo(() => {
-    const groups: Record<NodeCategory, Record<string, NodeType[]>> = {
-      [NodeCategory.TRIGGER]: {},
-      [NodeCategory.PROCESSOR]: {},
-      [NodeCategory.ACTION]: {}
-    };
-
-    availableNodeTypes.forEach(nt => {
-      const sub = nt.subcategory || 'General';
-      if (!groups[nt.category][sub]) {
-        groups[nt.category][sub] = [];
-      }
-      groups[nt.category][sub].push(nt);
-    });
-
-    return groups;
-  }, [availableNodeTypes]);
-
-  // Draggable node item in sidebar
-  const DraggableNodeItem: React.FC<{ nodeType: NodeType }> = ({ nodeType }) => {
-    const onDragStart = (event: React.DragEvent, nodeType: NodeType) => {
-      event.dataTransfer.setData('application/reactflow', nodeType.category);
-      event.dataTransfer.setData('application/json', JSON.stringify({
-        type: 'nodeType',
-        nodeType: nodeType
-      }));
-      event.dataTransfer.effectAllowed = 'move';
-    };
-
-    return (
-      <Paper
-        sx={{
-          p: 2,
-          mb: 1,
-          cursor: 'grab',
-          border: `2px solid ${getCategoryColor(nodeType.category)}40`,
-          '&:hover': {
-            border: `2px solid ${getCategoryColor(nodeType.category)}80`,
-            transform: 'translateY(-1px)',
-          },
-          '&:active': {
-            cursor: 'grabbing'
-          }
-        }}
-        draggable
-        onDragStart={(e) => onDragStart(e, nodeType)}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-          <Chip
-            label={nodeType.category}
-            size="small"
-            sx={{
-              backgroundColor: getCategoryColor(nodeType.category),
-              color: 'white',
-              mr: 1
-            }}
-          />
-        </Box>
-        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-          {nodeType.name}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {nodeType.description}
-        </Typography>
-      </Paper>
-    );
-  };
 
   const handleNameSave = async () => {
     if (!flowId) return;
@@ -1097,9 +757,9 @@ const FlowBuilderInner: React.FC = () => {
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Flow Builder Header */}
       <AppBar position="static" color="default" elevation={1}>
-        <Toolbar>
+        <Toolbar sx={{ minHeight: '64px' }}>
           <Tooltip title="Back to Dashboard">
-            <IconButton edge="start" onClick={handleBack}>
+            <IconButton edge="start" onClick={handleBack} sx={{ mr: 1 }}>
               <ArrowBackIcon />
             </IconButton>
           </Tooltip>
@@ -1108,6 +768,7 @@ const FlowBuilderInner: React.FC = () => {
               size="small"
               value={flowName}
               autoFocus
+              variant="outlined"
               onChange={(e) => setFlowName(e.target.value)}
               onBlur={handleNameSave}
               onKeyDown={(e) => {
@@ -1118,28 +779,52 @@ const FlowBuilderInner: React.FC = () => {
                   setFlowName(flow?.name || '');
                 }
               }}
-              sx={{ flexGrow: 1, ml: 2, maxWidth: 300 }}
+              sx={{ 
+                flexGrow: 1, 
+                ml: 2, 
+                maxWidth: 300,
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '6px',
+                }
+              }}
               disabled={nameSaving}
             />
           ) : (
             <Typography
               variant="h6"
-              sx={{ flexGrow: 1, ml: 2, cursor: 'pointer' }}
+              sx={{ 
+                flexGrow: 1, 
+                ml: 2, 
+                cursor: 'pointer',
+                fontWeight: 500,
+                '&:hover': {
+                  color: 'primary.main'
+                }
+              }}
               onClick={() => setIsEditingName(true)}
             >
               {flowName || 'Flow Builder'}
             </Typography>
           )}
 
-          <Box sx={{ display: 'flex', gap: 1 }}>
+          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
             <Tooltip title="Flow Settings">
-              <IconButton>
+              <IconButton sx={{ color: 'text.secondary' }}>
                 <SettingsIcon />
               </IconButton>
             </Tooltip>
             
             <Tooltip title="Execute Flow">
-              <IconButton color="primary" onClick={handleExecuteFlow}>
+              <IconButton 
+                color="primary" 
+                onClick={handleExecuteFlow}
+                sx={{ 
+                  backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                  '&:hover': {
+                    backgroundColor: 'rgba(25, 118, 210, 0.15)'
+                  }
+                }}
+              >
                 <PlayIcon />
               </IconButton>
             </Tooltip>
@@ -1147,8 +832,14 @@ const FlowBuilderInner: React.FC = () => {
             <Button
               variant="contained"
               startIcon={<SaveIcon />}
-              onClick={handleSave}
+              onClick={() => handleSave()}
               disabled={saving}
+              sx={{ 
+                borderRadius: '6px',
+                textTransform: 'none',
+                fontWeight: 500,
+                boxShadow: '0 2px 4px rgba(0,0,0,0.08)'
+              }}
             >
               {saving ? 'Saving...' : 'Save'}
             </Button>
@@ -1158,56 +849,39 @@ const FlowBuilderInner: React.FC = () => {
 
       {/* Main Flow Builder Area */}
       <Box sx={{ flexGrow: 1, display: 'flex' }}>
-        {/* Node Library Sidebar */}
+        {/* Modern Node Library Sidebar */}
         <Paper 
           sx={{ 
-            width: 300, 
+            width: 320, 
             borderRadius: 0, 
             borderRight: 1, 
             borderColor: 'divider',
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            backgroundColor: '#fafafa',
+            boxShadow: 'none',
+            overflow: 'hidden',
+            position: 'relative',
+            zIndex: 2
           }}
+          elevation={0}
         >
-          <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-            <Typography variant="h6">Node Library</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Drag nodes to the canvas to build your flow
-            </Typography>
-          </Box>
-          
-          <Box sx={{ flexGrow: 1, p: 2, overflow: 'auto' }}>
-            {([NodeCategory.TRIGGER, NodeCategory.PROCESSOR, NodeCategory.ACTION] as NodeCategory[]).map(category => {
-              const subGroups = groupedNodeTypes[category];
-              const hasNodes = Object.keys(subGroups).length > 0;
-              if (!hasNodes) return null;
-              return (
-                <Box key={category} sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
-                    {category.charAt(0) + category.slice(1).toLowerCase()} Nodes
-                  </Typography>
-                  {Object.entries(subGroups).map(([subName, types]) => (
-                    <Accordion key={subName} disableGutters sx={{ mb: 1 }}>
-                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 'medium' }}>
-                          {subName} ({types.length})
-                        </Typography>
-                      </AccordionSummary>
-                      <AccordionDetails sx={{ p: 1 }}>
-                        {types.map(nt => (
-                          <DraggableNodeItem key={nt.id} nodeType={nt} />
-                        ))}
-                      </AccordionDetails>
-                    </Accordion>
-                  ))}
-                </Box>
-              );
-            })}
-          </Box>
+          <ModernNodeLibrary onNodeDragStart={(event, nodeType) => {
+            event.dataTransfer.setData('application/reactflow', nodeType.category);
+            event.dataTransfer.setData('application/json', JSON.stringify({
+              type: 'nodeType',
+              nodeType: nodeType
+            }));
+            event.dataTransfer.effectAllowed = 'move';
+          }} />
         </Paper>
 
         {/* React Flow Canvas */}
-        <Box sx={{ flexGrow: 1, position: 'relative' }}>
+        <Box sx={{ 
+          flexGrow: 1, 
+          position: 'relative',
+          borderLeft: '1px solid rgba(0, 0, 0, 0.08)'
+        }}>
           <ReactFlow
             nodes={nodes}
             edges={validatedEdges}
@@ -1224,8 +898,17 @@ const FlowBuilderInner: React.FC = () => {
             attributionPosition="bottom-left"
             isValidConnection={isValidConnection}
           >
-            <Controls />
-            <MiniMap />
+            <Controls 
+              position="bottom-right" 
+              showInteractive={false} 
+              style={{ 
+                background: 'rgba(255, 255, 255, 0.8)', 
+                borderRadius: '8px',
+                boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
+                padding: '4px'
+              }}
+              className="custom-flow-controls"
+            />
             <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
           </ReactFlow>
         </Box>
@@ -1240,15 +923,26 @@ const FlowBuilderInner: React.FC = () => {
         />
       </Box>
       
-      {/* Flow Execution Dialog */}
-      <FlowExecutionDialog
-        open={executionDialogOpen}
-        onClose={() => setExecutionDialogOpen(false)}
-        flowName={flow?.name || 'Untitled Flow'}
-        triggerNodeId={triggerNodeId}
-        triggerNodeType={triggerNodeType}
-        onExecute={handleFlowExecution}
-      />
+      {/* Flow Execution Dialogs (conditional) */}
+      {executionDialogOpen && (triggerNodeType === 'chat_input' || triggerNodeType === 'voice_input') ? (
+        <ChatBotExecutionDialog
+          open={executionDialogOpen}
+          onClose={() => setExecutionDialogOpen(false)}
+          flowName={flow?.name || 'Untitled Flow'}
+          triggerNodeId={triggerNodeId}
+          triggerNodeType={triggerNodeType}
+          onExecute={handleFlowExecution}
+        />
+      ) : (
+        <FlowExecutionDialog
+          open={executionDialogOpen}
+          onClose={() => setExecutionDialogOpen(false)}
+          flowName={flow?.name || 'Untitled Flow'}
+          triggerNodeId={triggerNodeId}
+          triggerNodeType={triggerNodeType}
+          onExecute={handleFlowExecution}
+        />
+      )}
     </Box>
   );
 };

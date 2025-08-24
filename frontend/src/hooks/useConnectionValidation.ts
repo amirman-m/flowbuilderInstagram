@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { Connection, Edge, Node } from '@xyflow/react';
+import { Connection, Edge, Node, IsValidConnection } from '@xyflow/react';
 import { NodeType, FlowNode, FlowEdge } from '../types/nodes';
 import { 
   ConnectionValidator, 
@@ -42,7 +42,7 @@ export interface UseConnectionValidationReturn {
   onConnect: (connection: Connection) => boolean;
   
   /** Handle connection validation before creation */
-  isValidConnection: (connection: Connection) => boolean;
+  isValidConnection: IsValidConnection<FlowEdge>;
   
   /** Get validation error message for a connection */
   getConnectionError: (connection: Connection) => string | null;
@@ -83,8 +83,12 @@ export function useConnectionValidation(
     const sourceNodeData = sourceNode.data as FlowNode['data'];
     const targetNodeData = targetNode.data as FlowNode['data'];
     
-    const sourceNodeType = sourceNodeData?.nodeType || nodeTypes[sourceNodeData?.instance?.typeId];
-    const targetNodeType = targetNodeData?.nodeType || nodeTypes[targetNodeData?.instance?.typeId];
+    // Safely access the node type using the instance typeId with null checks
+    const sourceNodeTypeId = sourceNodeData?.instance?.typeId || sourceNodeData?.instance?.type;
+    const targetNodeTypeId = targetNodeData?.instance?.typeId || targetNodeData?.instance?.type;
+    
+    const sourceNodeType = sourceNodeData?.nodeType || (sourceNodeTypeId ? nodeTypes[sourceNodeTypeId] : undefined);
+    const targetNodeType = targetNodeData?.nodeType || (targetNodeTypeId ? nodeTypes[targetNodeTypeId] : undefined);
     
     if (!sourceNodeType || !targetNodeType) {
       return null;
@@ -207,10 +211,13 @@ export function useConnectionValidation(
   /**
    * Validation function for React Flow's isValidConnection prop
    */
-  const isValidConnection = useCallback((connection: Connection): boolean => {
+  const isValidConnection: IsValidConnection<FlowEdge> = useCallback((connectionOrEdge) => {
     if (!preventInvalidConnections) {
       return true; // Allow all connections if prevention is disabled
     }
+    
+    // Handle both Connection and Edge types
+    const connection = connectionOrEdge as Connection;
     
     return isConnectionValid(connection);
   }, [isConnectionValid, preventInvalidConnections]);
@@ -262,8 +269,12 @@ export function useEdgeValidation(
     const sourceNodeData = sourceNode.data as FlowNode['data'];
     const targetNodeData = targetNode.data as FlowNode['data'];
     
-    const sourceNodeType = sourceNodeData?.nodeType || nodeTypes[sourceNodeData?.instance?.typeId];
-    const targetNodeType = targetNodeData?.nodeType || nodeTypes[targetNodeData?.instance?.typeId];
+    // Safely access the node type using the instance typeId with null checks
+    const sourceNodeTypeId = sourceNodeData?.instance?.typeId || sourceNodeData?.instance?.type;
+    const targetNodeTypeId = targetNodeData?.instance?.typeId || targetNodeData?.instance?.type;
+    
+    const sourceNodeType = sourceNodeData?.nodeType || (sourceNodeTypeId ? nodeTypes[sourceNodeTypeId] : undefined);
+    const targetNodeType = targetNodeData?.nodeType || (targetNodeTypeId ? nodeTypes[targetNodeTypeId] : undefined);
     
     if (!sourceNodeType || !targetNodeType) {
       return {

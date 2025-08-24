@@ -1,0 +1,228 @@
+/* ============================================================================
+   FLOW BUILDER CUSTOM STYLES - MODERN SAAS DESIGN
+   ============================================================================ */
+
+/* React Flow Controls - Fix for zoom in/out icons visibility */
+.react-flow__controls {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  background-color: rgba(30, 30, 30, 0.95);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+}
+
+.react-flow__controls button {
+  background-color: rgba(40, 40, 40, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #e2e8f0;
+  transition: all 0.2s ease-in-out;
+  margin: 2px;
+}
+
+.react-flow__controls button:hover {
+  background-color: #2d2d2d;
+  color: #f1f5f9;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Custom flow controls with orange/yellow hover effect */
+.custom-flow-controls button:hover {
+  background-color: #f59e0b !important; /* Amber-500 */
+  color: #ffffff !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4) !important;
+}
+
+.custom-flow-controls button:hover path {
+  fill: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+.react-flow__controls button path {
+  fill: #e2e8f0;
+  stroke: #e2e8f0;
+  transition: all 0.2s ease-in-out;
+}
+
+.react-flow__controls button:hover path {
+  fill: #f1f5f9;
+  stroke: #f1f5f9;
+}
+
+/* Modern Node Library Styling */
+.modern-node-library {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.modern-node-library .category-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 12px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.modern-node-library .category-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+.modern-node-library .node-item {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.modern-node-library .node-item:hover {
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+.modern-node-library .node-item:active {
+  transform: scale(0.98) translateX(4px);
+}
+
+/* Custom Scrollbar for Node Library */
+.modern-node-library ::-webkit-scrollbar {
+  width: 6px;
+}
+
+.modern-node-library ::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 3px;
+}
+
+.modern-node-library ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+.modern-node-library ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* Search Bar Enhancement */
+.modern-search-bar .MuiOutlinedInput-root {
+  border-radius: 10px;
+  transition: all 0.2s ease-in-out;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.modern-search-bar .MuiOutlinedInput-root:hover {
+  background: rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.modern-search-bar .MuiOutlinedInput-root.Mui-focused {
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: #3b82f6;
+}
+
+/* Flow Builder Header Enhancement */
+.flow-builder-header {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+/* React Flow Canvas Enhancement */
+.react-flow__background {
+  background-color: #1a1a1a;
+}
+
+.react-flow__minimap {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  background: rgba(30, 30, 30, 0.95);
+  backdrop-filter: blur(8px);
+}
+
+/* Professional Button Styling */
+.modern-button {
+  border-radius: 8px;
+  font-weight: 600;
+  text-transform: none;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.modern-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+/* Category Icon Styling */
+.category-icon-container {
+  background: linear-gradient(135deg, var(--category-color) 0%, var(--category-color-dark) 100%);
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Node Information Dialog Enhancement */
+.node-info-dialog .MuiDialog-paper {
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* Chip Enhancement */
+.modern-chip {
+  border-radius: 6px;
+  font-weight: 500;
+  font-size: 0.75rem;
+  transition: all 0.2s ease-in-out;
+}
+
+.modern-chip:hover {
+  transform: scale(1.05);
+}
+
+/* Animation Classes */
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.slide-in-right {
+  animation: slideInRight 0.3s ease-out;
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .modern-node-library {
+    width: 280px !important;
+  }
+  
+  .react-flow__controls {
+    bottom: 20px;
+    right: 20px;
+  }
+}
