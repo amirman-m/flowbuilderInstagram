@@ -489,7 +489,8 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
         
         // Fallback to common output names for ChatInput -> DeepSeek flow
         if (!sourceOutput) {
-          sourceOutput = sourceOutputs.message_data || 
+          sourceOutput = sourceOutputs.message_data ||
+                          sourceOutputs.ai_response ||
                         sourceOutputs.user_input || 
                         sourceOutputs.default ||
                         sourceOutputs;
