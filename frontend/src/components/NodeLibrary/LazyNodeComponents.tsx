@@ -100,16 +100,6 @@ export const LazyTranscriptionNode = lazy(() =>
   }))
 );
 
-/**
- * Lazy-loaded InstagramTriggerNode component
- * Bundle: instagram-trigger-node.chunk.js
- */
-export const LazyInstagramTriggerNode = lazy(() => 
-  import('../nodes/types/InstagramTriggerNode').then(module => ({
-    default: module.InstagramTriggerNode
-  }))
-);
-
 // Dynamically create lazy components from NODE_REGISTRY
 // This eliminates the need to manually maintain a separate registry
 const createLazyComponent = (nodeTypeId: string) => {

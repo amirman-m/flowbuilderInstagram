@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { Connection, Edge, Node } from '@xyflow/react';
+import { Connection, Edge, Node, IsValidConnection } from '@xyflow/react';
 import { NodeType, FlowNode, FlowEdge } from '../types/nodes';
 import { 
   ConnectionValidator, 
@@ -42,7 +42,7 @@ export interface UseConnectionValidationReturn {
   onConnect: (connection: Connection) => boolean;
   
   /** Handle connection validation before creation */
-  isValidConnection: (connection: Connection) => boolean;
+  isValidConnection: IsValidConnection<FlowEdge>;
   
   /** Get validation error message for a connection */
   getConnectionError: (connection: Connection) => string | null;
@@ -211,7 +211,7 @@ export function useConnectionValidation(
   /**
    * Validation function for React Flow's isValidConnection prop
    */
-  const isValidConnection = useCallback((connectionOrEdge: Connection | Edge): boolean => {
+  const isValidConnection: IsValidConnection<FlowEdge> = useCallback((connectionOrEdge) => {
     if (!preventInvalidConnections) {
       return true; // Allow all connections if prevention is disabled
     }

@@ -167,10 +167,12 @@ const FlowBuilderInner: React.FC = () => {
   
   // Initialize connection validation
   const {
-    getValidatedEdges
+    getValidatedEdges,
+    onConnect: onConnectValidated,
+    isValidConnection
   } = useConnectionValidation(nodes, nodeTypesMap, {
-    realTimeValidation: false,
-    preventInvalidConnections: false
+    realTimeValidation: true,
+    preventInvalidConnections: true
   });
   
   // Handle new connections with simplified validation
@@ -205,7 +207,13 @@ const FlowBuilderInner: React.FC = () => {
     }
     
     console.log('✅ Connection validated, creating edge');
-    
+    if (!onConnectValidated(connection)) {
+      showSnackbar({
+        message: 'Connection to this node is not allowed',
+        severity: 'warning',
+      });
+      return;
+    }
     // Create the new edge and attach the delete handler
     const newEdge: Edge = attachEdgeHandlers({
       id: `edge_${Date.now()}`,
@@ -223,12 +231,10 @@ const FlowBuilderInner: React.FC = () => {
       message: 'Nodes connected successfully',
       severity: 'success',
     });
-  }, [edges, setEdges, attachEdgeHandlers, showSnackbar]);
+  }, [edges, setEdges, attachEdgeHandlers, showSnackbar , onConnectValidated]);
   
   // Apply validation styling to edges
-  const validatedEdges = useMemo(() => {
-    return getValidatedEdges(edges);
-  }, [getValidatedEdges, edges]);
+  const validatedEdges = useMemo(() => getValidatedEdges(edges), [getValidatedEdges, edges]);
   
 
   // Load node types on mount, then load the flow
@@ -890,7 +896,7 @@ const FlowBuilderInner: React.FC = () => {
             deleteKeyCode={null}
             fitView
             attributionPosition="bottom-left"
-            isValidConnection={() => true}
+            isValidConnection={isValidConnection}
           >
             <Controls 
               position="bottom-right" 

@@ -106,17 +106,6 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
         hasStatusIndicator: true
       }
     },
-    "instagram_trigger": {
-      category: NodeCategory.TRIGGER,
-      subcategory: "Social Media",
-      componentName: "InstagramTriggerNode",
-      features: {
-        hasSettings: true,
-        hasExecution: true,
-        hasCustomUI: false,
-        hasStatusIndicator: true
-      }
-    },
     // Add more nodes here in the future
     
   };
