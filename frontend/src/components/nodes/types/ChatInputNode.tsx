@@ -139,7 +139,7 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
               lastExecution: {
                 status: NodeExecutionStatus.SUCCESS,
                 outputs: result.outputs || {},
-                startedAt: new Date(),
+                startedAt: new Date().toISOString(),
               },
               outputs: result.outputs || {}
             },
@@ -183,7 +183,7 @@ export const ChatInputNode: React.FC<NodeComponentProps> = (props) => {
           lastExecution: {
             status: NodeExecutionStatus.PENDING,
             outputs: {},
-            startedAt: new Date(),
+            startedAt: new Date().toISOString(),
           },
           outputs: {},
         },

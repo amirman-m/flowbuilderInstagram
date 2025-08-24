@@ -4,4 +4,7 @@ export type { NodeExecutionContext, NodeExecutionResult, NodeUpdateCallback } fr
 export { ChatInputNodeExecutor } from './ChatInputNodeExecutor';
 export { DeepSeekChatNodeExecutor } from './DeepSeekChatNodeExecutor';
 export { OpenAIChatNodeExecutor } from './OpenAIChatNodeExecutor';
+export { TranscriptionNodeExecutor } from './TranscriptionNodeExecutor';
 export { NodeExecutorFactory } from './NodeExecutorFactory';
+export { VoiceInputNodeExecutor } from './VoiceInputNodeExecutor';
+
