@@ -27,6 +27,7 @@ import nodeService from '../../services/nodeService';
 import { NodeExecutorFactory } from '../nodes/executors/NodeExecutorFactory';
 import { ChatInputNodeExecutor } from '../nodes/executors/ChatInputNodeExecutor';
 import { DeepSeekChatNodeExecutor } from '../nodes/executors/DeepSeekChatNodeExecutor';
+import { OpenAIChatNodeExecutor } from '../nodes/executors/OpenAIChatNodeExecutor';
 import { NodeExecutor } from '../nodes/core/NodeExecutor';
 
 // Define custom node type that matches the actual structure
@@ -319,6 +320,12 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
             executor.executeWithMessageInput(inputs, flowId),
             NODE_EXECUTION_TIMEOUT_MS
           );
+        } else if (executor instanceof OpenAIChatNodeExecutor) {
+          // Handle OpenAI node with message input from previous nodes
+          result = await withTimeout(
+            executor.executeWithMessageInput(inputs, flowId),
+            NODE_EXECUTION_TIMEOUT_MS
+          );
         } else {
           // Generic executor execution
           result = await withTimeout(
@@ -339,14 +346,34 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
         );
       }
       
-      // Update status message to success
-      updateMessage(statusMessageId, {
-        content: `${nodeLabel} executed successfully`,
-        status: NodeExecutionStatus.SUCCESS
-      });
-      
-      console.log(`✅ Node ${nodeId} execution result:`, result);
-      return result;
+      // Respect executor result; show error UI and snackbar if it failed (e.g., validation errors)
+      if (result && result.success === false) {
+        // Build a user-friendly message without relying on a specific result type
+        let msg: string = 'Execution failed';
+        if (result && typeof result === 'object') {
+          if ('message' in result && (result as any).message) {
+            msg = (result as any).message as string;
+          } else if ('error' in result && (result as any).error) {
+            msg = (result as any).error as string;
+          }
+        }
+        updateMessage(statusMessageId, {
+          content: `Error executing ${nodeLabel}: ${msg}`,
+          status: NodeExecutionStatus.ERROR
+        });
+        showSnackbar({ message: msg, severity: 'error' });
+        console.warn(`❌ Node ${nodeId} reported failure:`, result);
+        return result;
+      } else {
+        // Update status message to success
+        updateMessage(statusMessageId, {
+          content: `${nodeLabel} executed successfully`,
+          status: NodeExecutionStatus.SUCCESS
+        });
+        
+        console.log(`✅ Node ${nodeId} execution result:`, result);
+        return result;
+      }
     } catch (error: any) {
       // Update status message to error
       updateMessage(statusMessageId, {
@@ -374,6 +401,16 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
       const triggerNodeResult = await executeNode(nodeExecutionOrder[0], triggerInputs);
       results[nodeExecutionOrder[0]] = triggerNodeResult;
       
+      // Abort flow on first node failure
+      if (triggerNodeResult && triggerNodeResult.success === false) {
+        let msg = 'Trigger node failed';
+        if (typeof triggerNodeResult === 'object') {
+          if ('message' in triggerNodeResult && (triggerNodeResult as any).message) msg = (triggerNodeResult as any).message;
+          else if ('error' in triggerNodeResult && (triggerNodeResult as any).error) msg = (triggerNodeResult as any).error;
+        }
+        throw new Error(msg);
+      }
+      
       // Execute remaining nodes in order
       for (let i = 1; i < nodeExecutionOrder.length; i++) {
         setCurrentExecutingNodeIndex(i);
@@ -385,6 +422,16 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
         // Execute the node
         const nodeResult = await executeNode(nodeId, nodeInputs);
         results[nodeId] = nodeResult;
+        
+        // Abort flow if any node reports failure
+        if (nodeResult && nodeResult.success === false) {
+          let msg = 'Node execution failed';
+          if (typeof nodeResult === 'object') {
+            if ('message' in nodeResult && (nodeResult as any).message) msg = (nodeResult as any).message;
+            else if ('error' in nodeResult && (nodeResult as any).error) msg = (nodeResult as any).error;
+          }
+          throw new Error(msg);
+        }
       }
       
       // All nodes executed successfully
@@ -501,7 +548,8 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
       );
       
       // Call the original onExecute to sync results with store
-      await onExecute({ user_input: userMessage });
+      // for now it is disabled becuase it calls the entire flow and we  call the nodes sequentially
+      //await onExecute({ user_input: userMessage });
 
       // Update processing message to success
       updateMessage(processingId, {
@@ -762,21 +810,26 @@ export const ChatBotExecutionDialog: React.FC<ChatBotExecutionDialogProps> = ({
             mb: 2
           }}
         >
-          <Chip
-            icon={statusIcon}
-            label={message.content}
-            variant="outlined"
-            sx={{
-              backgroundColor: statusBgColor,
-              borderColor: statusColor,
-              color: statusColor,
-              fontSize: '12px',
-              height: '28px',
-              '& .MuiChip-icon': {
-                color: statusColor
-              }
-            }}
-          />
+          <Tooltip title={message.content} arrow>
+            <Chip
+              icon={statusIcon}
+              label={message.content}
+              variant="outlined"
+              sx={{
+                backgroundColor: statusBgColor,
+                borderColor: statusColor,
+                color: statusColor,
+                fontSize: '12px',
+                height: '28px',
+                maxWidth: 320,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                '& .MuiChip-icon': {
+                  color: statusColor
+                }
+              }}
+            />
+          </Tooltip>
         </Box>
       );
     }

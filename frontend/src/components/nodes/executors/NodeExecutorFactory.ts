@@ -4,6 +4,7 @@
 import { NodeExecutor } from '../core/NodeExecutor';
 import { ChatInputNodeExecutor } from './ChatInputNodeExecutor';
 import { DeepSeekChatNodeExecutor } from './DeepSeekChatNodeExecutor';
+import { OpenAIChatNodeExecutor } from './OpenAIChatNodeExecutor';
 import { NodeInstance, NodeType } from '../../../types/nodes';
 
 /**
@@ -24,6 +25,7 @@ export class NodeExecutorFactory {
     // Register built-in executors
     NodeExecutorFactory.registerExecutor('chat_input', ChatInputNodeExecutor);
     NodeExecutorFactory.registerExecutor('simple-deepseek-chat', DeepSeekChatNodeExecutor);
+    NodeExecutorFactory.registerExecutor('simple-openai-chat', OpenAIChatNodeExecutor);
   }
 
   /**

@@ -3,4 +3,5 @@ export { NodeExecutor } from '../core/NodeExecutor';
 export type { NodeExecutionContext, NodeExecutionResult, NodeUpdateCallback } from '../core/NodeExecutor';
 export { ChatInputNodeExecutor } from './ChatInputNodeExecutor';
 export { DeepSeekChatNodeExecutor } from './DeepSeekChatNodeExecutor';
+export { OpenAIChatNodeExecutor } from './OpenAIChatNodeExecutor';
 export { NodeExecutorFactory } from './NodeExecutorFactory';
