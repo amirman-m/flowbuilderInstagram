@@ -11,11 +11,10 @@ import {
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
 } from '@mui/icons-material';
-import { BaseNode } from '../core/BaseNode';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
 import { useExecutionData } from '../hooks/useExecutionData';
-import { useNodeExecution } from '../hooks/useNodeExecution';
 import { NodeExecutionStatus } from '../../../types/nodes';
+import { CompactNodeContainer } from '../core/CompactNodeContainer';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -36,21 +35,6 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
   // Get current settings from instance data
   const currentSettings = instance.data?.settings || {};
   
-  // Use centralized execution service
-  const {
-    status: nodeStatus,
-    message: statusMessage,
-    isExecuting,
-    isReadyForExecution,
-    validateSettings
-  } = useNodeExecution({
-    nodeId: id,
-    settings: currentSettings,
-    requiredSettings: ['access_token'],
-    onNodeUpdate,
-    onExecutionComplete
-  });
-
   // Initialize access token from settings
   useEffect(() => {
     if (currentSettings.access_token) {
@@ -78,18 +62,18 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
     updateSettings({ access_token: '' });
   };
 
-  // Validate settings whenever access token changes
-  useEffect(() => {
-    validateSettings();
-  }, [validateSettings]);
-
-  // Execute handler for BaseNode - uses centralized service
-  const handleExecute = async (): Promise<void> => {
-    if (!isReadyForExecution) {
-      return;
+  // Guard before execution: ensure access token exists, otherwise open settings
+  const handleBeforeExecute = (): boolean => {
+    const token = (instance?.data?.settings as any)?.access_token || accessToken;
+    if (!token || String(token).trim() === '') {
+      openSettingsDialog();
+      return false;
     }
+    return true;
+  };
 
-    // Custom execution logic for Telegram webhook setup
+  // Execute handler - sets up webhook then starts SSE listening
+  const handleExecute = async (): Promise<void> => {
     try {
       const response = await fetch(`${API_BASE_URL}/telegram/setup-webhook/${flowId}`, {
         method: 'POST',
@@ -97,7 +81,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          access_token: currentSettings.access_token
+          access_token: (instance?.data?.settings as any)?.access_token || accessToken
         })
       });
 
@@ -105,10 +89,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // Start listening after webhook setup
-      startListening();
-      
-      // Update node state manually since this is custom execution
+      // Optionally reflect activation in lastExecution
       if (onNodeUpdate) {
         onNodeUpdate(id, {
           data: {
@@ -125,10 +106,11 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
           }
         });
       }
+
+      // Start listening after webhook setup
+      startListening();
     } catch (error) {
       console.error('Error setting up webhook:', error);
-      
-      // Update node state with error
       if (onNodeUpdate) {
         onNodeUpdate(id, {
           data: {
@@ -166,13 +148,16 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
           if (messageData.type === 'webhook_ready') {
             console.log('Webhook ready - send a message to your Telegram bot');
           } else if (messageData.type === 'telegram_message') {
-            // Update node with execution results using centralized service
+            // Normalize outputs under message_data for useExecutionData compatibility
             const outputs = {
-              input_text: messageData.text,
-              chat_id: messageData.chat_id,
-              input_type: messageData.input_type || 'text',
-              user_data: messageData.user_data || {}
-            };
+              message_data: {
+                input_text: messageData.text,
+                chat_id: messageData.chat_id,
+                input_type: messageData.input_type || 'text',
+                user_data: messageData.user_data || {},
+                timestamp: new Date().toISOString()
+              }
+            } as Record<string, unknown>;
             
             if (onNodeUpdate) {
               onNodeUpdate(id, {
@@ -222,38 +207,9 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
     };
   }, []);
 
-  // Custom content for BaseNode
+  // Custom content for execution display
   const renderCustomContent = () => (
     <>
-      {/* Status Messages */}
-      {statusMessage && (
-        <Typography 
-          variant="caption" 
-          sx={{ 
-            display: 'block',
-            color: statusMessage.includes('Error') ? '#f44336' : 
-                   statusMessage.includes('activated') ? '#4caf50' : '#666',
-            mb: 1,
-            fontSize: '0.75rem'
-          }}
-        >
-          {statusMessage}
-        </Typography>
-      )}
-      
-      {/* Error Message */}
-      {executionData.isError && executionData.outputs?.error && (
-        <Alert 
-          severity="error" 
-          icon={<ErrorIcon />}
-          sx={{ mt: 1, fontSize: '0.75rem' }}
-        >
-          <Typography variant="caption">
-            {executionData.outputs.error}
-          </Typography>
-        </Alert>
-      )}
-      
       {/* Execution Results Display */}
       {executionData.displayData && (
         <Box sx={{ 
@@ -278,8 +234,8 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
           >
             {(() => {
               const { displayData } = executionData;
-              if (displayData.inputText) {
-                return `Text: "${displayData.inputText}"${displayData.chatId ? ` • Chat ID: ${displayData.chatId}` : ''}${displayData.inputType ? ` • Type: ${displayData.inputType}` : ''}`;
+              if ((displayData as any)?.inputText) {
+                return `Text: "${(displayData as any).inputText}"${(displayData as any).chatId ? ` • Chat ID: ${(displayData as any).chatId}` : ''}${(displayData as any).inputType ? ` • Type: ${(displayData as any).inputType}` : ''}`;
               }
               return 'No output data available';
             })()}
@@ -318,18 +274,15 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
 
   return (
     <>
-      <BaseNode
+      <CompactNodeContainer
         {...props}
-        nodeTypeId="telegram-input"
-        nodeConfig={undefined}
-        status={nodeStatus}
-        statusMessage={statusMessage || (isReadyForExecution ? 'Ready to execute' : 'Configure settings')}
-        isExecuting={isExecuting}
-        onExecute={() => handleExecute()}
-        onSettingsClick={openSettingsDialog}
-        customContent={renderCustomContent()}
-        icon={<CheckCircleIcon />}
+        customColorName="electric"
+        onBeforeExecute={handleBeforeExecute}
+        onCustomExecute={handleExecute}
       />
+
+      {/* Custom content with status indicators */}
+      {renderCustomContent()}
 
       {/* Settings Dialog */}
       {settingsDialogOpen && (

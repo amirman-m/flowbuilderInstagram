@@ -16,7 +16,7 @@ import {
   Error as ErrorIcon
 } from '@mui/icons-material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
-import { BaseNode } from '../core/BaseNode';
+import { CompactNodeContainer } from '../core/CompactNodeContainer';
 import { useNodeConfiguration, useExecutionData } from '../hooks';
 import { nodeService } from '../../../services/nodeService';
 import { useParams } from 'react-router-dom';
@@ -175,7 +175,7 @@ export const TelegramMessageActionNode: React.FC<NodeComponentProps> = (props) =
     setSettingsOpen(false);
   }, [currentSettings]);
   
-  // Custom content for BaseNode
+  // Custom content rendered below the container
   const customContent = (
     <Box>
       {/* Execution Data Display */}
@@ -221,17 +221,14 @@ export const TelegramMessageActionNode: React.FC<NodeComponentProps> = (props) =
   
   return (
     <>
-      <BaseNode
+      <CompactNodeContainer
         {...props}
-        nodeTypeId="send_telegram_message"
-        nodeConfig={nodeConfig}
-        onExecute={handleExecute}
-        onSettingsClick={handleSettingsClick}
-        validationState={validationState}
-        isExecuting={isExecuting}
-        icon={<TelegramLogo size={20} />}
-        customContent={customContent}
+        customColorName="electric"
+        onCustomExecute={handleExecute}
       />
+      
+      {/* Custom content with status indicators */}
+      {customContent}
 
       {/* Settings Dialog */}
       <Dialog
