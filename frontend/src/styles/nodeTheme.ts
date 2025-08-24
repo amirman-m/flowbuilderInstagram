@@ -66,6 +66,7 @@ export const CATEGORY_COLORS: Record<NodeCategory, string> = {
   [NodeCategory.TRIGGER]: '#10B981', // Modern emerald green
   [NodeCategory.PROCESSOR]: '#3B82F6', // Modern blue  
   [NodeCategory.ACTION]: '#F59E0B', // Modern amber
+  [NodeCategory.MY_MODEL]: '#8B5CF6', // Modern violet for custom models
 };
 
 // Get gradient colors for modern node backgrounds
@@ -88,6 +89,12 @@ export const getCategoryGradient = (category: NodeCategory): { primary: string; 
         primary: '#F59E0B',
         secondary: '#D97706',
         accent: '#FEF3C7'
+      };
+    case NodeCategory.MY_MODEL:
+      return {
+        primary: '#8B5CF6',
+        secondary: '#7C3AED',
+        accent: '#EDE9FE'
       };
     default:
       return {
@@ -120,6 +127,13 @@ const CATEGORY_VARIANTS: Record<NodeCategory, CategoryVariant> = {
     gradientTo: '#d97706',
     iconColor: '#92400e',
     textColor: '#78350f'
+  },
+  [NodeCategory.MY_MODEL]: {
+    accentColor: CATEGORY_COLORS[NodeCategory.MY_MODEL],
+    gradientFrom: '#8b5cf6',
+    gradientTo: '#7c3aed',
+    iconColor: '#5b21b6',
+    textColor: '#4c1d95'
   }
 };
 
@@ -284,12 +298,13 @@ export const createHandleStyles = (
 export const createStatusIndicatorStyles = (
   status: NodeExecutionStatus
 ): CSSObject => {
-  const statusColors = {
+  const statusColors: Record<NodeExecutionStatus, string> = {
     [NodeExecutionStatus.PENDING]: '#94a3b8',
     [NodeExecutionStatus.RUNNING]: '#3b82f6',
     [NodeExecutionStatus.SUCCESS]: '#10b981',
     [NodeExecutionStatus.ERROR]: '#ef4444',
-    [NodeExecutionStatus.SKIPPED]: '#9ca3af'  // Added SKIPPED status with a gray color
+    [NodeExecutionStatus.SKIPPED]: '#9ca3af',  
+    [NodeExecutionStatus.WARNING]: '#f59e0b'
   };
   
   return {
