@@ -1,5 +1,5 @@
 // src/components/nodes/node-types/OpenAIChatNode.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import { Box, Typography, Alert } from '@mui/material';
 import { CheckCircle as CheckCircleIcon, Warning as WarningIcon } from '@mui/icons-material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
@@ -7,6 +7,7 @@ import { useExecutionData } from '../hooks';
 import { useNodeConfigurationStatus } from '../hooks/useNodeConfigurationStatus';
 import { NodeResultDisplay } from '../core/NodeResultDisplay';
 import { CompactNodeContainer } from '../core/CompactNodeContainer';
+import { ModelConfigWarningDialog } from '../../dialogs/ModelConfigWarningDialog';
 
 // (Icon handled via NODE_ICONS in presenter; no inline logo needed.)
 
@@ -14,6 +15,10 @@ export const OpenAIChatNode: React.FC<NodeComponentProps> = (props) => {
   const { data, id } = props;
   const nodeData = data as NodeDataWithHandlers;
   const { nodeType, instance } = nodeData;
+
+  // State for configuration warning dialog
+  const [showConfigWarning, setShowConfigWarning] = useState(false);
+  const [pendingExecution, setPendingExecution] = useState(false);
 
   // Use execution data hook
   const executionData = useExecutionData({
@@ -57,6 +62,43 @@ export const OpenAIChatNode: React.FC<NodeComponentProps> = (props) => {
     text = text.replace(/<[^>]+>/g, ' ');
     text = text.replace(/[*_`>#-]+/g, ' ');
     return text.replace(/\s+/g, ' ').trim();
+  };
+
+  // Handle execution with model check
+  const handleBeforeExecute = () => {
+    const model = (instance?.data?.settings as any)?.model;
+    if (!model) {
+      setShowConfigWarning(true);
+      setPendingExecution(true);
+      return false; // Prevent execution until dialog is handled
+    }
+    return true;
+  };
+
+  // Continue execution without model
+  const handleContinueAnyway = () => {
+    setShowConfigWarning(false);
+
+    // Execute the node directly without opening settings
+    if (pendingExecution) {
+      setPendingExecution(false);
+
+      // Get the execution function from CompactNodeContainer
+      const executionService = nodeData.onExecute;
+      if (executionService) {
+        // Call execution directly with required nodeId parameter
+        setTimeout(() => {
+          executionService(id);
+        }, 100);
+      }
+    }
+  };
+
+  // Cancel execution
+  const handleCancelExecution = () => {
+    setShowConfigWarning(false);
+    setPendingExecution(false);
+    // Just close the dialog, don't do anything else
   };
 
   const customContent = (
@@ -137,8 +179,18 @@ export const OpenAIChatNode: React.FC<NodeComponentProps> = (props) => {
       <CompactNodeContainer
         {...props}
         customColorName="indigo"
+        onBeforeExecute={handleBeforeExecute}
       />
       {customContent}
+      
+      {/* Modern configuration warning dialog */}
+      <ModelConfigWarningDialog
+        open={showConfigWarning}
+        onClose={handleCancelExecution}
+        onContinue={handleContinueAnyway}
+        nodeType="OpenAI Chat"
+        message="OpenAI node requires a Model before execution. Continue anyway?"
+      />
     </>
   );
 };

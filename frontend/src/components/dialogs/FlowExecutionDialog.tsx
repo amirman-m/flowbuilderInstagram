@@ -70,7 +70,8 @@ export const FlowExecutionDialog: React.FC<FlowExecutionDialogProps> = ({
   // Refs for media handling
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const recordingIntervalRef = useRef<number | null>(null);
+  // Use ReturnType to be compatible with both browser and Node typings
+  const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Cleanup function for audio resources
   useEffect(() => {

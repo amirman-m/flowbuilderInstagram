@@ -1,5 +1,5 @@
 // src/components/nodes/node-types/DeepSeekChatNode.tsx
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Box, 
   Typography, 
@@ -14,12 +14,16 @@ import { useExecutionData } from '../hooks';
 import { useNodeConfigurationStatus } from '../hooks/useNodeConfigurationStatus';
 import { NodeResultDisplay } from '../core/NodeResultDisplay';
 import { CompactNodeContainer } from '../core/CompactNodeContainer';
-
+import { ModelConfigWarningDialog } from '../../dialogs/ModelConfigWarningDialog';
 
 export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
   const { data, id } = props;
   const nodeData = data as NodeDataWithHandlers;
   const { nodeType, instance } = nodeData;
+  
+  // State for configuration warning dialog
+  const [showConfigWarning, setShowConfigWarning] = useState(false);
+  const [pendingExecution, setPendingExecution] = useState(false);
   
   // Use hooks for execution data
   const executionData = useExecutionData({
@@ -39,6 +43,43 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
     currentSettings,
     ['model'] // Required settings for DeepSeekChatNode
   );
+
+  // Handle execution with model check
+  const handleBeforeExecute = () => {
+    const model = (instance?.data?.settings as any)?.model;
+    if (!model) {
+      setShowConfigWarning(true);
+      setPendingExecution(true);
+      return false; // Prevent execution until dialog is handled
+    }
+    return true;
+  };
+  
+  // Continue execution without model
+  const handleContinueAnyway = () => {
+    setShowConfigWarning(false);
+    
+    // Execute the node directly without opening settings
+    if (pendingExecution) {
+      setPendingExecution(false);
+      
+      // Get the execution function from CompactNodeContainer
+      const executionService = nodeData.onExecute;
+      if (executionService) {
+        // Call execution directly with required nodeId parameter
+        setTimeout(() => {
+          executionService(id);
+        }, 100);
+      }
+    }
+  };
+  
+  // Cancel execution
+  const handleCancelExecution = () => {
+    setShowConfigWarning(false);
+    setPendingExecution(false);
+    // Just close the dialog, don't do anything else
+  };
 
   // Execution handlers will be managed by CompactNodeContainer
 
@@ -156,10 +197,20 @@ export const DeepSeekChatNode: React.FC<NodeComponentProps> = (props) => {
       <CompactNodeContainer
         {...props}
         customColorName="cyan"
+        onBeforeExecute={handleBeforeExecute}
       />
       
       {/* Custom content with warnings and status indicators */}
       {customContent}
+      
+      {/* Modern configuration warning dialog */}
+      <ModelConfigWarningDialog
+        open={showConfigWarning}
+        onClose={handleCancelExecution}
+        onContinue={handleContinueAnyway}
+        nodeType="DeepSeek Chat"
+        message="DeepSeek node requires a Model before execution. Continue anyway?"
+      />
     </>
   );
 };

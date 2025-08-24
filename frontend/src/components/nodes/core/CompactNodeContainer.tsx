@@ -11,12 +11,14 @@ import { useParams } from 'react-router-dom';
 import { useNodeInputs } from '../hooks/useNodeInputs';
 import { NodeExecutionStatus } from '../../../types/nodes';
 import { NodeExecutionManager } from './NodeExecutionManager';
+import { useRequiredInputsGuard } from '../hooks/useRequiredInputsGuard';
 
 export interface CompactNodeContainerProps extends NodeComponentProps {
   customColorName?: string;
   showExecuteButton?: boolean;
   showDeleteButton?: boolean;
   onCustomExecute?: () => void;
+  onBeforeExecute?: () => Promise<boolean> | boolean;
 }
 
 export const CompactNodeContainer: React.FC<CompactNodeContainerProps> = ({
@@ -25,7 +27,8 @@ export const CompactNodeContainer: React.FC<CompactNodeContainerProps> = ({
   customColorName,
   showExecuteButton = true,
   showDeleteButton = true,
-  onCustomExecute
+  onCustomExecute,
+  onBeforeExecute
 }) => {
   const { nodeType, instance, onNodeUpdate, onNodeDelete } = data;
 
@@ -36,6 +39,9 @@ export const CompactNodeContainer: React.FC<CompactNodeContainerProps> = ({
 
   // Inputs collector from connected upstream nodes
   const { collectInputs } = useNodeInputs(id);
+
+  // Guard: ensure required input ports are connected before execution
+  const { assertOrNotify } = useRequiredInputsGuard(id, nodeType);
 
   // Initialize execution status from backend-provided data when node mounts or data updates
   React.useEffect(() => {
@@ -100,6 +106,17 @@ export const CompactNodeContainer: React.FC<CompactNodeContainerProps> = ({
     nodeType,
     customColorName,
     onExecute: async () => {
+      // Optional guard from node component: can cancel execution
+      if (onBeforeExecute) {
+        const proceed = await onBeforeExecute();
+        if (!proceed) return;
+      }
+
+      // Validate required input connections before executing
+      const inputsOk = assertOrNotify();
+      if (!inputsOk) {
+        return;
+      }
       if (onCustomExecute) {
         onCustomExecute();
       } else {
