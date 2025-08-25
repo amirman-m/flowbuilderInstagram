@@ -239,7 +239,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
       eventSource.onmessage = (event) => {
         try {
           const messageData = JSON.parse(event.data);
-
+      
           if (messageData.type === 'webhook_ready') {
             console.log('Webhook ready - send a message to your Telegram bot');
           } else if (messageData.type === 'telegram_message') {
@@ -247,17 +247,14 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
             const sseOutputs = messageData.outputs || {};
             const msgData = sseOutputs.message_data || {};
             
-            // Normalize outputs under message_data for useExecutionData compatibility
+            // Log the received message data for debugging
+            console.log('Received telegram message data:', msgData);
+            
+            // Preserve the complete message_data structure without modification
             const outputs = {
-              message_data: {
-                input_text: msgData.input_text || msgData.chat_input,
-                chat_id: msgData.chat_id,
-                input_type: msgData.input_type || 'text',
-                user_data: msgData.user_data || {},
-                timestamp: msgData.timestamp || new Date().toISOString()
-              }
+              message_data: msgData
             } as Record<string, unknown>;
-
+      
             if (onNodeUpdate) {
               onNodeUpdate(id, {
                 data: {
@@ -271,7 +268,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
                 }
               });
             }
-
+      
             // Close SSE connection after receiving message
             eventSource.close();
           } else if (messageData.type === 'timeout') {
@@ -382,6 +379,11 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
               const { displayData } = executionData;
               if (executionData.status === 'running') {
                 return 'Waiting for Telegram message... Send a message to your bot.';
+              }
+              if ((displayData as any)?.inputType === 'voice') {
+                const v = (displayData as any)?.voiceInput || (displayData as any)?.messageData?.voice_input;
+                const fileId = typeof v === 'object' ? v?.file_id : undefined;
+                return `Voice message received${fileId ? ` • file_id: ${fileId}` : ''}${(displayData as any).chatId ? ` • Chat ID: ${(displayData as any).chatId}` : ''}`;
               }
               if ((displayData as any)?.inputText) {
                 return `Text: "${(displayData as any).inputText}"${(displayData as any).chatId ? ` • Chat ID: ${(displayData as any).chatId}` : ''}${(displayData as any).inputType ? ` • Type: ${(displayData as any).inputType}` : ''}`;
