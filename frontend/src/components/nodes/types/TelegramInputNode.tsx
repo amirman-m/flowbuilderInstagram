@@ -18,7 +18,11 @@ import { useExecutionData } from '../hooks/useExecutionData';
 import { NodeExecutionStatus } from '../../../types/nodes';
 import { CompactNodeContainer } from '../core/CompactNodeContainer';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
+const API_BASE_URL = (() => {
+  const raw: string = (import.meta.env.VITE_API_URL as string) || '';
+  const base = raw.replace(/\/$/, '');
+  return base.endsWith('/api/v1') ? base : `${base}/api/v1`;
+})();
 
 export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
   const { data, id } = props;
