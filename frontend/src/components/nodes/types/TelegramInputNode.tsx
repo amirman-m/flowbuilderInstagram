@@ -19,9 +19,20 @@ import { NodeExecutionStatus } from '../../../types/nodes';
 import { CompactNodeContainer } from '../core/CompactNodeContainer';
 
 const API_BASE_URL = (() => {
-  const raw: string = (import.meta.env.VITE_API_URL as string) || '';
-  const base = raw.replace(/\/$/, '');
-  return base.endsWith('/api/v1') ? base : `${base}/api/v1`;
+  // Use relative URL to avoid Content Security Policy violations
+  // This will work with both HTTP and HTTPS
+  const apiPath = '/api/v1';
+  
+  // If VITE_API_URL is set and it's not localhost, use it (for production)
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && !envUrl.includes('localhost')) {
+    // Remove trailing slash if present
+    const base = envUrl.replace(/\/$/, '');
+    return base.endsWith('/api/v1') ? base : `${base}/api/v1`;
+  }
+  
+  // For local development, use relative path
+  return apiPath;
 })();
 
 export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
