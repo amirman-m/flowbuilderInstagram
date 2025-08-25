@@ -14,6 +14,84 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+@router.post("/webhook/{user_id}/{flow_id}/{node_id}")
+@router.get("/webhook/{user_id}/{flow_id}/{node_id}")
+async def telegram_webhook_dynamic(
+    user_id: int,
+    flow_id: int,
+    node_id: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    New dynamic webhook endpoint that supports user_id/flow_id/node_id structure
+    """
+    try:
+        if request.method == "GET":
+            return {"ok": True, "message": "Dynamic webhook endpoint is ready"}
+        
+        webhook_data = await request.json()
+        logger.info(f"Received Telegram webhook for user {user_id}, flow {flow_id}, node {node_id}")
+        
+        # Use new TelegramBotService for processing
+        from ...services.telegram_bot_service import TelegramBotService
+        from ...services.nodes.triggers.telegram_input import process_webhook_message
+        
+        # Find the specific node instance
+        telegram_trigger = db.query(NodeInstance).filter(
+            NodeInstance.flow_id == flow_id,
+            NodeInstance.id == node_id,
+            NodeInstance.type_id == "telegram_input"
+        ).first()
+        
+        if not telegram_trigger:
+            logger.error(f"Telegram trigger node {node_id} not found in flow {flow_id}")
+            return {"ok": False, "error": "Telegram trigger node not found"}
+        
+        access_token = telegram_trigger.data.get("settings", {}).get("access_token")
+        if not access_token:
+            logger.error(f"No access token found for node {node_id}")
+            return {"ok": False, "error": "No access token configured"}
+        
+        # Process webhook message
+        result = await process_webhook_message(webhook_data, access_token, flow_id)
+        
+        if result.status == "success":
+            message_data = result.outputs.get("message_data", {})
+            
+            # Update node with execution data
+            current_data = telegram_trigger.data or {}
+            current_data["lastExecution"] = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "status": "success",
+                "outputs": {"message_data": message_data},
+                "logs": result.logs or []
+            }
+            telegram_trigger.data = current_data
+            db.commit()
+            
+            # Execute flow
+            try:
+                flow_executor = create_flow_executor(db)
+                execution_result = await flow_executor.execute_flow(
+                    flow_id=flow_id,
+                    trigger_inputs={"webhook_data": webhook_data, "trigger_data": message_data},
+                    user_id=user_id
+                )
+                
+                return {"ok": True, "message": "Message processed successfully"}
+                
+            except Exception as e:
+                logger.error(f"Flow execution error: {e}")
+                return {"ok": False, "error": f"Flow execution failed: {str(e)}"}
+        else:
+            return {"ok": False, "error": result.error}
+            
+    except Exception as e:
+        logger.error(f"Webhook processing error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Legacy webhook endpoint for backward compatibility
 @router.post("/webhook/{flow_id}")
 @router.get("/webhook/{flow_id}")
 async def telegram_webhook(

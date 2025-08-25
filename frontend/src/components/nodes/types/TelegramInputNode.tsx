@@ -22,6 +22,9 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
   const { data, id } = props;
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [accessToken, setAccessToken] = useState('');
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationMessage, setValidationMessage] = useState('');
+  const [validationStatus, setValidationStatus] = useState<'none' | 'success' | 'error'>('none');
   
   // SSE connection reference
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -43,7 +46,11 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
   }, [currentSettings.access_token]);
 
   // Settings handlers
-  const closeSettingsDialog = () => setSettingsDialogOpen(false);
+  const closeSettingsDialog = () => {
+    setSettingsDialogOpen(false);
+    setValidationStatus('none');
+    setValidationMessage('');
+  };
   const openSettingsDialog = () => setSettingsDialogOpen(true);
   
   const updateSettings = (newSettings: any) => {
@@ -60,28 +67,30 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
   const resetSettings = () => {
     setAccessToken('');
     updateSettings({ access_token: '' });
+    setValidationStatus('none');
+    setValidationMessage('');
   };
 
-  // Guard before execution: ensure access token exists, otherwise open settings
-  const handleBeforeExecute = (): boolean => {
-    const token = (instance?.data?.settings as any)?.access_token || accessToken;
-    if (!token || String(token).trim() === '') {
-      openSettingsDialog();
+  // Validate bot token using new API
+  const validateBotToken = async (token: string): Promise<boolean> => {
+    if (!token || token.trim() === '') {
+      setValidationStatus('error');
+      setValidationMessage('Please enter a bot token');
       return false;
     }
-    return true;
-  };
 
-  // Execute handler - sets up webhook then starts SSE listening
-  const handleExecute = async (): Promise<void> => {
+    setIsValidating(true);
+    setValidationStatus('none');
+    setValidationMessage('');
+
     try {
-      const response = await fetch(`${API_BASE_URL}/telegram/setup-webhook/${flowId}`, {
+      const response = await fetch(`${API_BASE_URL}/telegram-bot/validate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          access_token: (instance?.data?.settings as any)?.access_token || accessToken
+          access_token: token
         })
       });
 
@@ -89,7 +98,68 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // Optionally reflect activation in lastExecution
+      const result = await response.json();
+      
+      if (result.success) {
+        setValidationStatus('success');
+        setValidationMessage(result.message);
+        return true;
+      } else {
+        setValidationStatus('error');
+        setValidationMessage(result.message);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error validating bot token:', error);
+      setValidationStatus('error');
+      setValidationMessage('Failed to validate bot token. Please check your connection.');
+      return false;
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  // Guard before execution: ensure access token exists and is valid
+  const handleBeforeExecute = async (): Promise<boolean> => {
+    const token = (instance?.data?.settings as any)?.access_token || accessToken;
+    if (!token || String(token).trim() === '') {
+      openSettingsDialog();
+      return false;
+    }
+
+    // Validate token before proceeding
+    return await validateBotToken(token);
+  };
+
+  // Execute handler - uses new bot setup API then starts SSE listening
+  const handleExecute = async (): Promise<void> => {
+    try {
+      const token = (instance?.data?.settings as any)?.access_token || accessToken;
+      
+      // Use new bot setup API
+      const response = await fetch(`${API_BASE_URL}/telegram-bot/setup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          access_token: token,
+          flow_id: parseInt(flowId || '1'),
+          node_id: id
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.message);
+      }
+
+      // Update node with bot configuration
       if (onNodeUpdate) {
         onNodeUpdate(id, {
           data: {
@@ -99,8 +169,9 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
               status: NodeExecutionStatus.SUCCESS,
               startedAt: new Date().toISOString(),
               outputs: {
-                webhook_status: 'activated',
-                message: 'Webhook activated - listening for messages...'
+                webhook_status: 'configured',
+                bot_config: result.config_data,
+                message: result.message
               }
             }
           }
@@ -110,7 +181,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
       // Start listening after webhook setup
       startListening();
     } catch (error) {
-      console.error('Error setting up webhook:', error);
+      console.error('Error setting up bot:', error);
       if (onNodeUpdate) {
         onNodeUpdate(id, {
           data: {
@@ -321,7 +392,18 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
               placeholder="Enter your Telegram bot token"
               sx={{ mb: 2 }}
               helperText="Get your bot token from @BotFather on Telegram"
+              error={validationStatus === 'error'}
             />
+            
+            {/* Validation feedback */}
+            {validationMessage && (
+              <Alert 
+                severity={validationStatus === 'success' ? 'success' : 'error'} 
+                sx={{ mb: 2 }}
+              >
+                {validationMessage}
+              </Alert>
+            )}
             
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
               <Button onClick={resetSettings} color="error">
@@ -331,13 +413,17 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
                 Cancel
               </Button>
               <Button
-                onClick={() => {
-                  updateSettings({ access_token: accessToken });
-                  closeSettingsDialog();
+                onClick={async () => {
+                  const isValid = await validateBotToken(accessToken);
+                  if (isValid) {
+                    updateSettings({ access_token: accessToken });
+                    closeSettingsDialog();
+                  }
                 }}
                 variant="contained"
+                disabled={isValidating}
               >
-                Save
+                {isValidating ? 'Validating...' : 'Save'}
               </Button>
             </Box>
           </Paper>

@@ -1,18 +1,14 @@
-import os
 import asyncio
-import httpx
 import json
 from typing import Dict, Any, Optional
 from fastapi.responses import StreamingResponse
 from ....models.nodes import NodeType, NodeCategory, NodeDataType, NodePort, NodePorts, NodeExecutionResult
+from ...telegram_bot_service import TelegramBotService
 from datetime import datetime, timezone
 import uuid
 import logging
 
 logger = logging.getLogger(__name__)
-
-# Global state to track webhook registrations
-_webhook_states = {}
 
 # Global SSE connection registry
 _sse_connections: Dict[int, Dict[str, asyncio.Queue]] = {}
@@ -79,58 +75,13 @@ def get_telegram_input_node_type() -> NodeType:
         }
     )
 
+# Legacy function - replaced by TelegramBotService
 async def setup_telegram_webhook(access_token: str, webhook_url: str) -> bool:
     """
-    Set up Telegram webhook for the bot
-    Returns True if successful, False otherwise
+    DEPRECATED: Use TelegramBotService instead
     """
-    try:
-        # Check if webhook is already set up for this token
-        webhook_key = f"telegram_webhook_{access_token[:10]}"
-        if _webhook_states.get(webhook_key):
-            logger.info(f"Webhook already configured for token {access_token[:10]}...")
-            return True
-
-        # Set up the webhook
-        telegram_api_url = f"https://api.telegram.org/bot{access_token}/setWebhook"
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                telegram_api_url,
-                json={
-                    "url": webhook_url,
-                    "allowed_updates": ["message"]
-                }
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if result.get("ok"):
-                    _webhook_states[webhook_key] = True
-                    logger.info(f"Telegram webhook set up successfully for {webhook_url}")
-                    return True
-                else:
-                    error_desc = result.get('description', 'Unknown error')
-                    logger.error(f"Telegram API error: {error_desc}")
-                    logger.error(f"Full Telegram response: {result}")
-                    return False
-            else:
-                # Try to get error details from response body
-                try:
-                    error_result = response.json()
-                    error_desc = error_result.get('description', 'No description provided')
-                    logger.error(f"Failed to set up webhook: HTTP {response.status_code} - {error_desc}")
-                    logger.error(f"Full error response: {error_result}")
-                except:
-                    logger.error(f"Failed to set up webhook: HTTP {response.status_code}")
-                    logger.error(f"Response text: {response.text}")
-                
-                logger.error(f"Webhook URL attempted: {webhook_url}")
-                return False
-                
-    except Exception as e:
-        logger.error(f"Error setting up Telegram webhook: {str(e)}")
-        return False
+    logger.warning("setup_telegram_webhook is deprecated. Use TelegramBotService instead.")
+    return False
 
 async def process_webhook_message(webhook_data: Dict[str, Any], access_token: str, flow_id: int = None) -> NodeExecutionResult:
     """
@@ -281,20 +232,22 @@ async def notify_sse_connections(flow_id: int, message_data: Dict[str, Any]):
 
 async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecutionResult:
     """
-    Execute Telegram input trigger node - Regular node execution for flow system
+    Execute Telegram input trigger node using new modular TelegramBotService
     
     This function handles two scenarios:
     1. Webhook data processing (when called from webhook endpoint)
-    2. Regular node execution (returns setup status for flow system)
+    2. Regular node execution (validates bot and sets up webhook)
     """
     start_time = datetime.now(timezone.utc)
     
-    # Get settings and access token
+    # Get settings and context
     settings = context.get("settings", {})
     access_token = context.get("access_token") or settings.get("access_token")
     flow_id = context.get("flow_id", 1)
+    node_id = context.get("node_id", "telegram_input")
+    user_id = context.get("user_id", 1)  # TODO: Get from auth context
     
-    logger.info(f"🔍 Telegram node execution - flow {flow_id}")
+    logger.info(f"🔍 Telegram node execution - flow {flow_id}, node {node_id}")
     logger.info(f"🔍 Access token: {access_token[:10] if access_token else 'None'}...")
     
     if not access_token:
@@ -314,34 +267,49 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
         logger.info("Processing webhook data for flow execution")
         return await process_webhook_message(webhook_data, access_token, flow_id)
     
-    # This is regular node execution - just set up webhook and return success
-    # The actual message waiting happens via SSE in the frontend
+    # This is regular node execution - validate bot and set up webhook using new service
     try:
-        webhook_url = f"https://asangram.tech/api/v1/telegram/webhook/{flow_id}"
+        # Initialize the bot service
+        bot_service = TelegramBotService()
         
-        logger.info(f"Setting up Telegram webhook for flow {flow_id}")
-        webhook_success = await setup_telegram_webhook(access_token, webhook_url)
+        # Get database session (TODO: inject properly)
+        from app.core.database import SessionLocal
+        db = SessionLocal()
         
-        if not webhook_success:
+        try:
+            # Validate bot and set up webhook using new modular service
+            success, message, config_data = await bot_service.validate_and_setup_bot(
+                db=db,
+                user_id=user_id,
+                access_token=access_token,
+                flow_id=flow_id,
+                node_id=node_id
+            )
+            
+            if not success:
+                return NodeExecutionResult(
+                    outputs={},
+                    status="error",
+                    error=message,
+                    started_at=start_time,
+                    completed_at=datetime.now(timezone.utc)
+                )
+            
+            # Return success with bot configuration data
             return NodeExecutionResult(
-                outputs={},
-                status="error",
-                error="Failed to set up Telegram webhook",
+                outputs={
+                    "webhook_status": "configured",
+                    "bot_config": config_data,
+                    "message": message
+                },
+                status="success",
+                logs=[f"Telegram bot configured successfully: {message}"],
                 started_at=start_time,
                 completed_at=datetime.now(timezone.utc)
             )
-        
-        # Return success - webhook is set up, frontend will handle SSE listening
-        return NodeExecutionResult(
-            outputs={
-                "webhook_status": "activated",
-                "message": "Webhook activated - use SSE endpoint to listen for messages"
-            },
-            status="success",
-            logs=[f"Telegram webhook set up successfully for flow {flow_id}"],
-            started_at=start_time,
-            completed_at=datetime.now(timezone.utc)
-        )
+            
+        finally:
+            db.close()
                 
     except Exception as e:
         logger.error(f"Error in Telegram execution: {str(e)}")
