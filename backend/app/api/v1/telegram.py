@@ -317,6 +317,8 @@ async def telegram_webhook_stable(
     Resolves default flow/node mapping from TelegramBotConfig.
     """
     try:
+        logger.info(f"Webhook called: user_id={user_id}, bot_id={bot_id}, method={request.method}")
+        
         if request.method == "GET":
             return {"ok": True, "message": "Stable webhook endpoint is ready"}
 
@@ -329,22 +331,29 @@ async def telegram_webhook_stable(
 
         if not bot_config:
             logger.error(f"No active bot config found for user {user_id} and bot_id {bot_id}")
+            # Debug: List all bot configs for this user
+            all_configs = db.query(TelegramBotConfig).filter(TelegramBotConfig.user_id == user_id).all()
+            logger.error(f"Available bot configs for user {user_id}: {[(c.bot_id, c.is_active, c.config_name) for c in all_configs]}")
             return {"ok": False, "error": "Bot configuration not found"}
 
         if not bot_config.webhook_secret or bot_config.webhook_secret != secret:
-            logger.warning("Webhook secret mismatch")
+            logger.warning(f"Webhook secret mismatch: expected={bot_config.webhook_secret}, got={secret}")
             raise HTTPException(status_code=403, detail="Invalid webhook secret")
 
         webhook_data = await request.json()
+        logger.info(f"Webhook data received: {webhook_data}")
 
         # Resolve target flow/node
         target_flow_id = bot_config.default_flow_id
         target_node_id = bot_config.default_node_id
+        logger.info(f"Bot config defaults: flow_id={target_flow_id}, node_id={target_node_id}")
 
         if not target_flow_id or not target_node_id:
+            logger.warning("No default flow/node configured, searching for fallback")
             # Fallback: find first flow with a telegram_input node for this user
             flow = db.query(Flow).filter(Flow.user_id == user_id).first()
             if not flow:
+                logger.error(f"No flow available for user {user_id}")
                 raise HTTPException(status_code=400, detail="No flow available for user")
 
             telegram_trigger = db.query(NodeInstance).filter(
@@ -353,10 +362,15 @@ async def telegram_webhook_stable(
             ).first()
 
             if not telegram_trigger:
+                logger.error(f"No Telegram trigger node found in flow {flow.id} for user {user_id}")
+                # Debug: List all nodes in the flow
+                all_nodes = db.query(NodeInstance).filter(NodeInstance.flow_id == flow.id).all()
+                logger.error(f"Available nodes in flow {flow.id}: {[(n.id, n.type_id) for n in all_nodes]}")
                 raise HTTPException(status_code=400, detail="No Telegram trigger node found to handle webhook")
 
             target_flow_id = flow.id
             target_node_id = telegram_trigger.id
+            logger.info(f"Using fallback: flow_id={target_flow_id}, node_id={target_node_id}")
 
         # Load node instance for access token
         telegram_trigger = db.query(NodeInstance).filter(
@@ -366,12 +380,15 @@ async def telegram_webhook_stable(
         ).first()
 
         if not telegram_trigger:
+            logger.error(f"Target Telegram trigger node not found: flow_id={target_flow_id}, node_id={target_node_id}")
             raise HTTPException(status_code=400, detail="Target Telegram trigger node not found")
 
         access_token = (telegram_trigger.data or {}).get("settings", {}).get("access_token")
         if not access_token:
+            logger.error(f"Bot access token not configured on target node {target_node_id}")
             raise HTTPException(status_code=400, detail="Bot access token not configured on target node")
 
+        logger.info(f"Processing webhook message for flow {target_flow_id}")
         # Process webhook message
         result = await process_webhook_message(webhook_data, access_token, target_flow_id)
 
@@ -380,6 +397,7 @@ async def telegram_webhook_stable(
             return {"ok": False, "error": result.error}
 
         message_data = result.outputs.get("message_data", {})
+        logger.info(f"Webhook message processed successfully: {message_data.get('input_text', 'N/A')}")
 
         # Update node lastExecution for UI and commit
         try:
@@ -403,6 +421,7 @@ async def telegram_webhook_stable(
                 trigger_inputs={"webhook_data": webhook_data, "trigger_data": message_data},
                 user_id=user_id
             )
+            logger.info(f"Flow {target_flow_id} executed successfully")
             return {"ok": True, "message": "Message processed successfully"}
         except Exception as e:
             logger.error(f"Flow execution error: {e}")

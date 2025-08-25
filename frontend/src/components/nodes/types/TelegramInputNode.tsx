@@ -181,63 +181,31 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
     return await validateBotToken(token);
   };
 
-  // Execute handler - uses new bot setup API then starts SSE listening
+  // Execute handler - shows waiting dialog and starts listening
   const handleExecute = async (): Promise<void> => {
     try {
-      const usingExisting = !!selectedExistingName;
-      const token = (instance?.data?.settings as any)?.access_token || accessToken;
-      // Use new bot setup API (send either config_name only, or token+name)
-      const response = await fetch(`${API_BASE_URL}/telegram-bot/setup`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(usingExisting ? {
-          access_token: null,
-          flow_id: parseInt(flowId || '1'),
-          node_id: id,
-          config_name: selectedExistingName
-        } : {
-          access_token: token,
-          flow_id: parseInt(flowId || '1'),
-          node_id: id,
-          config_name: botName && botName.trim() ? botName.trim() : 'telegram'
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.message);
-      }
-
-      // Update node with bot configuration
+      // Update node to show "waiting for message" status
       if (onNodeUpdate) {
         onNodeUpdate(id, {
           data: {
             ...instance.data,
             lastExecution: {
               timestamp: new Date().toISOString(),
-              status: NodeExecutionStatus.SUCCESS,
+              status: NodeExecutionStatus.RUNNING,
               startedAt: new Date().toISOString(),
               outputs: {
-                webhook_status: 'configured',
-                bot_config: result.config_data,
-                message: result.message
+                webhook_status: 'listening',
+                message: 'Waiting for Telegram message... Send a message to your bot.'
               }
             }
           }
         });
       }
 
-      // Start listening after webhook setup
+      // Start listening immediately
       startListening();
     } catch (error) {
-      console.error('Error setting up bot:', error);
+      console.error('Error starting listener:', error);
       if (onNodeUpdate) {
         onNodeUpdate(id, {
           data: {
@@ -275,14 +243,18 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
           if (messageData.type === 'webhook_ready') {
             console.log('Webhook ready - send a message to your Telegram bot');
           } else if (messageData.type === 'telegram_message') {
+            // Extract message data from SSE event
+            const sseOutputs = messageData.outputs || {};
+            const msgData = sseOutputs.message_data || {};
+            
             // Normalize outputs under message_data for useExecutionData compatibility
             const outputs = {
               message_data: {
-                input_text: messageData.text,
-                chat_id: messageData.chat_id,
-                input_type: messageData.input_type || 'text',
-                user_data: messageData.user_data || {},
-                timestamp: new Date().toISOString()
+                input_text: msgData.input_text || msgData.chat_input,
+                chat_id: msgData.chat_id,
+                input_type: msgData.input_type || 'text',
+                user_data: msgData.user_data || {},
+                timestamp: msgData.timestamp || new Date().toISOString()
               }
             } as Record<string, unknown>;
 
@@ -302,6 +274,23 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
 
             // Close SSE connection after receiving message
             eventSource.close();
+          } else if (messageData.type === 'timeout') {
+            // Handle timeout
+            if (onNodeUpdate) {
+              onNodeUpdate(id, {
+                data: {
+                  ...instance.data,
+                  lastExecution: {
+                    timestamp: new Date().toISOString(),
+                    status: NodeExecutionStatus.ERROR,
+                    startedAt: new Date().toISOString(),
+                    error: 'Timeout: No message received in 60 seconds',
+                    outputs: {}
+                  }
+                }
+              });
+            }
+            eventSource.close();
           }
         } catch (parseError) {
           console.error('Failed to parse SSE event data:', parseError);
@@ -310,13 +299,43 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
 
       eventSource.onerror = () => {
         console.error('SSE connection error');
+        if (onNodeUpdate) {
+          onNodeUpdate(id, {
+            data: {
+              ...instance.data,
+              lastExecution: {
+                timestamp: new Date().toISOString(),
+                status: NodeExecutionStatus.ERROR,
+                startedAt: new Date().toISOString(),
+                error: 'Connection error while waiting for message',
+                outputs: {}
+              }
+            }
+          });
+        }
         eventSource.close();
       };
 
       // Timeout after 60 seconds
       setTimeout(() => {
-        console.log('SSE timeout - no messages received');
-        eventSource.close();
+        if (eventSource.readyState !== EventSource.CLOSED) {
+          console.log('SSE timeout - no messages received');
+          if (onNodeUpdate) {
+            onNodeUpdate(id, {
+              data: {
+                ...instance.data,
+                lastExecution: {
+                  timestamp: new Date().toISOString(),
+                  status: NodeExecutionStatus.ERROR,
+                  startedAt: new Date().toISOString(),
+                  error: 'Timeout: No message received in 60 seconds',
+                  outputs: {}
+                }
+              }
+            });
+          }
+          eventSource.close();
+        }
       }, 60000);
 
     } catch (error) {
@@ -347,7 +366,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
           border: '1px solid #ddd'
         }}>
           <Typography variant="caption" sx={{ fontSize: '0.7rem', color: '#666' }}>
-            Last message:
+            {executionData.status === 'running' ? 'Status:' : 'Last message:'}
           </Typography>
           <Typography
             variant="caption"
@@ -361,6 +380,9 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
           >
             {(() => {
               const { displayData } = executionData;
+              if (executionData.status === 'running') {
+                return 'Waiting for Telegram message... Send a message to your bot.';
+              }
               if ((displayData as any)?.inputText) {
                 return `Text: "${(displayData as any).inputText}"${(displayData as any).chatId ? ` • Chat ID: ${(displayData as any).chatId}` : ''}${(displayData as any).inputType ? ` • Type: ${(displayData as any).inputType}` : ''}`;
               }
@@ -370,8 +392,20 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
         </Box>
       )}
 
+      {/* Status indicators */}
+      {executionData.status === 'running' && (
+        <Alert
+          severity="info"
+          sx={{ mt: 1, fontSize: '0.75rem' }}
+        >
+          <Typography variant="caption">
+            🔄 Listening for Telegram messages... Send a message to your bot.
+          </Typography>
+        </Alert>
+      )}
+      
       {/* Success indicator for received messages */}
-      {executionData.hasFreshResults && executionData.isSuccess && (
+      {executionData.hasFreshResults && executionData.isSuccess && executionData.status !== 'running' && (
         <Alert
           severity="success"
           icon={<CheckCircleIcon />}
