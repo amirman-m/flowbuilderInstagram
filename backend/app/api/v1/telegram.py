@@ -375,17 +375,16 @@ async def telegram_webhook_stable(
         # Load node instance for access token
         telegram_trigger = db.query(NodeInstance).filter(
             NodeInstance.flow_id == target_flow_id,
-            NodeInstance.id == target_node_id,
             NodeInstance.type_id == "telegram_input"
         ).first()
 
         if not telegram_trigger:
-            logger.error(f"Target Telegram trigger node not found: flow_id={target_flow_id}, node_id={target_node_id}")
+            logger.error(f"Target Telegram trigger node not found: flow_id={target_flow_id}")
             raise HTTPException(status_code=400, detail="Target Telegram trigger node not found")
 
         access_token = (telegram_trigger.data or {}).get("settings", {}).get("access_token")
         if not access_token:
-            logger.error(f"Bot access token not configured on target node {target_node_id}")
+            logger.error(f"Bot access token not configured on target node")
             raise HTTPException(status_code=400, detail="Bot access token not configured on target node")
 
         logger.info(f"Processing webhook message for flow {target_flow_id}")
