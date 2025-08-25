@@ -2,6 +2,29 @@
 
 This guide will help you deploy the Social Media Flow Builder application to production.
 python -m alembic revision --autogenerate -m "Add telegram_bot_configs table"
+
+Use one of the following:
+
+PowerShell (Windows):
+powershell
+# From the repo root
+docker compose exec -T db psql -U postgres -d socialmediaflow -f /tmp/004_telegram_bot_configs_stable_webhook.sql
+If /tmp file isn’t there yet:
+
+powershell
+# Copy and run
+docker cp database/init/004_telegram_bot_configs_stable_webhook.sql $(docker compose ps -q db):/tmp/004_telegram_bot_configs_stable_webhook.sql
+docker compose exec -T db psql -U postgres -d socialmediaflow -f /tmp/004_telegram_bot_configs_stable_webhook.sql
+Git Bash/CMD:
+bash
+# From the repo root; pipe directly
+docker compose exec -T db psql -U postgres -d socialmediaflow < database/init/004_telegram_bot_configs_stable_webhook.sql
+
+Or
+
+Get-Content -Raw .\database\init\004_telegram_bot_configs_stable_webhook.sql | docker compose exec -T db psql -U postgres -d socialmediaflow
+
+Get-Content -Raw .\database\init\005_telegram_bot_configs_add_name.sql | docker compose exec -T db psql -U postgres -d socialmediaflow
 ## 🚀 Quick Start
 
 1. **Configure Environment Variables**

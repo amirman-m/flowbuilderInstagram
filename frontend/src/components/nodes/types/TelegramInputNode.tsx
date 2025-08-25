@@ -6,6 +6,8 @@ import {
   Button,
   TextField,
   Paper,
+  CircularProgress,
+  MenuItem,
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
@@ -21,11 +23,15 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
   const { data, id } = props;
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [botName, setBotName] = useState<string>('telegram');
   const [accessToken, setAccessToken] = useState('');
   const [isValidating, setIsValidating] = useState(false);
   const [validationMessage, setValidationMessage] = useState('');
   const [validationStatus, setValidationStatus] = useState<'none' | 'success' | 'error'>('none');
-  
+  const [isFetchingConfigs, setIsFetchingConfigs] = useState(false);
+  const [existingConfigs, setExistingConfigs] = useState<{ config_name: string; bot_username?: string | null }[]>([]);
+  const [selectedExistingName, setSelectedExistingName] = useState<string>('');
+
   // SSE connection reference
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -37,13 +43,38 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
 
   // Get current settings from instance data
   const currentSettings = instance.data?.settings || {};
-  
+
   // Initialize access token from settings
   useEffect(() => {
     if (currentSettings.access_token) {
       setAccessToken(currentSettings.access_token);
     }
+    if (currentSettings.config_name) {
+      setBotName(currentSettings.config_name);
+    }
   }, [currentSettings.access_token]);
+
+  // Fetch existing configs when dialog opens
+  useEffect(() => {
+    const fetchConfigs = async () => {
+      try {
+        setIsFetchingConfigs(true);
+        const res = await fetch(`${API_BASE_URL}/telegram-bot/configs`);
+        if (!res.ok) throw new Error(`Failed to load configs (${res.status})`);
+        const data = await res.json();
+        const items = Array.isArray(data.items) ? data.items : [];
+        setExistingConfigs(items.map((i: any) => ({
+          config_name: String(i.config_name),
+          bot_username: i.bot_username ?? null,
+        })));
+      } catch (e) {
+        console.error('Failed to fetch Telegram bot configs', e);
+      } finally {
+        setIsFetchingConfigs(false);
+      }
+    };
+    if (settingsDialogOpen) fetchConfigs();
+  }, [settingsDialogOpen]);
 
   // Settings handlers
   const closeSettingsDialog = () => {
@@ -52,7 +83,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
     setValidationMessage('');
   };
   const openSettingsDialog = () => setSettingsDialogOpen(true);
-  
+
   const updateSettings = (newSettings: any) => {
     if (onNodeUpdate) {
       onNodeUpdate(id, {
@@ -63,10 +94,12 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
       });
     }
   };
-  
+
   const resetSettings = () => {
     setAccessToken('');
-    updateSettings({ access_token: '' });
+    setBotName('telegram');
+    setSelectedExistingName('');
+    updateSettings({ access_token: '', config_name: 'telegram' });
     setValidationStatus('none');
     setValidationMessage('');
   };
@@ -99,7 +132,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
       }
 
       const result = await response.json();
-      
+
       if (result.success) {
         setValidationStatus('success');
         setValidationMessage(result.message);
@@ -121,6 +154,8 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
 
   // Guard before execution: ensure access token exists and is valid
   const handleBeforeExecute = async (): Promise<boolean> => {
+    // If using existing config, no need to validate token client-side
+    if (selectedExistingName) return true;
     const token = (instance?.data?.settings as any)?.access_token || accessToken;
     if (!token || String(token).trim() === '') {
       openSettingsDialog();
@@ -134,18 +169,24 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
   // Execute handler - uses new bot setup API then starts SSE listening
   const handleExecute = async (): Promise<void> => {
     try {
+      const usingExisting = !!selectedExistingName;
       const token = (instance?.data?.settings as any)?.access_token || accessToken;
-      
-      // Use new bot setup API
+      // Use new bot setup API (send either config_name only, or token+name)
       const response = await fetch(`${API_BASE_URL}/telegram-bot/setup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
+        body: JSON.stringify(usingExisting ? {
+          access_token: null,
+          flow_id: parseInt(flowId || '1'),
+          node_id: id,
+          config_name: selectedExistingName
+        } : {
           access_token: token,
           flow_id: parseInt(flowId || '1'),
-          node_id: id
+          node_id: id,
+          config_name: botName && botName.trim() ? botName.trim() : 'telegram'
         })
       });
 
@@ -154,7 +195,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
       }
 
       const result = await response.json();
-      
+
       if (!result.success) {
         throw new Error(result.message);
       }
@@ -205,7 +246,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
       const eventSource = new EventSource(`${API_BASE_URL}/telegram/listen/${flowId}`, {
         withCredentials: true
       });
-      
+
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = () => {
@@ -215,7 +256,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
       eventSource.onmessage = (event) => {
         try {
           const messageData = JSON.parse(event.data);
-          
+
           if (messageData.type === 'webhook_ready') {
             console.log('Webhook ready - send a message to your Telegram bot');
           } else if (messageData.type === 'telegram_message') {
@@ -229,7 +270,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
                 timestamp: new Date().toISOString()
               }
             } as Record<string, unknown>;
-            
+
             if (onNodeUpdate) {
               onNodeUpdate(id, {
                 data: {
@@ -243,7 +284,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
                 }
               });
             }
-            
+
             // Close SSE connection after receiving message
             eventSource.close();
           }
@@ -283,20 +324,20 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
     <>
       {/* Execution Results Display */}
       {executionData.displayData && (
-        <Box sx={{ 
-          mt: 1, 
-          p: 1, 
-          backgroundColor: '#f5f5f5', 
+        <Box sx={{
+          mt: 1,
+          p: 1,
+          backgroundColor: '#f5f5f5',
           borderRadius: 1,
           border: '1px solid #ddd'
         }}>
           <Typography variant="caption" sx={{ fontSize: '0.7rem', color: '#666' }}>
             Last message:
           </Typography>
-          <Typography 
-            variant="caption" 
-            sx={{ 
-              fontSize: '0.75rem', 
+          <Typography
+            variant="caption"
+            sx={{
+              fontSize: '0.75rem',
               color: '#333',
               display: 'block',
               mt: 0.5,
@@ -313,11 +354,11 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
           </Typography>
         </Box>
       )}
-      
+
       {/* Success indicator for received messages */}
       {executionData.hasFreshResults && executionData.isSuccess && (
-        <Alert 
-          severity="success" 
+        <Alert
+          severity="success"
           icon={<CheckCircleIcon />}
           sx={{ mt: 1, fontSize: '0.75rem' }}
         >
@@ -327,11 +368,11 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
           </Typography>
         </Alert>
       )}
-      
+
       {/* Error indicator */}
       {executionData.hasFreshResults && executionData.isError && (
-        <Alert 
-          severity="error" 
+        <Alert
+          severity="error"
           icon={<ErrorIcon />}
           sx={{ mt: 1, fontSize: '0.75rem' }}
         >
@@ -383,7 +424,44 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
             <Typography variant="h6" sx={{ mb: 2 }}>
               Telegram Bot Settings
             </Typography>
-            
+
+            {/* Existing config selector */}
+            <TextField
+              select
+              fullWidth
+              label="Use Existing Bot"
+              value={selectedExistingName}
+              onChange={(e) => {
+                const val = e.target.value as string;
+                setSelectedExistingName(val);
+                if (val) {
+                  // When selecting existing, mirror its name into botName for clarity
+                  setBotName(val);
+                }
+              }}
+              sx={{ mb: 2 }}
+              helperText={isFetchingConfigs ? 'Loading existing bots...' : (existingConfigs.length ? 'Select an existing bot to reuse' : 'No saved bots yet')}
+              InputProps={{ endAdornment: isFetchingConfigs ? <CircularProgress size={18} /> : undefined }}
+            >
+              <MenuItem value="">Create new</MenuItem>
+              {existingConfigs.map((cfg) => (
+                <MenuItem key={cfg.config_name} value={cfg.config_name}>
+                  {cfg.config_name}{cfg.bot_username ? ` (${cfg.bot_username})` : ''}
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <TextField
+              fullWidth
+              label="Bot Name"
+              value={botName}
+              onChange={(e) => setBotName(e.target.value)}
+              placeholder="Enter a friendly name (e.g., marketing-bot)"
+              sx={{ mb: 2 }}
+              helperText="This name helps you reuse the same bot across flows"
+              disabled={!!selectedExistingName}
+            />
+
             <TextField
               fullWidth
               label="Bot Access Token"
@@ -393,18 +471,19 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
               sx={{ mb: 2 }}
               helperText="Get your bot token from @BotFather on Telegram"
               error={validationStatus === 'error'}
+              disabled={!!selectedExistingName}
             />
-            
+
             {/* Validation feedback */}
             {validationMessage && (
-              <Alert 
-                severity={validationStatus === 'success' ? 'success' : 'error'} 
+              <Alert
+                severity={validationStatus === 'success' ? 'success' : 'error'}
                 sx={{ mb: 2 }}
               >
                 {validationMessage}
               </Alert>
             )}
-            
+
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
               <Button onClick={resetSettings} color="error">
                 Reset
@@ -414,10 +493,72 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
               </Button>
               <Button
                 onClick={async () => {
-                  const isValid = await validateBotToken(accessToken);
-                  if (isValid) {
-                    updateSettings({ access_token: accessToken });
-                    closeSettingsDialog();
+                  // If using existing, skip validation and call setup with name only
+                  const usingExisting = !!selectedExistingName;
+                  const proceed = usingExisting ? true : await validateBotToken(accessToken);
+                  if (proceed) {
+                    try {
+                      // Persist local node settings snapshot (for UI only)
+                      if (usingExisting) {
+                        updateSettings({ access_token: '', config_name: selectedExistingName });
+                      } else {
+                        updateSettings({ access_token: accessToken, config_name: (botName && botName.trim()) ? botName.trim() : 'telegram' });
+                      }
+
+                      // Immediately set up webhook (backend will check current status first)
+                      const response = await fetch(`${API_BASE_URL}/telegram-bot/setup`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(usingExisting ? {
+                          access_token: null,
+                          flow_id: parseInt(flowId || '1'),
+                          node_id: id,
+                          config_name: selectedExistingName
+                        } : {
+                          access_token: accessToken,
+                          flow_id: parseInt(flowId || '1'),
+                          node_id: id,
+                          config_name: (botName && botName.trim()) ? botName.trim() : 'telegram'
+                        })
+                      });
+
+                      if (!response.ok) {
+                        const errText = await response.text();
+                        throw new Error(`Setup failed (${response.status}): ${errText}`);
+                      }
+
+                      const result = await response.json();
+                      if (!result.success) {
+                        throw new Error(result.message || 'Failed to set up Telegram webhook');
+                      }
+
+                      // Reflect configured status in node data
+                      if (onNodeUpdate) {
+                        onNodeUpdate(id, {
+                          data: {
+                            ...instance.data,
+                            lastExecution: {
+                              timestamp: new Date().toISOString(),
+                              status: NodeExecutionStatus.SUCCESS,
+                              startedAt: new Date().toISOString(),
+                              outputs: {
+                                webhook_status: 'configured',
+                                bot_config: result.config_data,
+                                message: result.message
+                              }
+                            }
+                          }
+                        });
+                      }
+
+                      // Close dialog on success
+                      closeSettingsDialog();
+                    } catch (e) {
+                      console.error('Webhook setup error:', e);
+                      setValidationStatus('error');
+                      setValidationMessage(e instanceof Error ? e.message : 'Failed to set up Telegram webhook');
+                      return;
+                    }
                   }
                 }}
                 variant="contained"

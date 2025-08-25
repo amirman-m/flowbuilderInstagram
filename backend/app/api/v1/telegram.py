@@ -4,7 +4,10 @@ from sqlalchemy.orm import Session
 from ...core.database import get_db
 from ...models.flow import Flow
 from ...models.nodes import NodeInstance
+from ...models.telegram_bot import TelegramBotConfig
 from ...services.flow_execution import create_flow_executor
+from ...services.telegram_bot_service import TelegramBotService
+from ...services.nodes.triggers.telegram_input import process_webhook_message, setup_telegram_webhook, create_telegram_sse_stream
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 import logging
@@ -35,7 +38,6 @@ async def telegram_webhook_dynamic(
         
         # Use new TelegramBotService for processing
         from ...services.telegram_bot_service import TelegramBotService
-        from ...services.nodes.triggers.telegram_input import process_webhook_message
         
         # Find the specific node instance
         telegram_trigger = db.query(NodeInstance).filter(
@@ -130,7 +132,6 @@ async def telegram_webhook(
             return {"ok": False, "error": "No access token configured"}
         
         # Process the webhook message and notify SSE connections
-        from ...services.nodes.triggers.telegram_input import process_webhook_message
         result = await process_webhook_message(webhook_data, access_token, flow_id)
         
         if result.status == "success":
@@ -227,8 +228,6 @@ async def setup_telegram_webhook_endpoint(
                 detail="Bot access token not configured in Telegram trigger node"
             )
         
-        from ...services.nodes.triggers.telegram_input import setup_telegram_webhook
-        
         webhook_url = f"https://asangram.tech/api/v1/telegram/webhook/{flow_id}"
         success = await setup_telegram_webhook(access_token, webhook_url)
         
@@ -296,7 +295,6 @@ async def listen_for_telegram_messages(
             "node_id": telegram_trigger.id
         }
         
-        from ...services.nodes.triggers.telegram_input import create_telegram_sse_stream
         return await create_telegram_sse_stream(context)
         
     except HTTPException:
@@ -304,3 +302,113 @@ async def listen_for_telegram_messages(
     except Exception as e:
         logger.error(f"SSE endpoint error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to start SSE stream: {str(e)}")
+
+@router.post("/webhook/u/{user_id}/b/{bot_id}/{secret}")
+@router.get("/webhook/u/{user_id}/b/{bot_id}/{secret}")
+async def telegram_webhook_stable(
+    user_id: int,
+    bot_id: str,
+    secret: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Stable per-bot webhook endpoint secured by a secret. Independent of flow/node.
+    Resolves default flow/node mapping from TelegramBotConfig.
+    """
+    try:
+        if request.method == "GET":
+            return {"ok": True, "message": "Stable webhook endpoint is ready"}
+
+        # Find active bot config for user and bot_id and validate secret
+        bot_config: TelegramBotConfig | None = db.query(TelegramBotConfig).filter(
+            TelegramBotConfig.user_id == user_id,
+            TelegramBotConfig.bot_id == str(bot_id),
+            TelegramBotConfig.is_active == True
+        ).first()
+
+        if not bot_config:
+            logger.error(f"No active bot config found for user {user_id} and bot_id {bot_id}")
+            return {"ok": False, "error": "Bot configuration not found"}
+
+        if not bot_config.webhook_secret or bot_config.webhook_secret != secret:
+            logger.warning("Webhook secret mismatch")
+            raise HTTPException(status_code=403, detail="Invalid webhook secret")
+
+        webhook_data = await request.json()
+
+        # Resolve target flow/node
+        target_flow_id = bot_config.default_flow_id
+        target_node_id = bot_config.default_node_id
+
+        if not target_flow_id or not target_node_id:
+            # Fallback: find first flow with a telegram_input node for this user
+            flow = db.query(Flow).filter(Flow.user_id == user_id).first()
+            if not flow:
+                raise HTTPException(status_code=400, detail="No flow available for user")
+
+            telegram_trigger = db.query(NodeInstance).filter(
+                NodeInstance.flow_id == flow.id,
+                NodeInstance.type_id == "telegram_input"
+            ).first()
+
+            if not telegram_trigger:
+                raise HTTPException(status_code=400, detail="No Telegram trigger node found to handle webhook")
+
+            target_flow_id = flow.id
+            target_node_id = telegram_trigger.id
+
+        # Load node instance for access token
+        telegram_trigger = db.query(NodeInstance).filter(
+            NodeInstance.flow_id == target_flow_id,
+            NodeInstance.id == target_node_id,
+            NodeInstance.type_id == "telegram_input"
+        ).first()
+
+        if not telegram_trigger:
+            raise HTTPException(status_code=400, detail="Target Telegram trigger node not found")
+
+        access_token = (telegram_trigger.data or {}).get("settings", {}).get("access_token")
+        if not access_token:
+            raise HTTPException(status_code=400, detail="Bot access token not configured on target node")
+
+        # Process webhook message
+        result = await process_webhook_message(webhook_data, access_token, target_flow_id)
+
+        if result.status != "success":
+            logger.error(f"Failed to process webhook message: {result.error}")
+            return {"ok": False, "error": result.error}
+
+        message_data = result.outputs.get("message_data", {})
+
+        # Update node lastExecution for UI and commit
+        try:
+            current_data = telegram_trigger.data or {}
+            current_data["lastExecution"] = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "status": "success",
+                "outputs": {"message_data": message_data},
+                "logs": result.logs or []
+            }
+            telegram_trigger.data = current_data
+            db.commit()
+        except Exception as e:
+            logger.error(f"Failed to persist node lastExecution: {e}")
+
+        # Execute flow
+        try:
+            flow_executor = create_flow_executor(db)
+            await flow_executor.execute_flow(
+                flow_id=target_flow_id,
+                trigger_inputs={"webhook_data": webhook_data, "trigger_data": message_data},
+                user_id=user_id
+            )
+            return {"ok": True, "message": "Message processed successfully"}
+        except Exception as e:
+            logger.error(f"Flow execution error: {e}")
+            return {"ok": False, "error": f"Flow execution failed: {str(e)}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Stable webhook processing error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

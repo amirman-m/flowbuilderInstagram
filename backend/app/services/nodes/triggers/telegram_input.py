@@ -19,10 +19,10 @@ async def notify_sse_connections(flow_id: int, event_data: Dict[str, Any]):
     """
     connections = _sse_connections.get(flow_id, {})
     if not connections:
-        logger.info(f"📡 No SSE connections for flow {flow_id}")
+        logger.info(f" No SSE connections for flow {flow_id}")
         return
     
-    logger.info(f"📡 Notifying {len(connections)} SSE connections for flow {flow_id}")
+    logger.info(f"Notifying {len(connections)} SSE connections for flow {flow_id}")
     
     # Remove closed connections and notify active ones
     active_connections = {}
@@ -180,13 +180,12 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
             error=f"Failed to process webhook data: {str(e)}"
         )
 
-# SSE connection management
 async def register_sse_connection(flow_id: int, connection_id: str, queue: asyncio.Queue):
     """Register a new SSE connection for a flow"""
     if flow_id not in _sse_connections:
         _sse_connections[flow_id] = {}
     _sse_connections[flow_id][connection_id] = queue
-    logger.info(f"📡 Registered SSE connection {connection_id} for flow {flow_id}")
+    logger.info(f"Registered SSE connection {connection_id} for flow {flow_id}")
 
 async def unregister_sse_connection(flow_id: int, connection_id: str):
     """Unregister an SSE connection"""
@@ -194,94 +193,100 @@ async def unregister_sse_connection(flow_id: int, connection_id: str):
         del _sse_connections[flow_id][connection_id]
         if not _sse_connections[flow_id]:  # Remove empty flow entry
             del _sse_connections[flow_id]
-        logger.info(f"📡 Unregistered SSE connection {connection_id} for flow {flow_id}")
-
-async def notify_sse_connections(flow_id: int, message_data: Dict[str, Any]):
-    """Notify all SSE connections for a flow about new message"""
-    if flow_id not in _sse_connections:
-        logger.info(f"📡 No SSE connections for flow {flow_id}")
-        return
-    
-    connections = _sse_connections[flow_id].copy()  # Copy to avoid modification during iteration
-    logger.info(f"📡 Notifying {len(connections)} SSE connections for flow {flow_id}")
-    
-    # Remove closed connections and notify active ones
-    active_connections = {}
-    for connection_id, queue in connections.items():
-        try:
-            await queue.put({
-                "type": "telegram_message",
-                "status": "success",
-                "outputs": {"message_data": message_data},
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            })
-            logger.info(f"📡 Notified SSE connection {connection_id}")
-            active_connections[connection_id] = queue
-        except Exception as e:
-            logger.warning(f"Failed to notify SSE connection {connection_id}: {e}")
-    
-    # Update the registry with only active connections
-    _sse_connections[flow_id] = active_connections
+        logger.info(f"Unregistered SSE connection {connection_id} for flow {flow_id}")
 
 async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecutionResult:
     """
     Execute Telegram input trigger node using new modular TelegramBotService
     
-    This function handles two scenarios:
-    1. Webhook data processing (when called from webhook endpoint)
-    2. Regular node execution (validates bot and sets up webhook)
+    Scenarios:
+    1) Webhook data processing (called from webhook endpoint) -> process and emit via SSE
+    2) Regular execution (from UI): verify that a bot config (by config_name) exists and has a webhook URL, without exposing token
     """
     start_time = datetime.now(timezone.utc)
     
-    # Get settings and context
+    # Get context
     settings = context.get("settings", {})
     access_token = context.get("access_token") or settings.get("access_token")
+    config_name = context.get("config_name") or settings.get("config_name")
     flow_id = context.get("flow_id", 1)
     node_id = context.get("node_id", "telegram_input")
-    user_id = context.get("user_id", 1)  # TODO: Get from auth context
+    user_id = context.get("user_id", 1)  # TODO: use auth context
     
-    logger.info(f"🔍 Telegram node execution - flow {flow_id}, node {node_id}")
-    logger.info(f"🔍 Access token: {access_token[:10] if access_token else 'None'}...")
+    logger.info(f"Telegram node execution - flow {flow_id}, node {node_id}")
     
-    if not access_token:
-        # No token provided in node settings/context. Let the frontend prompt for token
-        logger.info("No access token provided; frontend should prompt user to validate token and set webhook.")
-        return NodeExecutionResult(
-            outputs={
-                "webhook_status": "pending_setup",
-                "message": "No access token provided. Prompt user to validate token and set webhook."
-            },
-            status="success",
-            started_at=start_time,
-            completed_at=datetime.now(timezone.utc)
-        )
-    
-    # Check if this is webhook data processing (called from webhook endpoint)
+    # Webhook processing path
     webhook_data = context.get("webhook_data")
     if webhook_data:
-        # This is webhook data processing - process and return message data
         logger.info("Processing webhook data for flow execution")
-        return await process_webhook_message(webhook_data, access_token, flow_id)
+        # access_token is not needed for processing message contents
+        return await process_webhook_message(webhook_data, access_token or "", flow_id)
     
-    # This is regular node execution - validate bot and set up webhook using new service
+    # UI-triggered execution: prefer config_name-only flow
     try:
-        # Initialize the bot service
         bot_service = TelegramBotService()
-        
-        # Get database session (TODO: inject properly)
         from app.core.database import SessionLocal
         db = SessionLocal()
-        
         try:
-            # Validate bot and set up webhook using new modular service
+            # If neither access token nor config name given, instruct UI
+            if not (access_token or (config_name and str(config_name).strip())):
+                return NodeExecutionResult(
+                    outputs={
+                        "webhook_status": "pending_setup",
+                        "message": "Provide a saved bot name (config_name) or configure one in settings."
+                    },
+                    status="success",
+                    started_at=start_time,
+                    completed_at=datetime.now(timezone.utc)
+                )
+            
+            # If config_name provided, verify existence and readiness
+            if (config_name and str(config_name).strip()):
+                # Reuse list to avoid exposing token, check webhook_url presence
+                configs = bot_service.list_user_configs(db, user_id)
+                match = next((c for c in configs if c.get("config_name") == config_name), None)
+                if not match:
+                    return NodeExecutionResult(
+                        outputs={},
+                        status="error",
+                        error=f"No bot config found named '{config_name}'",
+                        started_at=start_time,
+                        completed_at=datetime.now(timezone.utc)
+                    )
+                webhook_url = match.get("webhook_url")
+                if not webhook_url:
+                    return NodeExecutionResult(
+                        outputs={},
+                        status="error",
+                        error="Bot config exists but webhook is not configured",
+                        started_at=start_time,
+                        completed_at=datetime.now(timezone.utc)
+                    )
+                # Return ready status; frontend should start listening SSE
+                return NodeExecutionResult(
+                    outputs={
+                        "webhook_status": "configured",
+                        "bot_config": {
+                            "config_name": match.get("config_name"),
+                            "bot_username": match.get("bot_username"),
+                            "bot_id": match.get("bot_id"),
+                            "webhook_url": webhook_url,
+                        },
+                        "message": "Telegram bot is configured. Listening for messages."
+                    },
+                    status="success",
+                    started_at=start_time,
+                    completed_at=datetime.now(timezone.utc)
+                )
+            
+            # Fallback: if only access_token present, keep backward compatibility
             success, message, config_data = await bot_service.validate_and_setup_bot(
                 db=db,
                 user_id=user_id,
                 access_token=access_token,
                 flow_id=flow_id,
-                node_id=node_id
+                node_id=node_id,
             )
-            
             if not success:
                 return NodeExecutionResult(
                     outputs={},
@@ -290,8 +295,6 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
                     started_at=start_time,
                     completed_at=datetime.now(timezone.utc)
                 )
-            
-            # Return success with bot configuration data
             return NodeExecutionResult(
                 outputs={
                     "webhook_status": "configured",
@@ -299,14 +302,11 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
                     "message": message
                 },
                 status="success",
-                logs=[f"Telegram bot configured successfully: {message}"],
                 started_at=start_time,
                 completed_at=datetime.now(timezone.utc)
             )
-            
         finally:
             db.close()
-                
     except Exception as e:
         logger.error(f"Error in Telegram execution: {str(e)}")
         return NodeExecutionResult(
@@ -319,38 +319,12 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
 
 async def create_telegram_sse_stream(context: Dict[str, Any]) -> StreamingResponse:
     """
-    Create SSE stream for Telegram input - Separate function for SSE endpoint
-    
-    This function is called by the SSE endpoint and handles real-time message streaming.
+    Create SSE stream for Telegram input.
+    No webhook setup here; assumes webhook already configured at the stable URL.
     """
-    
-    # Get settings and access token
-    settings = context.get("settings", {})
-    access_token = context.get("access_token") or settings.get("access_token")
     flow_id = context.get("flow_id", 1)
-    
-    logger.info(f"🔍 Starting SSE stream for flow {flow_id}")
-    logger.info(f"🔍 Access token: {access_token[:10] if access_token else 'None'}...")
-    
-    if not access_token:
-        logger.error(f"No access token found. Context: {context}")
-        # Return error as SSE event
-        async def error_stream():
-            yield f"data: {json.dumps({'type': 'error', 'message': 'Bot access token not configured'})}\n\n"
-        return StreamingResponse(error_stream(), media_type="text/event-stream")
-    
-    # Set up webhook for this flow
-    webhook_url = f"https://asangram.tech/api/v1/telegram/webhook/{flow_id}"
-    
-    logger.info(f"Setting up Telegram webhook for flow {flow_id}")
-    webhook_success = await setup_telegram_webhook(access_token, webhook_url)
-    
-    if not webhook_success:
-        async def error_stream():
-            yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to set up Telegram webhook'})}\n\n"
-        return StreamingResponse(error_stream(), media_type="text/event-stream")
-    
-    # Create SSE stream
+    logger.info(f"Starting SSE stream for flow {flow_id}")
+
     async def sse_stream():
         connection_id = str(uuid.uuid4())
         message_queue = asyncio.Queue()
@@ -360,47 +334,37 @@ async def create_telegram_sse_stream(context: Dict[str, Any]) -> StreamingRespon
             await register_sse_connection(flow_id, connection_id, message_queue)
             
             # Send initial webhook ready event
-            yield f"data: {json.dumps({'type': 'webhook_ready', 'message': 'Webhook activated - waiting for Telegram message...'})}\n\n"
+            yield f"data: {json.dumps({'type': 'webhook_ready', 'message': 'Webhook active - waiting for Telegram message...'})}\n\n"
             
-            # Set up timeout
+            # Wait loop with keepalive pings
             timeout_seconds = 60
-            start_time = datetime.now(timezone.utc)
+            start_time_ts = datetime.now(timezone.utc)
             
             while True:
                 try:
-                    # Wait for message with timeout
-                    remaining_time = timeout_seconds - (datetime.now(timezone.utc) - start_time).total_seconds()
+                    remaining_time = timeout_seconds - (datetime.now(timezone.utc) - start_time_ts).total_seconds()
                     if remaining_time <= 0:
                         yield f"data: {json.dumps({'type': 'timeout', 'message': f'Timeout: No message received in {timeout_seconds} seconds'})}\n\n"
                         break
                     
-                    # Wait for message or timeout
                     try:
                         message = await asyncio.wait_for(message_queue.get(), timeout=min(remaining_time, 5.0))
                         yield f"data: {json.dumps(message)}\n\n"
-                        
-                        # If we got a telegram_message, we're done
                         if message.get('type') == 'telegram_message':
                             break
-                            
                     except asyncio.TimeoutError:
-                        # Send keepalive ping
                         yield f"data: {json.dumps({'type': 'ping', 'timestamp': datetime.now(timezone.utc).isoformat()})}\n\n"
                         continue
-                        
                 except Exception as e:
                     logger.error(f"Error in SSE stream: {e}")
                     yield f"data: {json.dumps({'type': 'error', 'message': f'Stream error: {str(e)}'})}\n\n"
                     break
-                    
         except Exception as e:
             logger.error(f"Error setting up SSE stream: {e}")
             yield f"data: {json.dumps({'type': 'error', 'message': f'Setup error: {str(e)}'})}\n\n"
-            
         finally:
-            # Clean up connection
             await unregister_sse_connection(flow_id, connection_id)
-            logger.info(f"🔍 SSE stream ended for connection {connection_id}")
+            logger.info(f"SSE stream ended for connection {connection_id}")
     
     return StreamingResponse(sse_stream(), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache",

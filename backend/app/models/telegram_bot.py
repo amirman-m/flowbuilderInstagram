@@ -19,6 +19,16 @@ class TelegramBotConfig(Base):
     bot_username = Column(String(100), nullable=True)
     bot_id = Column(String(50), nullable=True)
     is_active = Column(Boolean, default=True)
+
+    # Friendly name provided by user to reuse this bot across flows
+    config_name = Column(String(100), nullable=True, index=True)
+
+    # NEW: stable secret for per-bot webhook URL
+    webhook_secret = Column(String(100), nullable=True, index=True)
+
+    # NEW: default mapping for execution target
+    default_flow_id = Column(Integer, nullable=True)
+    default_node_id = Column(String(100), nullable=True)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())

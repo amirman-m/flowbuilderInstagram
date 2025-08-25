@@ -6,6 +6,7 @@ import httpx
 import logging
 from typing import Optional, Dict, Any, Tuple
 from datetime import datetime
+import uuid
 from sqlalchemy.orm import Session
 from app.models.telegram_bot import TelegramBotConfig
 from app.core.config import settings
@@ -230,19 +231,37 @@ class TelegramBotService:
         self.webhook_manager = TelegramWebhookManager()
         self.repository = TelegramBotConfigRepository()
     
-    def generate_webhook_url(self, user_id: int, flow_id: int, node_id: str) -> str:
-        """Generate webhook URL based on user, flow, and node"""
+    def generate_webhook_url(self, user_id: int, bot_id: str, secret: str) -> str:
+        """Generate stable per-bot webhook URL (independent of flow/node)"""
         base_url = getattr(settings, 'WEBHOOK_BASE_URL', 'https://asangram.tech')
-        # Ensure we use the v1 API path which is implemented in app/api/v1/telegram.py
-        return f"{base_url}/api/v1/telegram/webhook/{user_id}/{flow_id}/{node_id}"
+        return f"{base_url}/api/v1/telegram/webhook/u/{user_id}/b/{bot_id}/{secret}"
+    
+    def list_user_configs(self, db: Session, user_id: int) -> list[dict[str, Any]]:
+        """Return active bot configs for a user (minimal fields for selection)."""
+        rows = (
+            db.query(TelegramBotConfig)
+            .filter(TelegramBotConfig.user_id == user_id, TelegramBotConfig.is_active == True)
+            .order_by(TelegramBotConfig.config_name.nullslast(), TelegramBotConfig.bot_username.nullslast())
+            .all()
+        )
+        result: list[dict[str, Any]] = []
+        for r in rows:
+            result.append({
+                "config_name": r.config_name or "telegram",
+                "bot_username": r.bot_username,
+                "bot_id": r.bot_id,
+                "webhook_url": r.webhook_url,
+            })
+        return result
     
     async def validate_and_setup_bot(
         self,
         db: Session,
         user_id: int,
-        access_token: str,
+        access_token: Optional[str],
         flow_id: int,
-        node_id: str
+        node_id: str,
+        config_name: Optional[str] = None,
     ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
         """
         Complete bot validation and setup process
@@ -250,64 +269,94 @@ class TelegramBotService:
         Returns:
             Tuple[bool, str, Optional[Dict]]: (success, message, bot_config_data)
         """
-        # Step 1: Validate bot token
-        is_valid, bot_info = await self.validator.validate_bot_token(access_token)
-        if not is_valid:
-            return False, "Invalid bot token. Please check your token from @BotFather.", None
+        # Step 1: Validate token via Telegram API
+        try:
+            # Resolve access token from existing config if not provided but name is
+            if (not access_token) and config_name:
+                existing = (
+                    db.query(TelegramBotConfig)
+                    .filter(
+                        TelegramBotConfig.user_id == user_id,
+                        TelegramBotConfig.config_name == config_name,
+                        TelegramBotConfig.is_active == True,
+                    )
+                    .first()
+                )
+                if not existing:
+                    return False, f"No existing bot config found named '{config_name}'", None
+                access_token = existing.access_token
+
+            if not access_token:
+                return False, "Access token is required (either directly or via config_name)", None
+
+            is_valid, bot_info = await self.validator.validate_bot_token(access_token)
+            if not is_valid:
+                return False, "Invalid bot token. Please check your token from @BotFather.", None
+        except Exception:
+            logger.exception("Token validation error")
+            return False, "Failed to validate bot token with Telegram.", None
         
-        # Step 2: Check current webhook status
-        webhook_success, webhook_info = await self.webhook_manager.get_webhook_info(access_token)
-        if not webhook_success:
-            return False, "Failed to get webhook information from Telegram.", None
-        
-        # Step 3: Generate expected webhook URL
-        expected_webhook_url = self.generate_webhook_url(user_id, flow_id, node_id)
-        current_webhook_url = webhook_info.get("url", "")
-        
-        # Step 4: Handle webhook configuration
-        webhook_needs_update = False
-        if not current_webhook_url:
-            # No webhook set
-            webhook_needs_update = True
-            logger.info("No webhook configured, setting new webhook")
-        elif current_webhook_url != expected_webhook_url:
-            # Different webhook URL, need to update
-            webhook_needs_update = True
-            logger.info(f"Webhook URL mismatch. Current: {current_webhook_url}, Expected: {expected_webhook_url}")
-            
-            # Delete existing webhook first
-            delete_success, delete_error = await self.webhook_manager.delete_webhook(access_token)
-            if not delete_success:
-                return False, f"Failed to delete existing webhook: {delete_error}", None
-        
-        # Step 5: Set webhook if needed
-        if webhook_needs_update:
-            set_success, set_error = await self.webhook_manager.set_webhook(access_token, expected_webhook_url)
-            if not set_success:
-                return False, f"Failed to set webhook: {set_error}", None
-        
-        # Step 6: Save/update configuration in database
+        # Step 2: Ensure bot config exists and has a stable secret, and store default mapping
         try:
             bot_config = self.repository.create_or_update_bot_config(
                 db=db,
                 user_id=user_id,
                 access_token=access_token,
                 bot_info=bot_info,
-                webhook_url=expected_webhook_url
+                webhook_url=None  # set after URL generation
             )
             
+            # Ensure stable secret
+            if not bot_config.webhook_secret:
+                bot_config.webhook_secret = uuid.uuid4().hex
+            # Store friendly name (default to 'telegram' if not provided)
+            friendly_name = (config_name or '').strip() or 'telegram'
+            bot_config.config_name = friendly_name
+            # Persist default flow/node mapping from this setup request
+            bot_config.default_flow_id = flow_id
+            bot_config.default_node_id = node_id
+            db.commit()
+            db.refresh(bot_config)
+            
+            # Step 3: Generate expected webhook URL using per-bot path
+            expected_webhook_url = self.generate_webhook_url(user_id, bot_config.bot_id or str(bot_info.get("id")), bot_config.webhook_secret)
+            
+            # Step 4: Check current webhook status
+            webhook_success, webhook_info = await self.webhook_manager.get_webhook_info(access_token)
+            if not webhook_success:
+                return False, "Failed to get webhook information from Telegram.", None
+            current_webhook_url = webhook_info.get("url", "")
+            
+            # Step 5: Handle webhook configuration (delete mismatched / set new)
+            webhook_needs_update = (current_webhook_url != expected_webhook_url)
+            if current_webhook_url and webhook_needs_update:
+                delete_success, delete_error = await self.webhook_manager.delete_webhook(access_token)
+                if not delete_success:
+                    return False, f"Failed to delete existing webhook: {delete_error}", None
+            
+            if webhook_needs_update:
+                set_success, set_error = await self.webhook_manager.set_webhook(access_token, expected_webhook_url)
+                if not set_success:
+                    return False, f"Failed to set webhook: {set_error}", None
+            
+            # Step 6: Save final URL
+            bot_config.webhook_url = expected_webhook_url
+            db.commit()
+            db.refresh(bot_config)
+            
             config_data = {
-                "bot_id": bot_config.bot_id,
+                "bot_id": bot_config.bot_id or str(bot_info.get("id")),
                 "bot_username": bot_config.bot_username,
                 "webhook_url": bot_config.webhook_url,
+                "config_name": bot_config.config_name,
                 "status": "configured"
             }
             
-            return True, "Bot configured successfully. Ready to receive messages.", config_data
+            return True, "Telegram bot configured successfully.", config_data
             
         except Exception as e:
-            logger.error(f"Database error saving bot config: {e}")
-            return False, f"Failed to save bot configuration: {str(e)}", None
+            logger.exception("Failed to persist bot configuration")
+            return False, f"Database error: {str(e)}", None
     
     async def validate_bot_only(
         self,
