@@ -248,9 +248,27 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
             const msgData = sseOutputs.message_data || {};
             
             // Log the received message data for debugging
-            console.log('Received telegram message data:', msgData);
+            console.log('Received telegram message data:', JSON.stringify(msgData, null, 2));
             
-            // Preserve the complete message_data structure without modification
+            // Check if this is a voice message and ensure voice_input is present
+            if (msgData.input_type === 'voice' && !msgData.voice_input) {
+              console.error('Voice message received but voice_input field is missing!');
+              
+              // Try to reconstruct voice_input from webhook data if available
+              if (messageData.webhook_data?.message?.voice) {
+                const voiceInfo = messageData.webhook_data.message.voice;
+                msgData.voice_input = {
+                  file_id: voiceInfo.file_id,
+                  file_unique_id: voiceInfo.file_unique_id,
+                  duration: voiceInfo.duration,
+                  mime_type: voiceInfo.mime_type,
+                  file_size: voiceInfo.file_size
+                };
+                console.log('Reconstructed voice_input from webhook data:', msgData.voice_input);
+              }
+            }
+            
+            // Preserve the complete message_data structure
             const outputs = {
               message_data: msgData
             } as Record<string, unknown>;
