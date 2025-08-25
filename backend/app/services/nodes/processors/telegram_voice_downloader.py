@@ -58,8 +58,9 @@ def get_telegram_voice_downloader_node_type() -> NodeType:
 async def _resolve_bot_token(context: Dict[str, Any]) -> Optional[str]:
     """Resolve Telegram bot access token from DB via config_name or default flow mapping.
 
-    Prefers settings.config_name. If absent, try to use flow_id (if provided in context)
-    to find a TelegramBotConfig whose default_flow_id matches.
+    Prefers settings.access_token, then settings.config_name with user_id, then
+    default_flow_id mapping using flow_id + user_id. As a final fallback, scans the
+    flow's telegram_input node settings for an access_token.
     """
     try:
         # Access node settings merged into context by FlowExecutor
@@ -70,12 +71,18 @@ async def _resolve_bot_token(context: Dict[str, Any]) -> Optional[str]:
         user_id = context.get("user_id") or context.get("userId")
         flow_id = context.get("flow_id") or context.get("flowId")
 
+        # 0) Immediate: allow explicit access_token in this node's settings
+        if isinstance(settings, dict) and settings.get("access_token"):
+            return settings.get("access_token")
+
         # Access DB
         from app.core.database import SessionLocal
         from app.models.telegram_bot import TelegramBotConfig
+        from app.models.node_instance import NodeInstance
 
         db = SessionLocal()
         try:
+            # 1) Preferred: config_name owned by user
             if config_name and user_id:
                 row = (
                     db.query(TelegramBotConfig)
@@ -89,7 +96,7 @@ async def _resolve_bot_token(context: Dict[str, Any]) -> Optional[str]:
                 if row and row.access_token:
                     return row.access_token
 
-            # Fallback: try default_flow_id mapping if flow_id present
+            # 2) Fallback: default_flow_id mapping for this user/flow
             if flow_id and user_id:
                 row = (
                     db.query(TelegramBotConfig)
@@ -102,6 +109,21 @@ async def _resolve_bot_token(context: Dict[str, Any]) -> Optional[str]:
                 )
                 if row and row.access_token:
                     return row.access_token
+
+            # 3) Final fallback: look for a telegram_input node in this flow and read its settings.access_token
+            if flow_id:
+                tg_node = (
+                    db.query(NodeInstance)
+                    .filter(
+                        NodeInstance.flow_id == int(flow_id),
+                        NodeInstance.type_id == "telegram_input",
+                    )
+                    .first()
+                )
+                if tg_node and isinstance(tg_node.data, dict):
+                    node_settings = tg_node.data.get("settings", {})
+                    if isinstance(node_settings, dict) and node_settings.get("access_token"):
+                        return node_settings.get("access_token")
         finally:
             db.close()
     except Exception as e:
