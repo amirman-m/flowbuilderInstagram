@@ -9,6 +9,7 @@ import CodeIcon from '@mui/icons-material/Code';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import InfoIcon from '@mui/icons-material/Info';
+import DownloadIcon from '@mui/icons-material/Download';
 // Custom icons
 import DeepSeekIcon from '../components/icons/DeepSeekIcon';
 import OpenAIIcon from '../components/icons/OpenAIIcon';
@@ -29,6 +30,7 @@ export const NODE_ICONS: Record<string, NodeIconComponent> = {
   'simple-openai-chat': OpenAIIcon,
   'simple-deepseek-chat': DeepSeekIcon,
   'transcription': RecordVoiceOverIcon,
+  'download_telegram_voice': DownloadIcon,
   
   // Action nodes
   'send_telegram_message': SendIcon,

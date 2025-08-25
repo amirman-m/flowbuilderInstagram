@@ -146,12 +146,49 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
                 "input_type": "voice"
             }
             log_msg = f"Telegram voice message from chat {chat_id}: {voice_info.get('duration', 0)}s"
-            
+        
+        # Check for photo message (array of sizes)
+        elif "photo" in message:
+            photos = message.get("photo", []) or []
+            # Choose the largest photo by area (width*height); Telegram ensures ascending size order,
+            # but we compute robustly in case of inconsistencies
+            best_photo = None
+            if photos:
+                best_photo = max(
+                    photos,
+                    key=lambda p: (p.get("width", 0) or 0) * (p.get("height", 0) or 0)
+                )
+            caption = message.get("caption")
+            message_data = {
+                "session_id": session_id,
+                "chat_id": chat_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "metadata": {
+                    "telegram_message_id": message.get("message_id"),
+                    "from_user": message.get("from", {}).get("username", "unknown"),
+                    "chat_type": message.get("chat", {}).get("type", "private")
+                },
+                # Provide both the selected best photo and the full list for downstream use
+                "photo_input": {
+                    "best": best_photo,
+                    "all": photos,
+                },
+                # If a caption exists, also surface it as input_text/chat_input for compatibility
+                **({
+                    "input_text": caption,
+                    "chat_input": caption,
+                } if caption else {}),
+                "input_type": "photo"
+            }
+            preview = f" with caption: \"{caption[:40]}...\"" if caption and len(caption) > 40 else (f" with caption: \"{caption}\"" if caption else "")
+            dims = f"{(best_photo or {}).get('width', '?')}x{(best_photo or {}).get('height', '?')}"
+            log_msg = f"Telegram photo message from chat {chat_id}: best={dims}{preview}"
+        
         else:
             return NodeExecutionResult(
                 outputs={},
                 status="error",
-                error="Unsupported message type (only text and voice are supported)"
+                error="Unsupported message type (only text, voice, and photo are supported)"
             )
         
         # Notify SSE connections if flow_id provided

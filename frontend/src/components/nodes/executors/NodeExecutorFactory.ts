@@ -7,6 +7,7 @@ import { DeepSeekChatNodeExecutor } from './DeepSeekChatNodeExecutor';
 import { OpenAIChatNodeExecutor } from './OpenAIChatNodeExecutor';
 import { TranscriptionNodeExecutor } from './TranscriptionNodeExecutor';
 import { VoiceInputNodeExecutor } from './VoiceInputNodeExecutor';
+import { DownloadTelegramVoiceNodeExecutor } from './DownloadTelegramVoiceNodeExecutor';
 import { NodeInstance, NodeType } from '../../../types/nodes';
 
 /**
@@ -30,6 +31,7 @@ export class NodeExecutorFactory {
     NodeExecutorFactory.registerExecutor('simple-openai-chat', OpenAIChatNodeExecutor);
     NodeExecutorFactory.registerExecutor('transcription', TranscriptionNodeExecutor);
     NodeExecutorFactory.registerExecutor('voice_input', VoiceInputNodeExecutor);
+    NodeExecutorFactory.registerExecutor('download_telegram_voice', DownloadTelegramVoiceNodeExecutor);
   }
 
   /**

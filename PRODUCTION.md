@@ -24,7 +24,11 @@ Or
 
 Get-Content -Raw .\database\init\004_telegram_bot_configs_stable_webhook.sql | docker compose exec -T db psql -U postgres -d socialmediaflow
 
+cat database/init/004_telegram_bot_configs_stable_webhook.sql | docker compose exec -T db psql -U socialmedia_user -d socialmediaflow_prod
+
 Get-Content -Raw .\database\init\005_telegram_bot_configs_add_name.sql | docker compose exec -T db psql -U postgres -d socialmediaflow
+
+cat database/init/005_telegram_bot_configs_add_name.sql | docker compose exec -T db psql -U socialmedia_user -d socialmediaflow_prod
 ## 🚀 Quick Start
 
 1. **Configure Environment Variables**

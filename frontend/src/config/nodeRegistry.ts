@@ -84,6 +84,17 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
         hasStatusIndicator: true
       }
     },
+    "download_telegram_voice": {
+      category: NodeCategory.PROCESSOR,
+      subcategory: "Download Files",
+      componentName: "download_telegram_voice",
+      features: {
+        hasSettings: true,
+        hasExecution: true,
+        hasCustomUI: false,
+        hasStatusIndicator: true
+      }
+    },
     "send_telegram_message": {
       category: NodeCategory.ACTION,
       subcategory: "Telegram",
