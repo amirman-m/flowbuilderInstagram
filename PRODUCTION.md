@@ -1,7 +1,7 @@
 # Production Deployment Guide
 
 This guide will help you deploy the Social Media Flow Builder application to production.
-
+python -m alembic revision --autogenerate -m "Add telegram_bot_configs table"
 ## 🚀 Quick Start
 
 1. **Configure Environment Variables**
