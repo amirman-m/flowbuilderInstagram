@@ -63,15 +63,8 @@ def get_telegram_input_node_type() -> NodeType:
         ),
         settings_schema={
             "type": "object",
-            "properties": {
-                "access_token": {
-                    "type": "string",
-                    "title": "Bot Access Token",
-                    "description": "Telegram Bot API access token (from @BotFather)",
-                    "minLength": 1
-                }
-            },
-            "required": ["access_token"]
+            "properties": {},  # No settings
+            "required": []
         }
     )
 
@@ -251,11 +244,14 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
     logger.info(f"🔍 Access token: {access_token[:10] if access_token else 'None'}...")
     
     if not access_token:
-        logger.error(f"No access token found. Context: {context}")
+        # No token provided in node settings/context. Let the frontend prompt for token
+        logger.info("No access token provided; frontend should prompt user to validate token and set webhook.")
         return NodeExecutionResult(
-            outputs={},
-            status="error",
-            error="Bot access token not configured",
+            outputs={
+                "webhook_status": "pending_setup",
+                "message": "No access token provided. Prompt user to validate token and set webhook."
+            },
+            status="success",
             started_at=start_time,
             completed_at=datetime.now(timezone.utc)
         )
