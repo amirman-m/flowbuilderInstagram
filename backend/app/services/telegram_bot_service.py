@@ -233,7 +233,8 @@ class TelegramBotService:
     def generate_webhook_url(self, user_id: int, flow_id: int, node_id: str) -> str:
         """Generate webhook URL based on user, flow, and node"""
         base_url = getattr(settings, 'WEBHOOK_BASE_URL', 'https://asangram.tech')
-        return f"{base_url}/api/telegram/webhook/{user_id}/{flow_id}/{node_id}"
+        # Ensure we use the v1 API path which is implemented in app/api/v1/telegram.py
+        return f"{base_url}/api/v1/telegram/webhook/{user_id}/{flow_id}/{node_id}"
     
     async def validate_and_setup_bot(
         self,
