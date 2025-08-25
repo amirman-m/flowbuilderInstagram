@@ -95,27 +95,38 @@ class TelegramWebhookManager:
         """
         try:
             async with httpx.AsyncClient() as client:
+                # Telegram expects application/x-www-form-urlencoded or multipart form, not JSON
                 response = await client.post(
                     f"https://api.telegram.org/bot{access_token}/setWebhook",
-                    json={
+                    data={
                         "url": webhook_url,
-                        "allowed_updates": ["message"]
+                        # Keep minimal params to avoid encoding issues; add allowed_updates later if needed
+                        # "allowed_updates": json.dumps(["message"])  # Alternative if you want to restrict
                     },
                     timeout=10.0
                 )
                 
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get("ok"):
+                # Parse response body for better diagnostics
+                resp_text = None
+                resp_json: Optional[Dict[str, Any]] = None
+                try:
+                    resp_json = response.json()
+                except Exception:
+                    resp_text = response.text
+                
+                if response.status_code == 200 and resp_json is not None:
+                    if resp_json.get("ok"):
                         logger.info(f"Webhook set successfully: {webhook_url}")
                         return True, None
                     else:
-                        error_msg = data.get("description", "Unknown error")
-                        logger.error(f"Set webhook failed: {error_msg}")
+                        error_msg = resp_json.get("description", "Unknown error from Telegram")
+                        logger.error(f"Set webhook failed: {error_msg} | body={resp_json}")
                         return False, error_msg
                 else:
-                    error_msg = f"HTTP error: {response.status_code}"
-                    logger.error(f"HTTP error setting webhook: {response.status_code}")
+                    # Non-200 or non-JSON body
+                    body = resp_json if resp_json is not None else resp_text
+                    error_msg = f"HTTP {response.status_code} from Telegram setWebhook"
+                    logger.error(f"HTTP error setting webhook: {response.status_code} | body={body}")
                     return False, error_msg
                     
         except Exception as e:
