@@ -3,6 +3,7 @@ from .simple_openAI_chat import get_simple_openai_chat_node_type, execute_simple
 from .simple_deepseek_chat import get_simple_deepseek_chat_node_type, execute_simple_deepseek_chat
 from .transcription import get_transcription_node_type, execute_transcription
 from .telegram_voice_downloader import get_telegram_voice_downloader_node_type, execute_telegram_voice_downloader
+from .switch_input_type import get_switch_input_type_node_type, execute_switch_input_type
 
 def register_processor_nodes(registry: NodeRegistry):
     """Register all processor nodes"""
@@ -21,4 +22,7 @@ def register_processor_nodes(registry: NodeRegistry):
     # Register Download Telegram Voice node
     node_type = get_telegram_voice_downloader_node_type()
     registry.register_node(node_type, execute_telegram_voice_downloader)
-    
+
+    # Register Switch Input Type node
+    node_type = get_switch_input_type_node_type()
+    registry.register_node(node_type, execute_switch_input_type)
