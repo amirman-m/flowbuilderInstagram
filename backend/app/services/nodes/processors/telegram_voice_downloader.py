@@ -49,8 +49,20 @@ def get_telegram_voice_downloader_node_type() -> NodeType:
         ),
         settingsSchema={
             "type": "object",
-            "properties": {},  # No settings
-            "required": []
+            "properties": {
+                "access_token": {
+                    "type": "string",
+                    "title": "Bot Access Token",
+                    "description": "Telegram Bot API access token (optional if resolvable from Telegram Input or DB)",
+                    "minLength": 1,
+                },
+                "config_name": {
+                    "type": "string",
+                    "title": "Config Name",
+                    "description": "Name of Telegram bot config to load from DB for this user (optional)",
+                },
+            },
+            "required": [],
         },
     )
 
@@ -214,10 +226,21 @@ async def execute_telegram_voice_downloader(context: Dict[str, Any]) -> NodeExec
         # Resolve bot token from DB
         access_token = await _resolve_bot_token(context)
         if not access_token:
+            # Helpful diagnostics
+            try:
+                _settings_dbg = context.get("settings", {})
+                _flow_dbg = context.get("flow_id") or context.get("flowId")
+                _user_dbg = context.get("user_id") or context.get("userId")
+                logger.error(
+                    f"Token resolution failed. Debug -> flow_id={_flow_dbg}, user_id={_user_dbg}, "
+                    f"settings.keys={list(_settings_dbg.keys()) if isinstance(_settings_dbg, dict) else type(_settings_dbg)}"
+                )
+            except Exception:
+                pass
             return NodeExecutionResult(
                 outputs={},
                 status="error",
-                error="Unable to resolve Telegram bot access token. Provide settings.config_name or ensure default_flow_id is set on a Telegram bot config.",
+                error="Unable to resolve Telegram bot access token. Provide settings.access_token or settings.config_name, or ensure a Telegram Input node or DB config maps to this flow.",
                 started_at=started,
                 completed_at=datetime.now(timezone.utc),
             )
