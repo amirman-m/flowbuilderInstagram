@@ -13,6 +13,7 @@ from ...schemas.flow_save import FlowSaveRequest, NodeSchema, EdgeSchema
 from ...models.nodes import NodeInstance, NodeConnection , NodeCategory
 from ...services.flow_execution import create_flow_executor, FlowExecutionError
 from ...services import flow_service
+from ...services.telegram_bot_service import TelegramBotService, TelegramWebhookManager
 
 router = APIRouter()
 
@@ -269,6 +270,131 @@ async def execute_node(
             detail=f"Failed to execute node: {str(e)}"
         )
 
+
+@router.post("/{flow_id}/activate")
+async def activate_flow(
+    flow_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Activate a flow: validate single Telegram trigger, ensure webhook, persist status."""
+    # Step 0: Validate flow ownership
+    flow = db.query(Flow).filter(Flow.id == flow_id, Flow.user_id == current_user.id).first()
+    if not flow:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Flow not found")
+
+    # Step 1-2: Fetch nodes and identify trigger nodes
+    nodes = db.query(NodeInstance).filter(NodeInstance.flow_id == flow_id).all()
+    trigger_nodes: list[NodeInstance] = []
+    for n in nodes:
+        try:
+            node_type = node_registry.get_node_type(n.type_id)
+            if node_type and hasattr(node_type, 'category') and node_type.category.value == 'trigger':
+                trigger_nodes.append(n)
+        except Exception:
+            # Ignore unknown node types when checking triggers
+            continue
+
+    # Step 3: Validate exactly one trigger node
+    if len(trigger_nodes) == 0:
+        raise HTTPException(status_code=400, detail="No trigger node found. Exactly one trigger is required to activate a flow.")
+    if len(trigger_nodes) > 1:
+        ids = [t.id for t in trigger_nodes]
+        raise HTTPException(status_code=400, detail=f"Multiple trigger nodes found: {ids}. Only one trigger is allowed for activation.")
+
+    trigger = trigger_nodes[0]
+
+    # Step 4: Validate trigger type (only telegram_input allowed)
+    if trigger.type_id != "telegram_input":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Only telegram_input trigger is supported for activation. "
+                f"Found '{trigger.type_id}'. Nodes like chat_input and voice_input are interactive and cannot be background-activated."
+            ),
+        )
+
+    # Step 5: Validate webhook and access token
+    trigger_data = trigger.data or {}
+    settings_data = trigger_data.get("settings", {})
+    access_token = settings_data.get("access_token")
+    config_name = settings_data.get("config_name")  # optional friendly config
+    if not access_token and not config_name:
+        # allow config_name to resolve token via TelegramBotService
+        raise HTTPException(status_code=400, detail="Bot access token not configured on Telegram trigger node.")
+
+    # Use TelegramBotService to validate token, persist config, and ensure webhook
+    svc = TelegramBotService()
+    try:
+        ok, msg, cfg = await svc.validate_and_setup_bot(
+            db=db,
+            user_id=current_user.id,
+            access_token=access_token,
+            flow_id=flow_id,
+            node_id=trigger.id,
+            config_name=config_name,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Telegram setup failed: {str(e)}")
+
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+
+    # Step 7: Confirm activation (no endless loop; webhook + SSE handle events)
+    flow.status = "active"
+    db.commit()
+    db.refresh(flow)
+
+    return {
+        "ok": True,
+        "message": "Flow activated. Telegram webhook configured.",
+        "flow_id": flow.id,
+        "status": flow.status,
+        "webhook_url": (cfg or {}).get("webhook_url") if isinstance(cfg, dict) else None,
+    }
+
+
+@router.post("/{flow_id}/deactivate")
+async def deactivate_flow(
+    flow_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Deactivate a flow: delete Telegram webhook if present and set status to draft."""
+    # Validate ownership
+    flow = db.query(Flow).filter(Flow.id == flow_id, Flow.user_id == current_user.id).first()
+    if not flow:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Flow not found")
+
+    # Find telegram trigger (if any)
+    telegram_trigger = db.query(NodeInstance).filter(
+        NodeInstance.flow_id == flow_id,
+        NodeInstance.type_id == "telegram_input"
+    ).first()
+
+    # Attempt webhook deletion if we have a token
+    if telegram_trigger:
+        settings_data = (telegram_trigger.data or {}).get("settings", {})
+        access_token = settings_data.get("access_token")
+        if access_token:
+            mgr = TelegramWebhookManager()
+            try:
+                await mgr.delete_webhook(access_token)
+            except Exception:
+                # Don't fail deactivation on Telegram API errors
+                logging.exception("Failed to delete Telegram webhook during deactivation")
+
+    # Persist status
+    flow.status = "draft"
+    db.commit()
+    db.refresh(flow)
+
+    return {
+        "ok": True,
+        "message": "Flow deactivated.",
+        "flow_id": flow.id,
+        "status": flow.status,
+    }
 
 @router.post("/{flow_id}/execute", response_model=FlowExecutionResponse)
 async def execute_flow(

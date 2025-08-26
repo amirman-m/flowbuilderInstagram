@@ -199,21 +199,32 @@ export const useFlows = (): UseFlowsReturn => {
 
   /**
    * Toggles the activation status of a flow between 'active' and 'draft'.
-   * Currently updates local state only - backend integration pending.
    * 
    * @function toggleFlow
    * @param {number} flowId - The unique identifier of the flow to toggle
    * @param {boolean} isActive - Whether the flow should be activated (true) or deactivated (false)
-   * @todo Implement backend API call for flow activation/deactivation
    */
   const toggleFlow = (flowId: number, isActive: boolean) => {
-    setFlows(prev => prev.map(flow => 
-      flow.id === flowId 
-        ? { ...flow, status: isActive ? 'active' : 'draft' }
-        : flow
-    ));
-    // TODO: Implement backend API call for flow activation/deactivation
-    console.log(`Flow ${flowId} ${isActive ? 'activated' : 'deactivated'}`);
+    // Call backend to activate/deactivate, update UI on success only
+    const run = async () => {
+      try {
+        if (isActive) {
+          await flowsAPI.activateFlow(flowId);
+          setFlows(prev => prev.map(flow => flow.id === flowId ? { ...flow, status: 'active' } : flow));
+          showSnackbar({ message: 'Flow activated. Webhook configured.', severity: 'success' });
+        } else {
+          await flowsAPI.deactivateFlow(flowId);
+          setFlows(prev => prev.map(flow => flow.id === flowId ? { ...flow, status: 'draft' } : flow));
+          showSnackbar({ message: 'Flow deactivated. Webhook removed.', severity: 'success' });
+        }
+      } catch (err: any) {
+        const msg = err?.response?.data?.detail || err?.message || 'Activation failed';
+        showSnackbar({ message: msg, severity: 'error' });
+        // Reload flows to ensure UI reflects backend truth
+        try { await loadFlows(); } catch {}
+      }
+    };
+    run();
   };
 
   /**

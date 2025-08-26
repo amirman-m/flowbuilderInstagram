@@ -125,6 +125,17 @@ export const flowsAPI = {
   }> => {
     const response = await api.get(`/flows/${flowId}/deployment`);
     return response.data;
+  },
+
+  // Activation APIs
+  activateFlow: async (flowId: number): Promise<any> => {
+    const response = await api.post(`/flows/${flowId}/activate`);
+    return response.data;
+  },
+
+  deactivateFlow: async (flowId: number): Promise<any> => {
+    const response = await api.post(`/flows/${flowId}/deactivate`);
+    return response.data;
   }
 };
 
