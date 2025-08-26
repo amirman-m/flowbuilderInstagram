@@ -260,9 +260,14 @@ class FlowExecutor:
             # Get stored settings from the node data
             stored_settings = node_data.get('data', {}).get('settings', {})
             
-            # Merge execution context with stored settings
-            final_context = execution_context.copy()
-            final_context.update(stored_settings)
+            # Build final context expected by node processors:
+            # - preserve provided inputs structure (often under 'inputs')
+            # - include identifiers and settings under dedicated keys
+            final_context = {}
+            final_context.update(execution_context or {})
+            final_context['node_id'] = node_id
+            final_context['flow_id'] = node_data.get('flow_id')
+            final_context['settings'] = stored_settings or {}
             
             logger.info(f"🚀 Executing node {node_id} (type: {node_type_id}) with context: {final_context}")
             
@@ -619,25 +624,21 @@ class FlowExecutor:
             NodeExecutionResult or None if execution failed
         """
         try:
-            # Prepare execution context in the format expected by node functions
-            # Node functions expect a context dict with 'inputs' key containing the mapped inputs
-            # Use the stored settings from the database for this node instance
-            node_settings = node_instance.settings or {}
-            
-            # For trigger nodes, merge the trigger inputs with any stored settings
+            # For trigger nodes, merge the trigger inputs with identifiers and settings
             if inputs and "user_input" in inputs:
                 # This is a trigger node execution - use the user input directly
-                execution_context = inputs  # Pass trigger inputs directly
-                execution_context.update(node_settings)  # Add any stored settings
+                execution_context = dict(inputs)  # Pass trigger inputs directly
+                execution_context['node_id'] = node_instance.id
+                execution_context['flow_id'] = node_instance.flow_id
+                execution_context['settings'] = node_instance.settings
             else:
                 # This is a downstream node - use the mapped inputs from connected nodes
                 execution_context = {
                     "inputs": inputs,
                     "node_id": node_instance.id,
-                    "settings": node_settings
+                    "settings": node_instance.settings,
+                    "flow_id": node_instance.flow_id,
                 }
-                # Add any stored settings to the context
-                execution_context.update(node_settings)
             
             logger.info(f"🚀 Executing node {node_instance.id} with context: {execution_context}")
             

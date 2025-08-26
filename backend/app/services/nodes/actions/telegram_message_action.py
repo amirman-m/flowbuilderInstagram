@@ -74,14 +74,21 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
         node_id = context.get("node_id", "unknown")
         flow_id = context.get("flow_id") or context.get("flowId")
         
-        # The flows.py endpoint flattens request.inputs directly into context
-        # So we need to extract inputs from the context keys, excluding system keys
-        system_keys = {'node_id', 'flow_id', 'settings', 'flowId'}
-        inputs = {k: v for k, v in context.items() if k not in system_keys}
-        
-        # Debug: Log each key separately
+        # Primary: use structured inputs under 'inputs' if provided
+        inputs = {}
+        if isinstance(context.get("inputs"), dict):
+            inputs = context.get("inputs", {})
+            logger.info("Using primary 'inputs' from context['inputs']")
+        else:
+            # Fallback: some callers flatten inputs at top-level; exclude system keys
+            system_keys = {'node_id', 'flow_id', 'settings', 'flowId', 'inputs'}
+            inputs = {k: v for k, v in context.items() if k not in system_keys}
+            logger.info("Using flattened inputs from top-level context (fallback)")
+         
+         # Debug: Log each key separately
         logger.info(f"🔍 Context keys: {list(context.keys())}")
-        logger.info(f"🔍 System keys excluded: {system_keys}")
+        # Log known system keys set for visibility
+        logger.info("🔍 System keys considered: {'node_id','flow_id','settings','flowId','inputs'}")
         logger.info(f"🔍 Extracted inputs: {list(inputs.keys())}")
         logger.info(f"🔍 flow_id from context.get('flow_id'): {context.get('flow_id')}")
         logger.info(f"🔍 flowId from context.get('flowId'): {context.get('flowId')}")
