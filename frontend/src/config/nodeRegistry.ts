@@ -139,6 +139,17 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
         hasStatusIndicator: true
       }
     },
+    "send_telegram_voice": {
+      category: NodeCategory.ACTION,
+      subcategory: "Telegram",
+      componentName: "SendTelegramVoiceNode",
+      features: {
+        hasSettings: true,
+        hasExecution: true,
+        hasCustomUI: false,
+        hasStatusIndicator: true
+      }
+    },
     // Add more nodes here in the future
     
   };

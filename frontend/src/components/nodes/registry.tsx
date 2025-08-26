@@ -11,6 +11,7 @@ import {
 } from '@mui/icons-material';
 import { NodeInstance, NodeExecutionStatus, NodeType, NodeCategory } from '../../types/nodes';
 import { ChatInputNode, VoiceInputNode, OpenAIChatNode, DeepSeekChatNode, DownloadTelegramVoiceNode, SwitchInputTypeNode, OpenAISpeechNode } from './types';
+import { SendTelegramVoiceNode } from './types/SendTelegramVoiceNode';
 import { TranscriptionNode } from './types/TranscriptionNode';
 import { TelegramInputNode } from './types/TelegramInputNode';
 import { TelegramMessageActionNode } from './types/TelegramMessageActionNode';
@@ -89,6 +90,7 @@ export const nodeComponentRegistry: Record<string, React.FC<NodeComponentProps>>
   'download_telegram_voice': DownloadTelegramVoiceNode,
   'openai_speech': OpenAISpeechNode,
   'send_telegram_message': TelegramMessageActionNode,
+  'send_telegram_voice': SendTelegramVoiceNode,
   'switch-input-type': SwitchInputTypeNode,
   // Add more node types here - Example:
   // 'instagram-trigger': InstagramTriggerNode,
