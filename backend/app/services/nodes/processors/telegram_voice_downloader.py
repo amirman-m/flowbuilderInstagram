@@ -49,20 +49,8 @@ def get_telegram_voice_downloader_node_type() -> NodeType:
         ),
         settingsSchema={
             "type": "object",
-            "properties": {
-                "access_token": {
-                    "type": "string",
-                    "title": "Bot Access Token",
-                    "description": "Telegram Bot API access token (optional if resolvable from Telegram Input or DB)",
-                    "minLength": 1,
-                },
-                "config_name": {
-                    "type": "string",
-                    "title": "Config Name",
-                    "description": "Name of Telegram bot config to load from DB for this user (optional)",
-                },
-            },
-            "required": [],
+            "properties": {},  # No settings
+            "required": []
         },
     )
 
@@ -226,17 +214,6 @@ async def execute_telegram_voice_downloader(context: Dict[str, Any]) -> NodeExec
         # Resolve bot token from DB
         access_token = await _resolve_bot_token(context)
         if not access_token:
-            # Helpful diagnostics
-            try:
-                _settings_dbg = context.get("settings", {})
-                _flow_dbg = context.get("flow_id") or context.get("flowId")
-                _user_dbg = context.get("user_id") or context.get("userId")
-                logger.error(
-                    f"Token resolution failed. Debug -> flow_id={_flow_dbg}, user_id={_user_dbg}, "
-                    f"settings.keys={list(_settings_dbg.keys()) if isinstance(_settings_dbg, dict) else type(_settings_dbg)}"
-                )
-            except Exception:
-                pass
             return NodeExecutionResult(
                 outputs={},
                 status="error",
@@ -256,10 +233,35 @@ async def execute_telegram_voice_downloader(context: Dict[str, Any]) -> NodeExec
                 completed_at=datetime.now(timezone.utc),
             )
 
-        # Build data URI
+        # Map Telegram voice formats to OpenAI-compatible MIME types and extensions
+        def get_openai_compatible_format(telegram_mime: str) -> tuple[str, str]:
+            """Convert Telegram MIME type to OpenAI-compatible format.
+            Returns (mime_type, file_extension)
+            """
+            mime_lower = telegram_mime.lower()
+            
+            # Telegram voice messages are typically OGG/Opus
+            if "ogg" in mime_lower or "opus" in mime_lower:
+                return "audio/ogg", "ogg"
+            elif "webm" in mime_lower:
+                return "audio/webm", "webm"
+            elif "mp3" in mime_lower or "mpeg" in mime_lower:
+                return "audio/mpeg", "mp3"
+            elif "wav" in mime_lower:
+                return "audio/wav", "wav"
+            elif "m4a" in mime_lower or "mp4" in mime_lower:
+                return "audio/mp4", "m4a"
+            else:
+                # Default to OGG for Telegram voice messages
+                return "audio/ogg", "ogg"
+
+        # Determine proper MIME type and extension
+        original_mime = mime_type or voice_meta.get("mime_type") or "audio/ogg"
+        openai_mime, file_ext = get_openai_compatible_format(original_mime)
+        
+        # Build data URI with proper MIME type and file extension hint
         b64 = base64.b64encode(content).decode("ascii")
-        mime = mime_type or voice_meta.get("mime_type") or "audio/ogg"
-        data_uri = f"data:{mime};base64,{b64}"
+        data_uri = f"data:{openai_mime};name=voice.{file_ext};base64,{b64}"
 
         # Prepare output message_data: keep original fields, replace voice_input with the data string
         out_message_data = dict(message_data)
@@ -269,7 +271,9 @@ async def execute_telegram_voice_downloader(context: Dict[str, Any]) -> NodeExec
         meta.update({
             "telegram_file_path": file_path,
             "telegram_file_id": file_id,
-            "mime_type": mime,
+            "mime_type": openai_mime,
+            "file_extension": file_ext,
+            "original_mime_type": original_mime,
         })
         out_message_data["metadata"] = meta
         out_message_data["input_type"] = "voice"
@@ -278,7 +282,7 @@ async def execute_telegram_voice_downloader(context: Dict[str, Any]) -> NodeExec
             outputs={"message_data": out_message_data},
             status="success",
             logs=[
-                f"Downloaded Telegram voice file {file_id} ({mime}) and attached as base64 data URI",
+                f"Downloaded Telegram voice file {file_id} ({openai_mime}) and attached as base64 data URI with .{file_ext} extension",
             ],
             started_at=started,
             completed_at=datetime.now(timezone.utc),
