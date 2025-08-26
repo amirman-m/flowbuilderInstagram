@@ -11,6 +11,7 @@ import { DownloadTelegramVoiceNodeExecutor } from './DownloadTelegramVoiceNodeEx
 import { NodeInstance, NodeType } from '../../../types/nodes';
 import { SwitchInputTypeNodeExecutor } from './SwitchInputTypeNodeExecutor';
 import { TelegramInputNodeExecutor } from './TelegramInputNodeExecutor';
+import { OpenAISpeechNodeExecutor } from './OpenAISpeechNodeExecutor';
 
 /**
  * Factory for creating appropriate NodeExecutor instances
@@ -36,6 +37,7 @@ export class NodeExecutorFactory {
     NodeExecutorFactory.registerExecutor('download_telegram_voice', DownloadTelegramVoiceNodeExecutor);
     NodeExecutorFactory.registerExecutor('switch-input-type', SwitchInputTypeNodeExecutor);
     NodeExecutorFactory.registerExecutor('telegram_input', TelegramInputNodeExecutor);
+    NodeExecutorFactory.registerExecutor('openai_speech', OpenAISpeechNodeExecutor);
   }
 
   /**

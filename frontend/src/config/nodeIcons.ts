@@ -29,6 +29,7 @@ export const NODE_ICONS: Record<string, NodeIconComponent> = {
   
   // Processor nodes
   'simple-openai-chat': OpenAIIcon,
+  'openai_speech': OpenAIIcon,
   'simple-deepseek-chat': DeepSeekIcon,
   'transcription': RecordVoiceOverIcon,
   'download_telegram_voice': DownloadIcon,

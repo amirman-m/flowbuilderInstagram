@@ -84,6 +84,17 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
         hasStatusIndicator: true
       }
     },
+    "openai_speech": {
+      category: NodeCategory.PROCESSOR,
+      subcategory: "Audio Processing",
+      componentName: "OpenAISpeechNode",
+      features: {
+        hasSettings: true,
+        hasExecution: true,
+        hasCustomUI: true,
+        hasStatusIndicator: true
+      }
+    },
     "download_telegram_voice": {
       category: NodeCategory.PROCESSOR,
       subcategory: "Download Files",

@@ -6,3 +6,4 @@ export { DeepSeekChatNode } from '../types/DeepSeekChatNode';
 export { TelegramMessageActionNode } from '../types/TelegramMessageActionNode';
 export { DownloadTelegramVoiceNode } from '../types/DownloadTelegramVoiceNode';
 export { SwitchInputTypeNode } from '../types/SwitchInputTypeNode';
+export { OpenAISpeechNode } from '../types/OpenAISpeechNode';
