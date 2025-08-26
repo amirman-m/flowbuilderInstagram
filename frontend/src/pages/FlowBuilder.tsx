@@ -41,6 +41,7 @@ import { edgeTypes } from '../components/edges/CustomEdge';
 import { NodeInspector } from '../components/inspector';
 import { ChatBotExecutionDialog } from '../components/dialogs/ChatBotExecutionDialog';
 import { FlowExecutionDialog } from '../components/dialogs/FlowExecutionDialog';
+import { TelegramExecutionDialog } from '../components/dialogs/TelegramExecutionDialog';
 import { loadNodeConfigurations } from '../config/nodeConfiguration';
 import { useConnectionValidation } from '../hooks/useConnectionValidation';
 import { useSnackbar } from '../components/SnackbarProvider';
@@ -738,20 +739,7 @@ const FlowBuilderInner: React.FC = () => {
     );
   }
 
-  // Remove the error blocking render - let the UI show even with errors
-  // if (error) {
-  //   return (
-  //     <Container maxWidth="lg" sx={{ py: 4 }}>
-  //       <Alert severity="error" action={
-  //         <Button color="inherit" size="small" onClick={loadFlow}>
-  //           Retry
-  //         </Button>
-  //       }>
-  //         {error}
-  //       </Alert>
-  //     </Container>
-  //   );
-  // }
+ 
 
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -924,7 +912,16 @@ const FlowBuilderInner: React.FC = () => {
       </Box>
       
       {/* Flow Execution Dialogs (conditional) */}
-      {executionDialogOpen && (triggerNodeType === 'chat_input' || triggerNodeType === 'voice_input') ? (
+      {executionDialogOpen && triggerNodeType === 'telegram_input' ? (
+        <TelegramExecutionDialog
+          open={executionDialogOpen}
+          onClose={() => setExecutionDialogOpen(false)}
+          flowName={flow?.name || 'Untitled Flow'}
+          triggerNodeId={triggerNodeId}
+          triggerNodeType={triggerNodeType}
+          onExecute={handleFlowExecution}
+        />
+      ) : executionDialogOpen && (triggerNodeType === 'chat_input' || triggerNodeType === 'voice_input') ? (
         <ChatBotExecutionDialog
           open={executionDialogOpen}
           onClose={() => setExecutionDialogOpen(false)}

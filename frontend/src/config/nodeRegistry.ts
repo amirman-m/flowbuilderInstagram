@@ -95,6 +95,17 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
         hasStatusIndicator: true
       }
     },
+    "switch-input-type": {
+      category: NodeCategory.PROCESSOR,
+      subcategory: "Operations",
+      componentName: "SwitchInputTypeNode",
+      features: {
+        hasSettings: false,
+        hasExecution: true,
+        hasCustomUI: false,
+        hasStatusIndicator: true
+      }
+    },
     "send_telegram_message": {
       category: NodeCategory.ACTION,
       subcategory: "Telegram",

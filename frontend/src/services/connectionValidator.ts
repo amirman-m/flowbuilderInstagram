@@ -280,7 +280,7 @@ export class ConnectionValidationService {
     // Check for an intersection between source and target data types
     for (const sourceType of sourceTypes) {
       for (const targetType of targetTypes) {
-        const compatibleTypes = DATA_TYPE_COMPATIBILITY_MATRIX[targetPort.dataType as keyof typeof DATA_TYPE_COMPATIBILITY_MATRIX] || [];
+        const compatibleTypes = DATA_TYPE_COMPATIBILITY_MATRIX[targetType as keyof typeof DATA_TYPE_COMPATIBILITY_MATRIX] || [];
         if (compatibleTypes.includes(sourceType)) {
           isCompatible = true;
           if (sourceType === targetType) {

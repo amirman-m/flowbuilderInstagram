@@ -8,3 +8,5 @@ export { TranscriptionNodeExecutor } from './TranscriptionNodeExecutor';
 export { NodeExecutorFactory } from './NodeExecutorFactory';
 export { VoiceInputNodeExecutor } from './VoiceInputNodeExecutor';
 export { DownloadTelegramVoiceNodeExecutor } from './DownloadTelegramVoiceNodeExecutor';
+export { SwitchInputTypeNodeExecutor } from './SwitchInputTypeNodeExecutor';
+export { TelegramInputNodeExecutor } from './TelegramInputNodeExecutor';

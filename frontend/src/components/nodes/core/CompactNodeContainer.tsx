@@ -19,6 +19,7 @@ export interface CompactNodeContainerProps extends NodeComponentProps {
   showDeleteButton?: boolean;
   onCustomExecute?: () => void;
   onBeforeExecute?: () => Promise<boolean> | boolean;
+  showOutputLabels?: boolean;
 }
 
 export const CompactNodeContainer: React.FC<CompactNodeContainerProps> = ({
@@ -28,7 +29,8 @@ export const CompactNodeContainer: React.FC<CompactNodeContainerProps> = ({
   showExecuteButton = true,
   showDeleteButton = true,
   onCustomExecute,
-  onBeforeExecute
+  onBeforeExecute,
+  showOutputLabels = false
 }) => {
   const { nodeType, instance, onNodeUpdate, onNodeDelete } = data;
 
