@@ -78,10 +78,14 @@ async def _resolve_bot_token(context: Dict[str, Any]) -> Optional[str]:
         # Access DB
         from app.core.database import SessionLocal
         from app.models.telegram_bot import TelegramBotConfig
-        from app.models.node_instance import NodeInstance
+        # DEBUG: corrected import; NodeInstance lives in app.models.nodes, not app.models.node_instance
+        from app.models.nodes import NodeInstance
 
         db = SessionLocal()
         try:
+            # DEBUG: starting token resolution with context snapshot
+            logger.debug("[DEBUG] Token resolve: settings=%s config_name=%s user_id=%s flow_id=%s",
+                         settings, config_name, user_id, flow_id)
             # 1) Preferred: config_name owned by user
             if config_name and user_id:
                 row = (
@@ -93,6 +97,8 @@ async def _resolve_bot_token(context: Dict[str, Any]) -> Optional[str]:
                     )
                     .first()
                 )
+                # DEBUG: log result of config_name lookup
+                logger.debug("[DEBUG] Token resolve: config_name lookup result=%s", bool(row))
                 if row and row.access_token:
                     return row.access_token
 
@@ -107,6 +113,8 @@ async def _resolve_bot_token(context: Dict[str, Any]) -> Optional[str]:
                     )
                     .first()
                 )
+                # DEBUG: log result of default_flow mapping lookup
+                logger.debug("[DEBUG] Token resolve: default_flow mapping result=%s", bool(row))
                 if row and row.access_token:
                     return row.access_token
 
@@ -120,14 +128,20 @@ async def _resolve_bot_token(context: Dict[str, Any]) -> Optional[str]:
                     )
                     .first()
                 )
+                # DEBUG: log if telegram_input node was found in this flow
+                logger.debug("[DEBUG] Token resolve: telegram_input node found=%s", bool(tg_node))
                 if tg_node and isinstance(tg_node.data, dict):
                     node_settings = tg_node.data.get("settings", {})
+                    # DEBUG: log whether node carries an access_token in settings
+                    logger.debug("[DEBUG] Token resolve: telegram_input node has access_token=%s",
+                                 bool(isinstance(node_settings, dict) and node_settings.get("access_token")))
                     if isinstance(node_settings, dict) and node_settings.get("access_token"):
                         return node_settings.get("access_token")
         finally:
             db.close()
     except Exception as e:
-        logger.error(f"Failed to resolve Telegram bot token: {e}")
+        # DEBUG: keep explicit error for easier removal after fix
+        logger.error(f"[DEBUG] Failed to resolve Telegram bot token: {e}")
 
     return None
 
