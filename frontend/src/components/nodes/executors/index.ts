@@ -12,3 +12,4 @@ export { SwitchInputTypeNodeExecutor } from './SwitchInputTypeNodeExecutor';
 export { TelegramInputNodeExecutor } from './TelegramInputNodeExecutor';
 export { OpenAISpeechNodeExecutor } from './OpenAISpeechNodeExecutor';
 export { LanguageDetectionNodeExecutor } from './LanguageDetectionNodeExecutor';
+export { LanguageTranslatorNodeExecutor } from './LanguageTranslatorNodeExecutor';

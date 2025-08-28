@@ -9,3 +9,4 @@ export { SwitchInputTypeNode } from '../types/SwitchInputTypeNode';
 export { OpenAISpeechNode } from '../types/OpenAISpeechNode';
 export { WebScrapeNode } from '../types/WebScrapeNode';
 export { LanguageDetectionNode } from '../types/LanguageDetectionNode';
+export { LanguageTranslatorNode } from '../types/LanguageTranslatorNode';

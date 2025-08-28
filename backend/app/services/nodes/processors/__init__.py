@@ -6,7 +6,8 @@ from .telegram_voice_downloader import get_telegram_voice_downloader_node_type, 
 from .switch_input_type import get_switch_input_type_node_type, execute_switch_input_type
 from .openai_speech import get_openai_speech_node_type, execute_openai_speech
 from .web_scrape import get_web_scrape_node_type, execute_web_scrape
-from .multilingual_language_detection import get_multilingual_language_detection_node_type,execute_multilingual_language_detection
+from .multilingual_language_detection import get_multilingual_language_detection_node_type, execute_multilingual_language_detection
+from .language_translator import get_language_translator_node_type, execute_language_translator
 
 
 
@@ -43,3 +44,7 @@ def register_processor_nodes(registry: NodeRegistry):
     # Register Multilingual Language Detection node
     node_type = get_multilingual_language_detection_node_type()
     registry.register_node(node_type, execute_multilingual_language_detection)
+
+    # Register Language Translator node
+    node_type = get_language_translator_node_type()
+    registry.register_node(node_type, execute_language_translator)

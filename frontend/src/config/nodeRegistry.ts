@@ -172,6 +172,17 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
         hasStatusIndicator: true
       }
     },
+    "language-translator-m2m100": {
+      category: NodeCategory.PROCESSOR,
+      subcategory: "Language Processing",
+      componentName: "DefaultNode",
+      features: {
+        hasSettings: true,
+        hasExecution: true,
+        hasCustomUI: false,
+        hasStatusIndicator: true
+      }
+    },
     // Add more nodes here in the future
     
   };

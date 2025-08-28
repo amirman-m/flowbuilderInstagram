@@ -38,6 +38,7 @@ export const NODE_ICONS: Record<string, NodeIconComponent> = {
   'switch-input-type': SwapHorizIcon,
   'web_scrape': PublicIcon,
   'multilingual-e5-language-detection': LanguageIcon,
+  'language-translator-m2m100': LanguageIcon,
   
   // Action nodes
   'send_telegram_message': SendIcon,
