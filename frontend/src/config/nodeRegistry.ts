@@ -117,6 +117,17 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
         hasStatusIndicator: true
       }
     },
+    "web_scrape": {
+      category: NodeCategory.PROCESSOR,
+      subcategory: "Web Scraping",
+      componentName: "WebScrapeNode",
+      features: {
+        hasSettings: true,
+        hasExecution: true,
+        hasCustomUI: false,
+        hasStatusIndicator: true
+      }
+    },
     "send_telegram_message": {
       category: NodeCategory.ACTION,
       subcategory: "Telegram",
@@ -147,6 +158,17 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
         hasSettings: true,
         hasExecution: true,
         hasCustomUI: false,
+        hasStatusIndicator: true
+      }
+    },
+    "multilingual-e5-language-detection": {
+      category: NodeCategory.PROCESSOR,
+      subcategory: "Language Processing",
+      componentName: "LanguageDetectionNode",
+      features: {
+        hasSettings: true,
+        hasExecution: true,
+        hasCustomUI: true,
         hasStatusIndicator: true
       }
     },

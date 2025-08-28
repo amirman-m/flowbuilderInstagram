@@ -11,3 +11,4 @@ export { DownloadTelegramVoiceNodeExecutor } from './DownloadTelegramVoiceNodeEx
 export { SwitchInputTypeNodeExecutor } from './SwitchInputTypeNodeExecutor';
 export { TelegramInputNodeExecutor } from './TelegramInputNodeExecutor';
 export { OpenAISpeechNodeExecutor } from './OpenAISpeechNodeExecutor';
+export { LanguageDetectionNodeExecutor } from './LanguageDetectionNodeExecutor';

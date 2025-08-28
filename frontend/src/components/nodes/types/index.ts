@@ -7,3 +7,5 @@ export { TelegramMessageActionNode } from '../types/TelegramMessageActionNode';
 export { DownloadTelegramVoiceNode } from '../types/DownloadTelegramVoiceNode';
 export { SwitchInputTypeNode } from '../types/SwitchInputTypeNode';
 export { OpenAISpeechNode } from '../types/OpenAISpeechNode';
+export { WebScrapeNode } from '../types/WebScrapeNode';
+export { LanguageDetectionNode } from '../types/LanguageDetectionNode';

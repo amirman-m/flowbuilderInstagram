@@ -10,7 +10,18 @@ RUN apt-get update && apt-get install -y \
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
+
+# Install PyTorch CPU version explicitly
+RUN pip install --no-cache-dir torch==2.8.0 
+
+# Install other dependencies
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy model download script first to leverage Docker cache
+COPY download_model.py .
+
+# Pre-download the language detection model during build
+RUN python download_model.py
 
 # Copy application code
 COPY . .

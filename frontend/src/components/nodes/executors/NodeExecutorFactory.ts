@@ -12,6 +12,7 @@ import { NodeInstance, NodeType } from '../../../types/nodes';
 import { SwitchInputTypeNodeExecutor } from './SwitchInputTypeNodeExecutor';
 import { TelegramInputNodeExecutor } from './TelegramInputNodeExecutor';
 import { OpenAISpeechNodeExecutor } from './OpenAISpeechNodeExecutor';
+import { LanguageDetectionNodeExecutor } from './LanguageDetectionNodeExecutor';
 
 /**
  * Factory for creating appropriate NodeExecutor instances
@@ -38,6 +39,7 @@ export class NodeExecutorFactory {
     NodeExecutorFactory.registerExecutor('switch-input-type', SwitchInputTypeNodeExecutor);
     NodeExecutorFactory.registerExecutor('telegram_input', TelegramInputNodeExecutor);
     NodeExecutorFactory.registerExecutor('openai_speech', OpenAISpeechNodeExecutor);
+    NodeExecutorFactory.registerExecutor('multilingual-e5-language-detection', LanguageDetectionNodeExecutor);
   }
 
   /**

@@ -11,6 +11,8 @@ import ClearIcon from '@mui/icons-material/Clear';
 import InfoIcon from '@mui/icons-material/Info';
 import DownloadIcon from '@mui/icons-material/Download';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import PublicIcon from '@mui/icons-material/Public';
+import LanguageIcon from '@mui/icons-material/Language';
 // Custom icons
 import DeepSeekIcon from '../components/icons/DeepSeekIcon';
 import OpenAIIcon from '../components/icons/OpenAIIcon';
@@ -34,6 +36,8 @@ export const NODE_ICONS: Record<string, NodeIconComponent> = {
   'transcription': RecordVoiceOverIcon,
   'download_telegram_voice': DownloadIcon,
   'switch-input-type': SwapHorizIcon,
+  'web_scrape': PublicIcon,
+  'multilingual-e5-language-detection': LanguageIcon,
   
   // Action nodes
   'send_telegram_message': SendIcon,
