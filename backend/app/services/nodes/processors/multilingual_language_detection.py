@@ -68,6 +68,135 @@ LANGUAGE_MAP = {
     "LABEL_44": "Welsh"
 }
 
+# Abbreviation map based on the provided list. Only languages present in the list are mapped.
+# Anything not present in this mapping will result in abbreviation = None.
+ABBREV_MAP = {
+    # Exact names we may produce + normalizations
+    "afrikaans": "af",
+    "amharic": "am",
+    "arabic": "ar",
+    "asturian": "ast",
+    "azerbaijani": "az",
+    "bashkir": "ba",
+    "belarusian": "be",
+    "bulgarian": "bg",
+    "bengali": "bn",
+    "breton": "br",
+    "bosnian": "bs",
+    "catalan": "ca",
+    "valencian": "ca",
+    "cebuano": "ceb",
+    "czech": "cs",
+    "welsh": "cy",
+    "danish": "da",
+    "german": "de",
+    "greek": "el",
+    "english": "en",
+    "spanish": "es",
+    "estonian": "et",
+    "persian": "fa",
+    "fulah": "ff",
+    "finnish": "fi",
+    "french": "fr",
+    "western frisian": "fy",
+    "frisian": "fy",  # map generic Frisian to Western Frisian code
+    "irish": "ga",
+    "gaelic": "gd",
+    "scottish gaelic": "gd",
+    "galician": "gl",
+    "gujarati": "gu",
+    "hausa": "ha",
+    "hebrew": "he",
+    "hindi": "hi",
+    "croatian": "hr",
+    "haitian": "ht",
+    "haitian creole": "ht",
+    "hungarian": "hu",
+    "armenian": "hy",
+    "indonesian": "id",
+    "igbo": "ig",
+    "iloko": "ilo",
+    "icelandic": "is",
+    "italian": "it",
+    "japanese": "ja",
+    "javanese": "jv",
+    "georgian": "ka",
+    "kazakh": "kk",
+    "central khmer": "km",
+    "khmer": "km",
+    "kannada": "kn",
+    "korean": "ko",
+    "luxembourgish": "lb",
+    "letzeburgesch": "lb",
+    "ganda": "lg",
+    "lingala": "ln",
+    "lao": "lo",
+    "lithuanian": "lt",
+    "latvian": "lv",
+    "malagasy": "mg",
+    "macedonian": "mk",
+    "malayalam": "ml",
+    "mongolian": "mn",
+    "marathi": "mr",
+    "malay": "ms",
+    "burmese": "my",
+    "nepali": "ne",
+    "dutch": "nl",
+    "flemish": "nl",
+    "norwegian": "no",
+    "northern sotho": "ns",
+    "occitan": "oc",
+    "oriya": "or",
+    "panjabi": "pa",
+    "punjabi": "pa",
+    "polish": "pl",
+    "pushto": "ps",
+    "pashto": "ps",
+    "portuguese": "pt",
+    "romanian": "ro",
+    "moldavian": "ro",
+    "moldovan": "ro",
+    "russian": "ru",
+    "sindhi": "sd",
+    "sinhala": "si",
+    "sinhalese": "si",
+    "slovak": "sk",
+    "slovenian": "sl",
+    "somali": "so",
+    "albanian": "sq",
+    "serbian": "sr",
+    "swati": "ss",
+    "sundanese": "su",
+    "swedish": "sv",
+    "swahili": "sw",
+    "tamil": "ta",
+    "thai": "th",
+    "tagalog": "tl",
+    "tswana": "tn",
+    "turkish": "tr",
+    "ukrainian": "uk",
+    "urdu": "ur",
+    "uzbek": "uz",
+    "vietnamese": "vi",
+    "wolof": "wo",
+    "xhosa": "xh",
+    "yiddish": "yi",
+    "yoruba": "yo",
+    "chinese": "zh",
+}
+
+def _normalize_language_name(name: str) -> str:
+    """Normalize language name for mapping: lowercase, replace underscores with space, strip extras.
+    Handles patterns like "Language: Persian" -> "persian".
+    """
+    if not isinstance(name, str):
+        return ""
+    # Remove leading prefixes like "Language:"
+    if ":" in name:
+        name = name.split(":", 1)[-1]
+    name = name.replace("_", " ").strip().lower()
+    return name
+
 
 def get_multilingual_language_detection_node_type() -> NodeType:
     return NodeType(
@@ -246,7 +375,14 @@ async def execute_multilingual_language_detection(context: Dict[str, Any]) -> No
                     logs.append(f"Fallback mapped using hardcoded table: {language_name}")
 
             
-        logs.append(f"Predicted: {language_name} (score={score:.4f})")
+        # Compute abbreviation (two/three-letter code) if available from provided list
+        norm_lang = _normalize_language_name(language_name)
+        # Handle a few specific label variants produced by model mappings
+        if norm_lang in {"chinese china", "chinese hongkong", "chinese taiwan"}:
+            norm_lang = "chinese"
+        abbrev = ABBREV_MAP.get(norm_lang)
+
+        logs.append(f"Predicted: {language_name} (score={score:.4f}, abbrevation={abbrev if abbrev else 'None'})")
 
         completed = datetime.now(timezone.utc)
 
@@ -265,16 +401,19 @@ async def execute_multilingual_language_detection(context: Dict[str, Any]) -> No
             message_data["session_id"] = session_id
         # Attach detection
         message_data["detected_language"] = language_name
+        message_data["detected_language_abbrevation"] = abbrev  # may be None
         message_data.setdefault("metadata", {})
         message_data["metadata"]["language_detection"] = {
             "model": model_name,
             "score": score,
             "raw_label": raw_label,
             "input_source": input_source,
+            "abbrevation": abbrev,
         }
 
         outputs = {
             "detected_language": language_name,
+            "abbrevation": abbrev,
             "message_data": message_data,
         }
 
