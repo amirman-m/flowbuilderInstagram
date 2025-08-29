@@ -76,7 +76,7 @@ async def setup_telegram_webhook(access_token: str, webhook_url: str) -> bool:
     logger.warning("setup_telegram_webhook is deprecated. Use TelegramBotService instead.")
     return False
 
-async def process_webhook_message(webhook_data: Dict[str, Any], access_token: str, flow_id: int = None) -> NodeExecutionResult:
+async def process_webhook_message(webhook_data: Dict[str, Any], access_token: str, flow_id: int = None, bot_id: Optional[str] = None) -> NodeExecutionResult:
     """
     Process incoming Telegram webhook message and extract data
     """
@@ -116,11 +116,13 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
                 "metadata": {
                     "telegram_message_id": message.get("message_id"),
                     "from_user": message.get("from", {}).get("username", "unknown"),
-                    "chat_type": message.get("chat", {}).get("type", "private")
+                    "chat_type": message.get("chat", {}).get("type", "private"),
+                    **({"bot_id": bot_id, "telegram_bot_id": bot_id} if bot_id else {})
                 },
                 "input_text": text_content,  # OpenAI node expects 'input_text'
                 "chat_input": text_content,  # Keep original for backward compatibility
-                "input_type": "text"
+                "input_type": "text",
+                **({"bot_id": bot_id, "telegram_bot_id": bot_id} if bot_id else {})
             }
             log_msg = f"Telegram text message from chat {chat_id}: \"{text_content[:50]}{'...' if len(text_content) > 50 else ''}\""
             
@@ -134,7 +136,8 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
                 "metadata": {
                     "telegram_message_id": message.get("message_id"),
                     "from_user": message.get("from", {}).get("username", "unknown"),
-                    "chat_type": message.get("chat", {}).get("type", "private")
+                    "chat_type": message.get("chat", {}).get("type", "private"),
+                    **({"bot_id": bot_id, "telegram_bot_id": bot_id} if bot_id else {})
                 },
                 "voice_input": {
                     "file_id": voice_info.get("file_id"),
@@ -143,7 +146,8 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
                     "mime_type": voice_info.get("mime_type"),
                     "file_size": voice_info.get("file_size")
                 },
-                "input_type": "voice"
+                "input_type": "voice",
+                **({"bot_id": bot_id, "telegram_bot_id": bot_id} if bot_id else {})
             }
             log_msg = f"Telegram voice message from chat {chat_id}: {voice_info.get('duration', 0)}s"
         
@@ -166,7 +170,8 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
                 "metadata": {
                     "telegram_message_id": message.get("message_id"),
                     "from_user": message.get("from", {}).get("username", "unknown"),
-                    "chat_type": message.get("chat", {}).get("type", "private")
+                    "chat_type": message.get("chat", {}).get("type", "private"),
+                    **({"bot_id": bot_id, "telegram_bot_id": bot_id} if bot_id else {})
                 },
                 # Provide both the selected best photo and the full list for downstream use
                 "photo_input": {
@@ -178,7 +183,8 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
                     "input_text": caption,
                     "chat_input": caption,
                 } if caption else {}),
-                "input_type": "photo"
+                "input_type": "photo",
+                **({"bot_id": bot_id, "telegram_bot_id": bot_id} if bot_id else {})
             }
             preview = f" with caption: \"{caption[:40]}...\"" if caption and len(caption) > 40 else (f" with caption: \"{caption}\"" if caption else "")
             dims = f"{(best_photo or {}).get('width', '?')}x{(best_photo or {}).get('height', '?')}"

@@ -55,8 +55,16 @@ async def telegram_webhook_dynamic(
             logger.error(f"No access token found for node {node_id}")
             return {"ok": False, "error": "No access token configured"}
         
+        # Resolve bot_id from active config for this user/access_token
+        bot_cfg = db.query(TelegramBotConfig).filter(
+            TelegramBotConfig.user_id == user_id,
+            TelegramBotConfig.access_token == access_token,
+            TelegramBotConfig.is_active == True,
+        ).first()
+        resolved_bot_id = (bot_cfg.bot_id if bot_cfg else None)
+        
         # Process webhook message
-        result = await process_webhook_message(webhook_data, access_token, flow_id)
+        result = await process_webhook_message(webhook_data, access_token, flow_id, bot_id=resolved_bot_id)
         
         if result.status == "success":
             message_data = result.outputs.get("message_data", {})
@@ -131,8 +139,16 @@ async def telegram_webhook(
             logger.error(f"No access token found for Telegram trigger in flow {flow_id}")
             return {"ok": False, "error": "No access token configured"}
         
+        # Resolve bot_id from DB for this flow's user
+        bot_cfg = db.query(TelegramBotConfig).filter(
+            TelegramBotConfig.user_id == flow.user_id,
+            TelegramBotConfig.access_token == access_token,
+            TelegramBotConfig.is_active == True,
+        ).first()
+        resolved_bot_id = (bot_cfg.bot_id if bot_cfg else None)
+        
         # Process the webhook message and notify SSE connections
-        result = await process_webhook_message(webhook_data, access_token, flow_id)
+        result = await process_webhook_message(webhook_data, access_token, flow_id, bot_id=resolved_bot_id)
         
         if result.status == "success":
             message_data = result.outputs.get("message_data", {})
@@ -389,7 +405,7 @@ async def telegram_webhook_stable(
 
         logger.info(f"Processing webhook message for flow {target_flow_id}")
         # Process webhook message
-        result = await process_webhook_message(webhook_data, access_token, target_flow_id)
+        result = await process_webhook_message(webhook_data, access_token, target_flow_id, bot_id=str(bot_id))
 
         if result.status != "success":
             logger.error(f"Failed to process webhook message: {result.error}")
