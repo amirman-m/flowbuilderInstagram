@@ -21,7 +21,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY download_model.py .
 
 # Pre-download the language detection model during build
-RUN python download_model.py
+#RUN python download_model.py
 
 # Copy application code
 COPY . .

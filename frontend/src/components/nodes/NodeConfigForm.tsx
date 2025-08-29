@@ -301,12 +301,13 @@ const NodeConfigForm: React.FC<NodeConfigFormProps> = ({
       case 'string':
         if (schema.enum) {
           return (
-            <FormControl key={fieldName} {...commonProps}>
+            <FormControl key={fieldName} fullWidth margin="normal" error={!!error && !isReadOnly}>
               <InputLabel>{schema.title || fieldName}</InputLabel>
               <Select
                 value={value || ''}
                 onChange={(e) => handleFieldChange(fieldName, e.target.value)}
                 label={schema.title || fieldName}
+                disabled={isReadOnly}
               >
                 {schema.enum.map((option) => (
                   <MenuItem key={String(option)} value={String(option)}>
@@ -314,9 +315,9 @@ const NodeConfigForm: React.FC<NodeConfigFormProps> = ({
                   </MenuItem>
                 ))}
               </Select>
-              {commonProps.helperText && (
-                <FormHelperText error={commonProps.error}>
-                  {commonProps.helperText}
+              {(error?.message || schema.description) && (
+                <FormHelperText error={!!error && !isReadOnly}>
+                  {error?.message || schema.description}
                 </FormHelperText>
               )}
             </FormControl>

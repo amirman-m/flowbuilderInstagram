@@ -1,11 +1,17 @@
-from typing import Dict, Any
+from typing import Dict, Any, List
 from app.models.nodes import NodeType, NodeCategory, NodeDataType, NodePort, NodePorts, NodeExecutionResult
 from datetime import datetime, timezone
 from app.services.utils.input_type import determine_input_type
+from app.services.utils.chat_context import extract_chat_context, should_use_chat_mode
+from app.services.chat_history import ChatHistoryService, ChatMessage
+from app.services.bot_validation import is_bot_active
 from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 import os
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 def get_simple_openai_chat_node_type() -> NodeType:
     return NodeType(
@@ -13,7 +19,7 @@ def get_simple_openai_chat_node_type() -> NodeType:
         name="OpenAI Chat",
         description="Processes input text using OpenAI's chat model",
         category=NodeCategory.PROCESSOR,
-        version="1.0.0",
+        version="1.1.0",
         icon="chat",
         color="#2196F3",
         ports=NodePorts(
@@ -41,6 +47,7 @@ def get_simple_openai_chat_node_type() -> NodeType:
         settings_schema={
             "type": "object",
             "properties": {
+                
                 "model": {
                     "type": "string",
                     "description": "OpenAI model to use",
@@ -53,6 +60,12 @@ def get_simple_openai_chat_node_type() -> NodeType:
                     "default": "You are a helpful assistant.",
                     "minLength": 1,
                     "maxLength": 2000
+                },
+                "mode": {
+                    "type": "string",
+                    "description": "completion: single message → one reply; chat: remembers conversation.",
+                    "default": "completion",
+                    "enum": ["completion", "chat"]
                 },
                 "temperature": {
                     "type": "number",
@@ -73,15 +86,221 @@ def get_simple_openai_chat_node_type() -> NodeType:
         }
     )
 
+async def execute_completion_mode(
+    input_text: str,
+    system_prompt: str,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    session_id: str,
+    input_source: str,
+    input_type: str
+) -> NodeExecutionResult:
+    """
+    Execute OpenAI in completion mode (single-turn)
+    """
+    try:
+        # Get API key from environment
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY environment variable not set or empty")
+        
+        logger.info(f"OpenAI completion mode: model={model}, input_length={len(input_text)}")
+           
+        # Initialize OpenAI client
+        llm = ChatOpenAI(
+            model=model,  
+            openai_api_key=api_key,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        
+        # Prepare messages for single-turn completion
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=input_text)
+        ]
+        
+        # Call the LLM
+        response = llm.invoke(messages)
+        ai_response = response.content
+        
+        # Extract token usage
+        if hasattr(response, 'response_metadata'):
+            token_usage = response.response_metadata.get('token_usage', {})
+            input_tokens = token_usage.get('prompt_tokens', 'N/A')
+            output_tokens = token_usage.get('completion_tokens', 'N/A')
+            total_tokens = token_usage.get('total_tokens', 'N/A')
+        else:
+            input_tokens = output_tokens = total_tokens = 0
+        
+        logger.info(f"OpenAI completion successful: {len(ai_response)} chars, {total_tokens} tokens")
+        
+        # Create output structure
+        timestamp = datetime.now(timezone.utc).isoformat()
+        
+        output_data = {
+            "session_id": session_id,
+            "input_text": input_text,
+            "input_type": input_type,
+            "ai_response": ai_response,
+            "timestamp": timestamp,
+            "metadata": {
+                "mode": "completion",
+                "model": model,
+                "system_prompt": system_prompt,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": total_tokens,
+                "input_source": input_source
+            }
+        }
+        
+        return NodeExecutionResult(
+            outputs={"ai_response": output_data},
+            status="success",
+            logs=[
+                f"OpenAI completion: {ai_response[:50]}{'...' if len(ai_response) > 50 else ''}",
+                f"Tokens - Input: {input_tokens}, Output: {output_tokens}, Total: {total_tokens}"
+            ]
+        )
+        
+    except Exception as e:
+        logger.error(f"OpenAI completion error: {str(e)}")
+        return NodeExecutionResult(
+            outputs={},
+            status="error",
+            error=f"OpenAI completion error: {str(e)}"
+        )
+
+async def execute_chat_mode(
+    input_text: str,
+    system_prompt: str,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    session_id: str,
+    input_source: str,
+    input_type: str,
+    chat_id: str,
+    bot_id: str
+) -> NodeExecutionResult:
+    """
+    Execute OpenAI in chat mode (multi-turn with history)
+    """
+    try:
+        # Get API key from environment
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY environment variable not set or empty")
+        
+        logger.info(f"OpenAI chat mode: model={model}, chat_id={chat_id}, bot_id={bot_id}")
+        
+        # Load existing chat history
+        chat_history = ChatHistoryService.load_chat_history(chat_id, bot_id)
+        logger.info(f"Loaded {len(chat_history)} messages from chat history")
+        
+        # Initialize OpenAI client
+        llm = ChatOpenAI(
+            model=model,  
+            openai_api_key=api_key,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        
+        # Prepare messages with history
+        messages = [SystemMessage(content=system_prompt)]
+        
+        # Add chat history
+        for msg in chat_history:
+            if msg.role == "user":
+                messages.append(HumanMessage(content=msg.content))
+            elif msg.role == "assistant":
+                messages.append(SystemMessage(content=msg.content))  # Use SystemMessage for assistant history
+        
+        # Add current user message
+        messages.append(HumanMessage(content=input_text))
+        
+        logger.info(f"Prepared {len(messages)} messages for OpenAI (including system + history + current)")
+        
+        # Call the LLM
+        response = llm.invoke(messages)
+        ai_response = response.content
+        
+        # Extract token usage
+        if hasattr(response, 'response_metadata'):
+            token_usage = response.response_metadata.get('token_usage', {})
+            input_tokens = token_usage.get('prompt_tokens', 'N/A')
+            output_tokens = token_usage.get('completion_tokens', 'N/A')
+            total_tokens = token_usage.get('total_tokens', 'N/A')
+        else:
+            input_tokens = output_tokens = total_tokens = 0
+        
+        # Update chat history with new messages
+        chat_history.append(ChatMessage("user", input_text))
+        chat_history.append(ChatMessage("assistant", ai_response))
+        
+        # Save updated history
+        save_success = ChatHistoryService.save_chat_history(chat_id, bot_id, chat_history)
+        if not save_success:
+            logger.warning(f"Failed to save chat history for chat_id={chat_id}, bot_id={bot_id}")
+        
+        logger.info(f"OpenAI chat successful: {len(ai_response)} chars, {total_tokens} tokens, history_saved={save_success}")
+        
+        # Create output structure
+        timestamp = datetime.now(timezone.utc).isoformat()
+        
+        output_data = {
+            "session_id": session_id,
+            "input_text": input_text,
+            "input_type": input_type,
+            "ai_response": ai_response,
+            "timestamp": timestamp,
+            "chat_id": chat_id,
+            "bot_id": bot_id,
+            "metadata": {
+                "mode": "chat",
+                "model": model,
+                "system_prompt": system_prompt,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": total_tokens,
+                "input_source": input_source,
+                "chat_history_length": len(chat_history),
+                "history_saved": save_success
+            }
+        }
+        
+        return NodeExecutionResult(
+            outputs={"ai_response": output_data},
+            status="success",
+            logs=[
+                f"OpenAI chat: {ai_response[:50]}{'...' if len(ai_response) > 50 else ''}",
+                f"Tokens - Input: {input_tokens}, Output: {output_tokens}, Total: {total_tokens}",
+                f"Chat history: {len(chat_history)} messages, saved: {save_success}"
+            ]
+        )
+        
+    except Exception as e:
+        logger.error(f"OpenAI chat error: {str(e)}")
+        return NodeExecutionResult(
+            outputs={},
+            status="error",
+            error=f"OpenAI chat error: {str(e)}"
+        )
+
 async def execute_simple_openai_chat(context: Dict[str, Any]) -> NodeExecutionResult:
     """
-    Execute simple OpenAI chat node
-    This node accepts string input from any connected node and sends it to OpenAI.
+    Execute simple OpenAI chat node with support for both completion and chat modes
     """
     # Get all inputs from connected nodes
     inputs = context.get("inputs", {})
     
-    # Find the first string input from any connected node
+    # Extract input text and metadata
     input_text = None
     input_source = None
     session_id = None
@@ -132,97 +351,52 @@ async def execute_simple_openai_chat(context: Dict[str, Any]) -> NodeExecutionRe
     
     # Get the settings from the context
     settings = context.get("settings", {})
+    mode = settings.get("mode", "completion")
     model = settings.get("model", "gpt-3.5-turbo")
     system_prompt = settings.get("system_prompt", "You are a helpful assistant.")
     temperature = settings.get("temperature", 0.7)
     max_tokens = settings.get("max_tokens", 1024)
     
-    try:
-        # Get API key from environment
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable not set or empty")
-        
-        # Print debug information
-        print(f"Using OpenAI API with model: {model}")
-        print(f"API Key (first 5 chars): {api_key[:5]}...")
-           
-        # Initialize OpenAI client (v1.x API)
-        llm = ChatOpenAI(
-            model=model,  
-            openai_api_key=api_key,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
-        # Prepare messages for LangChain
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=input_text)
-        ]
-        # Send the request using OpenAI client
-        # Call the LLM
-        response = llm.invoke(messages)
-        # Extract the response content
-        ai_response = response.content
-        print(f"Response received: {ai_response[:50]}...")
-        if hasattr(response, 'response_metadata'):
-            token_usage = response.response_metadata.get('token_usage', {})
-        # Get token usage
-            input_tokens = token_usage.get('prompt_tokens', 'N/A')
-            output_tokens = token_usage.get('completion_tokens', 'N/A')
-            total_tokens = token_usage.get('total_tokens', 'N/A')
-        else:
-            print("\nToken usage data not available in response.")
-            input_tokens = 0
-            output_tokens = 0
-            total_tokens = 0
-    except Exception as e:
-        print(f"OpenAI execution error: {str(e)}")
-        return NodeExecutionResult(
-            outputs={},
-            status="error",
-            error=f"OpenAI API error: {str(e)}"
-        )
-    '''  
-    except:
-        ai_response = "Error in OpenAI API"
-    
-    ai_response = "Error in OpenAI API"
-    input_tokens = 5
-    output_tokens = 5
-    total_tokens = 5
-    '''
-    # Create comprehensive output structure
-    timestamp = datetime.now(timezone.utc).isoformat()
-    
     # Determine input type based on content analysis (only if not already set from connected node)
     if input_type == "text":  # Only override default, preserve from connected node
         input_type = determine_input_type(input_text)
     
-    output_data = {
-        "session_id": session_id,
-        "input_text": input_text,
-        "input_type": input_type,
-        "ai_response": ai_response,
-        "timestamp": timestamp,
-        "metadata": {
-            "model": model,
-            "system_prompt": system_prompt,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "total_tokens": total_tokens,
-            "input_source": input_source
-        }
-    }
+    # Extract chat context for potential chat mode
+    chat_id, bot_id = extract_chat_context(inputs)
     
-    # Return the comprehensive response
-    return NodeExecutionResult(
-        outputs={"ai_response": output_data},
-        status="success",
-        logs=[
-            f"OpenAI response generated: {ai_response[:50]}{'...' if len(ai_response) > 50 else ''}",
-            f"Tokens used - Input: {input_tokens}, Output: {output_tokens}, Total: {total_tokens}"
-        ]
-    )
+    # Validate bot if chat mode is requested
+    bot_is_active = False
+    if chat_id and bot_id:
+        bot_is_active = is_bot_active(bot_id)
+    
+    # Determine execution mode
+    use_chat_mode = should_use_chat_mode(mode, chat_id, bot_id, bot_is_active)
+    
+    logger.info(f"OpenAI execution: mode_requested={mode}, use_chat_mode={use_chat_mode}, "
+               f"chat_id={chat_id}, bot_id={bot_id}, bot_active={bot_is_active}")
+    
+    # Execute based on determined mode
+    if use_chat_mode:
+        return await execute_chat_mode(
+            input_text=input_text,
+            system_prompt=system_prompt,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            session_id=session_id,
+            input_source=input_source,
+            input_type=input_type,
+            chat_id=chat_id,
+            bot_id=bot_id
+        )
+    else:
+        return await execute_completion_mode(
+            input_text=input_text,
+            system_prompt=system_prompt,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            session_id=session_id,
+            input_source=input_source,
+            input_type=input_type
+        )
