@@ -13,6 +13,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+try:
+    from app.core.database import SessionLocal  # type: ignore
+    from app.models.telegram_bot import TelegramBotConfig  # type: ignore
+except Exception:
+    SessionLocal = None
+    TelegramBotConfig = None
+
 def get_simple_openai_chat_node_type() -> NodeType:
     return NodeType(
         id="simple-openai-chat",
@@ -363,6 +370,32 @@ async def execute_simple_openai_chat(context: Dict[str, Any]) -> NodeExecutionRe
     
     # Extract chat context for potential chat mode
     chat_id, bot_id = extract_chat_context(inputs)
+
+    # Fallback: resolve bot_id from DB via default flow/node mapping if missing
+    if (not bot_id) and context.get("flow_id") and context.get("node_id") and SessionLocal and TelegramBotConfig:
+        try:
+            db = SessionLocal()
+            try:
+                flow_id = context.get("flow_id")
+                node_id = context.get("node_id")
+                cfg = (
+                    db.query(TelegramBotConfig)
+                    .filter(
+                        TelegramBotConfig.is_active == True,
+                        TelegramBotConfig.default_flow_id == flow_id,
+                        TelegramBotConfig.default_node_id == node_id,
+                    )
+                    .first()
+                )
+                if cfg and cfg.bot_id:
+                    bot_id = str(cfg.bot_id)
+                    logger.info(
+                        f"Resolved bot_id from DB via flow/node mapping: flow_id={flow_id}, node_id={node_id}, bot_id={bot_id}"
+                    )
+            finally:
+                db.close()
+        except Exception as _e:
+            logger.warning(f"Failed to resolve bot_id from DB mapping (flow/node): {_e}")
     
     # Validate bot if chat mode is requested
     bot_is_active = False

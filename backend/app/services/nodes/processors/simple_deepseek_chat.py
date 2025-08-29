@@ -15,6 +15,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+try:
+    from app.core.database import SessionLocal  # type: ignore
+    from app.models.telegram_bot import TelegramBotConfig  # type: ignore
+except Exception:  # keep optional to avoid hard failure in environments without DB
+    SessionLocal = None
+    TelegramBotConfig = None
+
 def get_simple_deepseek_chat_node_type() -> NodeType:
     return NodeType(
         id="simple-deepseek-chat",
@@ -414,6 +421,32 @@ async def execute_simple_deepseek_chat(context: Dict[str, Any]) -> NodeExecution
     # Extract chat context for potential chat mode
     chat_id, bot_id = extract_chat_context(inputs)
     
+    # Fallback: if bot_id missing but we have flow/node, try resolve from DB default mapping
+    if (not bot_id) and context.get("flow_id") and context.get("node_id") and SessionLocal and TelegramBotConfig:
+        try:
+            db: Session = SessionLocal()
+            try:
+                flow_id = context.get("flow_id")
+                node_id = context.get("node_id")
+                cfg = (
+                    db.query(TelegramBotConfig)
+                    .filter(
+                        TelegramBotConfig.is_active == True,
+                        TelegramBotConfig.default_flow_id == flow_id,
+                        TelegramBotConfig.default_node_id == node_id,
+                    )
+                    .first()
+                )
+                if cfg and cfg.bot_id:
+                    bot_id = str(cfg.bot_id)
+                    logger.info(
+                        f"Resolved bot_id from DB via flow/node mapping: flow_id={flow_id}, node_id={node_id}, bot_id={bot_id}"
+                    )
+            finally:
+                db.close()
+        except Exception as _e:
+            logger.warning(f"Failed to resolve bot_id from DB mapping (flow/node): {_e}")
+    
     # Validate bot if chat mode is requested
     bot_is_active = False
     if chat_id and bot_id:
@@ -422,8 +455,10 @@ async def execute_simple_deepseek_chat(context: Dict[str, Any]) -> NodeExecution
     # Determine execution mode
     use_chat_mode = should_use_chat_mode(mode, chat_id, bot_id, bot_is_active)
     
-    logger.info(f"DeepSeek execution: mode_requested={mode}, use_chat_mode={use_chat_mode}, "
-               f"chat_id={chat_id}, bot_id={bot_id}, bot_active={bot_is_active}")
+    logger.info(
+        f"DeepSeek execution: mode_requested={mode}, use_chat_mode={use_chat_mode}, "
+        f"chat_id={chat_id}, bot_id={bot_id}, bot_active={bot_is_active}"
+    )
     
     # Execute based on determined mode
     if use_chat_mode:
