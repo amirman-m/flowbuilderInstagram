@@ -373,13 +373,13 @@ async def execute_simple_deepseek_chat(context: Dict[str, Any]) -> NodeExecution
                 found_voice_input = True
                 break
     
-    # If voice input detected, skip processing gracefully
+    # If voice input detected, return empty outputs (no message sent)
     if found_voice_input:
-        logger.info("DeepSeek chat node: Voice input detected, skipping text processing")
+        logger.info("DeepSeek chat node: Voice input detected, returning empty outputs")
         return NodeExecutionResult(
-            outputs={"skipped": True, "reason": "voice_input_detected"},
+            outputs={},
             status="success",
-            logs=["Skipped processing - voice input detected"]
+            logs=["Voice input detected - no text processing"]
         )
     
     for port_id, port_data in inputs.items():

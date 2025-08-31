@@ -148,7 +148,7 @@ def _find_credentials(inputs: Dict[str, Any], settings: Dict[str, Any], flow_id:
         try:
             from sqlalchemy.orm import Session
             from ....core.database import get_db
-            from ....models.node_instance import NodeInstance
+            from app.models.nodes import NodeInstance
             import json
             
             db = next(get_db())
