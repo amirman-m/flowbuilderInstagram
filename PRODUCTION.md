@@ -2,7 +2,30 @@
 
 This guide will help you deploy the Social Media Flow Builder application to production.
 python -m alembic revision --autogenerate -m "Add telegram_bot_configs table"
+  to check server healty : 
 
+  1- df -h
+
+  2- # Stop all containers
+docker stop $(docker ps -aq) 2>/dev/null || true
+
+# Remove all containers, networks, images, and build cache
+docker system prune -a --volumes --force
+
+# Remove all Docker images (including cached layers)
+docker image prune -a --force
+
+# Remove all unused volumes
+docker volume prune --force
+
+# Clean build cache
+docker builder prune --all --force
+
+
+
+########################################################################
+########################################################################
+########################################################################
 Use one of the following:
 
 PowerShell (Windows):
@@ -29,6 +52,11 @@ cat database/init/004_telegram_bot_configs_stable_webhook.sql | docker compose e
 Get-Content -Raw .\database\init\005_telegram_bot_configs_add_name.sql | docker compose exec -T db psql -U postgres -d socialmediaflow
 
 cat database/init/005_telegram_bot_configs_add_name.sql | docker compose exec -T db psql -U socialmedia_user -d socialmediaflow_prod
+
+
+Get-Content -Raw .\database\init\006_chat_history.sql | docker compose exec -T db psql -U postgres -d socialmediaflow
+# Example for prod
+cat database/init/006_chat_history.sql | docker compose exec -T db psql -U socialmedia_user -d socialmediaflow_prod
 ## 🚀 Quick Start
 
 1. **Configure Environment Variables**

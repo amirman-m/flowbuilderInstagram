@@ -242,10 +242,11 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
     """
     Execute Telegram input trigger node using new modular TelegramBotService
     
-    Scenarios:
+    Execution Contexts:
     1) Webhook data processing (called from webhook endpoint) -> process and emit via SSE
-    2) Regular execution (from UI): verify that a bot config (by config_name) exists and has a webhook URL, without exposing token
-    3) Flow activation: continuous 24/7 processing mode
+    2) Node test execution (from UI): setup webhook, listen for ONE message for testing
+    3) Flow test execution: setup webhook, listen for ONE message for flow testing
+    4) 24/7 activation: continuous processing (controlled by flow.status)
     """
     start_time = datetime.now(timezone.utc)
     
@@ -257,8 +258,18 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
     node_id = context.get("node_id", "telegram_input")
     user_id = context.get("user_id", 1)  # TODO: use auth context
     
-    # NEW: Execution mode to distinguish test vs continuous
-    execution_mode = context.get("execution_mode", "single")  # "single", "flow_test", "continuous"
+    # Determine execution context
+    is_webhook_processing = bool(context.get("webhook_data"))
+    is_flow_execution = bool(context.get("is_flow_execution"))  # Set by flow executor
+    is_node_test = not is_webhook_processing and not is_flow_execution  # Individual node testing
+    
+    # Set execution mode based on context
+    if is_webhook_processing:
+        execution_mode = "webhook_processing"
+    elif is_flow_execution:
+        execution_mode = "flow_test"  # Flow testing - single webhook
+    else:
+        execution_mode = "node_test"  # Node testing - single webhook
     
     logger.info(f"Telegram node execution - flow {flow_id}, node {node_id}, mode: {execution_mode}")
     
@@ -266,10 +277,9 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
     webhook_data = context.get("webhook_data")
     if webhook_data:
         logger.info("Processing webhook data for flow execution")
-        # access_token is not needed for processing message contents
         return await process_webhook_message(webhook_data, access_token or "", flow_id)
     
-    # UI-triggered execution: prefer config_name-only flow
+    # Node/Flow testing execution: always allowed regardless of flow activation status
     try:
         bot_service = TelegramBotService()
         from app.core.database import SessionLocal
@@ -290,7 +300,6 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
             
             # If config_name provided, verify existence and readiness
             if (config_name and str(config_name).strip()):
-                # Reuse list to avoid exposing token, check webhook_url presence
                 configs = bot_service.list_user_configs(db, user_id)
                 match = next((c for c in configs if c.get("config_name") == config_name), None)
                 if not match:
@@ -310,7 +319,9 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
                         started_at=start_time,
                         completed_at=datetime.now(timezone.utc)
                     )
-                # Return ready status; frontend should start listening SSE
+                
+                # Return ready status for testing (regardless of flow activation)
+                test_message = "individual node" if execution_mode == "node_test" else "flow"
                 return NodeExecutionResult(
                     outputs={
                         "webhook_status": "configured",
@@ -320,15 +331,16 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
                             "bot_id": match.get("bot_id"),
                             "webhook_url": webhook_url,
                         },
-                        "message": f"Telegram bot is configured. Listening for messages ({'single message' if execution_mode == 'single' else 'continuous' if execution_mode == 'continuous' else 'flow test'}).",
-                        "execution_mode": execution_mode
+                        "message": f"Telegram bot configured. Ready for {test_message} testing - listening for single message.",
+                        "execution_mode": execution_mode,
+                        "is_test_mode": True
                     },
                     status="success",
                     started_at=start_time,
                     completed_at=datetime.now(timezone.utc)
                 )
             
-            # Fallback: if only access_token present, keep backward compatibility
+            # Fallback: if only access_token present, setup bot config
             success, message, config_data = await bot_service.validate_and_setup_bot(
                 db=db,
                 user_id=user_id,
@@ -344,12 +356,15 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
                     started_at=start_time,
                     completed_at=datetime.now(timezone.utc)
                 )
+            
+            test_message = "individual node" if execution_mode == "node_test" else "flow"
             return NodeExecutionResult(
                 outputs={
                     "webhook_status": "configured",
                     "bot_config": config_data,
-                    "message": message,
-                    "execution_mode": execution_mode
+                    "message": f"Bot configured successfully. Ready for {test_message} testing - listening for single message.",
+                    "execution_mode": execution_mode,
+                    "is_test_mode": True
                 },
                 status="success",
                 started_at=start_time,

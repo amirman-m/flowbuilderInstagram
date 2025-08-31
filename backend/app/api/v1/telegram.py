@@ -28,23 +28,28 @@ async def telegram_webhook_dynamic(
 ):
     """
     New dynamic webhook endpoint that supports user_id/flow_id/node_id structure
+    Handles both test execution and 24/7 activated flows
     """
     try:
         if request.method == "GET":
             return {"ok": True, "message": "Dynamic webhook endpoint is ready"}
         
-        # Check if flow is active before processing
+        webhook_data = await request.json()
+        logger.info(f"Received Telegram webhook for user {user_id}, flow {flow_id}, node {node_id}")
+        
+        # Check flow exists
         flow = db.query(Flow).filter(Flow.id == flow_id).first()
         if not flow:
             logger.error(f"Flow {flow_id} not found")
             return {"ok": False, "error": "Flow not found"}
         
-        if flow.status != "active":
-            logger.info(f"Ignoring webhook for inactive flow {flow_id} (status: {flow.status})")
-            return {"ok": True, "message": "Flow is not active, webhook ignored"}
+        # Determine if this is 24/7 activated flow or test execution
+        is_activated_flow = (flow.status == "active")
         
-        webhook_data = await request.json()
-        logger.info(f"Received Telegram webhook for user {user_id}, flow {flow_id}, node {node_id}")
+        # For 24/7 activated flows, only process if flow is active
+        # For test executions, always process regardless of activation status
+        execution_context = "activated_24_7" if is_activated_flow else "test_execution"
+        logger.info(f"Processing webhook in {execution_context} mode for flow {flow_id}")
         
         # Use new TelegramBotService for processing
         from ...services.telegram_bot_service import TelegramBotService
@@ -85,12 +90,13 @@ async def telegram_webhook_dynamic(
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "status": "success",
                 "outputs": {"message_data": message_data},
-                "logs": result.logs or []
+                "logs": result.logs or [],
+                "execution_context": execution_context
             }
             telegram_trigger.data = current_data
             db.commit()
             
-            # Execute flow
+            # Execute flow (always execute for both test and 24/7 modes)
             try:
                 flow_executor = create_flow_executor(db)
                 execution_result = await flow_executor.execute_flow(
@@ -99,7 +105,7 @@ async def telegram_webhook_dynamic(
                     user_id=user_id
                 )
                 
-                return {"ok": True, "message": "Message processed successfully"}
+                return {"ok": True, "message": f"Message processed successfully ({execution_context})"}
                 
             except Exception as e:
                 logger.error(f"Flow execution error: {e}")
