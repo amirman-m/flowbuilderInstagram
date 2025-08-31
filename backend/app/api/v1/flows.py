@@ -15,6 +15,8 @@ from ...services.flow_execution import create_flow_executor, FlowExecutionError
 from ...services import flow_service
 from ...services.telegram_bot_service import TelegramBotService, TelegramWebhookManager
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
@@ -246,8 +248,6 @@ async def execute_node(
                 pass
             
         # Debug: Log what we're sending to the node
-        import logging
-        logger = logging.getLogger(__name__)
         logger.info(f"🔍 DEBUG: Request inputs: {getattr(request, 'inputs', 'No inputs attr')}")
         logger.info(f"🔍 DEBUG: Request settings: {getattr(request, 'settings', 'No settings attr')}")
         logger.info(f"🔍 DEBUG: Request dict: {request.dict()}")

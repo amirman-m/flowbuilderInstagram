@@ -110,7 +110,7 @@ def _find_credentials(inputs: Dict[str, Any], settings: Dict[str, Any], flow_id:
                     if not access_token and "access_token" in md:
                         access_token = md["access_token"]
 
-                # search by session id via DB (same pattern as message action)
+                # search by session id via DB (enhanced pattern from message action)
                 session_id = port_data.get("session_id")
                 if not (access_token and chat_id) and flow_id and session_id:
                     try:
@@ -127,6 +127,7 @@ def _find_credentials(inputs: Dict[str, Any], settings: Dict[str, Any], flow_id:
                         for tg_node in telegram_nodes:
                             node_data = tg_node.data
                             if isinstance(node_data, dict):
+                                # Check lastExecution for matching session_id
                                 last_exec = node_data.get("lastExecution", {})
                                 if isinstance(last_exec, dict):
                                     outputs = last_exec.get("outputs", {})
@@ -134,10 +135,14 @@ def _find_credentials(inputs: Dict[str, Any], settings: Dict[str, Any], flow_id:
                                     if isinstance(message_data, dict) and message_data.get("session_id") == session_id:
                                         if not chat_id and "chat_id" in message_data:
                                             chat_id = message_data["chat_id"]
+                                            logger.info(f"Found matching chat_id from Telegram node session: {chat_id}")
+                                
+                                # Check settings for access_token (always check, not just when session matches)
                                 if not access_token:
                                     settings_data = node_data.get("settings", {})
                                     if "access_token" in settings_data:
                                         access_token = settings_data["access_token"]
+                                        logger.info(f"Found access_token from Telegram node settings")
                         db.close()
                     except Exception as e:
                         logger.error(f"Error searching for Telegram session data: {e}")
