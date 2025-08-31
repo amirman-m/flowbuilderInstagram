@@ -94,6 +94,8 @@ export const SendTelegramVoiceNode: React.FC<NodeComponentProps> = (props) => {
         'audio_data',
         'voice_data',
         'voice_input',
+        'voiceOutput',
+        'voiceInput',
       ];
 
       const isProbablyBase64 = (s: string) => {
@@ -134,7 +136,24 @@ export const SendTelegramVoiceNode: React.FC<NodeComponentProps> = (props) => {
         const lastExecution = sourceData.lastExecution || {};
         const outputs = lastExecution.outputs || {};
 
-        const outVal = outputs[edge.sourceHandle || 'output'];
+        // Try handle-specific value first
+        let outVal = outputs[edge.sourceHandle || 'output'];
+
+        // Fallback: probe common voice/audio output keys
+        if (outVal === undefined) {
+          for (const key of ['voice_output', 'voice', 'audio', 'data_uri', 'audio_data', 'voice_data', 'voiceInput', 'voiceOutput', 'url']) {
+            if (outputs[key] !== undefined) {
+              outVal = outputs[key];
+              break;
+            }
+          }
+        }
+
+        // Final fallback: pass the entire outputs object to let backend extract
+        if (outVal === undefined) {
+          outVal = outputs;
+        }
+
         const voiceString = pickVoiceCandidate(outVal);
 
         // Map the output to the input port; default to 'voice'. Prefer extracted string when available.

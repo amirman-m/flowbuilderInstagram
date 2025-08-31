@@ -22,7 +22,7 @@ export const OpenAISpeechNode: React.FC<NodeComponentProps> = (props) => {
   });
 
   const currentSettings = instance?.data?.settings || {};
-  const { model = '', voice = '', response_format = 'mp3', speed = 1.0 } = currentSettings as any;
+  const { model = '', voice = '', response_format = 'opus', speed = 1.0 } = currentSettings as any;
 
   const handleBeforeExecute = () => {
     // Require at least voice; model has default in backend but we surface for UX

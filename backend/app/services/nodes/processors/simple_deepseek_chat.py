@@ -421,54 +421,27 @@ async def execute_simple_deepseek_chat(context: Dict[str, Any]) -> NodeExecution
     # Extract chat context for potential chat mode
     chat_id, bot_id = extract_chat_context(inputs)
     
-    # Try to resolve bot_id from inputs first (from message_data)
-    if not bot_id:
-        for port_id, port_data in inputs.items():
-            if isinstance(port_data, dict):
-                # Check direct bot_id field
-                if "bot_id" in port_data:
-                    bot_id = str(port_data["bot_id"])
-                    logger.info(f"Found bot_id from input data: {bot_id}")
-                    break
-                # Check metadata
-                if "metadata" in port_data and isinstance(port_data["metadata"], dict):
-                    if "bot_id" in port_data["metadata"]:
-                        bot_id = str(port_data["metadata"]["bot_id"])
-                        logger.info(f"Found bot_id from input metadata: {bot_id}")
-                        break
-
-    # Try to resolve bot_id from flow/node mapping if still not found
-    if not bot_id and context.get("flow_id") and context.get("node_id"):
+    # Fallback: if bot_id missing but we have flow/node, try resolve from DB default mapping
+    if (not bot_id) and context.get("flow_id") and context.get("node_id") and SessionLocal and TelegramBotConfig:
         try:
-            db = SessionLocal()
+            db: Session = SessionLocal()
             try:
-                # Look up the current telegram_input node in this flow
-                tg_node = (
-                    db.query(NodeInstance)
-                    .filter(NodeInstance.flow_id == context.get("flow_id"), NodeInstance.type_id == "telegram_input")
+                flow_id = context.get("flow_id")
+                node_id = context.get("node_id")
+                cfg = (
+                    db.query(TelegramBotConfig)
+                    .filter(
+                        TelegramBotConfig.is_active == True,
+                        TelegramBotConfig.default_flow_id == flow_id,
+                        TelegramBotConfig.default_node_id == node_id,
+                    )
                     .first()
                 )
-                if tg_node:
-                    # Try to get bot_id from the node's TelegramBotConfig
-                    settings_data = (tg_node.data or {}).get("settings", {})
-                    access_token = settings_data.get("access_token")
-                    config_name = settings_data.get("config_name")
-                    
-                    if access_token or config_name:
-                        from ...models.telegram_bot import TelegramBotConfig
-                        query = db.query(TelegramBotConfig).filter(TelegramBotConfig.user_id == 1)  # TODO: real user_id
-                        
-                        if access_token:
-                            query = query.filter(TelegramBotConfig.access_token == access_token)
-                        elif config_name:
-                            query = query.filter(TelegramBotConfig.config_name == config_name)
-                        
-                        cfg = query.filter(TelegramBotConfig.is_active == True).first()
-                        if cfg and cfg.bot_id:
-                            bot_id = str(cfg.bot_id)
-                            logger.info(
-                                f"Resolved bot_id from DB via flow/node mapping: flow_id={context.get('flow_id')}, node_id={context.get('node_id')}, bot_id={bot_id}"
-                            )
+                if cfg and cfg.bot_id:
+                    bot_id = str(cfg.bot_id)
+                    logger.info(
+                        f"Resolved bot_id from DB via flow/node mapping: flow_id={flow_id}, node_id={node_id}, bot_id={bot_id}"
+                    )
             finally:
                 db.close()
         except Exception as _e:

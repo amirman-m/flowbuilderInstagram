@@ -79,7 +79,7 @@ def get_openai_speech_node_type() -> NodeType:
                     "type": "string",
                     "description": "Output audio format",
                     "enum": SUPPORTED_FORMATS,
-                    "default": "mp3",
+                    "default": "opus",
                 },
             },
             "required": ["model", "voice"],
@@ -155,7 +155,7 @@ async def execute_openai_speech(context: Dict[str, Any]) -> NodeExecutionResult:
     model = settings.get("model", "tts-1")
     voice = settings.get("voice")
     speed = settings.get("speed", 1.0)
-    response_format = settings.get("response_format", "mp3")
+    response_format = settings.get("response_format", "opus")
 
     # Validate settings
     if model not in SUPPORTED_MODELS:

@@ -90,10 +90,7 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
         logger.info(f"🔍 flow_id from context.get('flow_id'): {context.get('flow_id')}")
         logger.info(f"🔍 flowId from context.get('flowId'): {context.get('flowId')}")
         logger.info(f"🔍 Final flow_id value: {flow_id}")
-        
-        logger.info(f"Executing Telegram output message node {node_id}")
-        logger.info(f"Inputs: {inputs}")
-        logger.info(f"Settings: {settings}")
+
         
         # Find the first string input from any connected node
         # Extract message text from inputs

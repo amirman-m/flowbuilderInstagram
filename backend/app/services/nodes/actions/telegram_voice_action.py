@@ -110,7 +110,7 @@ def _find_credentials(inputs: Dict[str, Any], settings: Dict[str, Any], flow_id:
                     if not access_token and "access_token" in md:
                         access_token = md["access_token"]
 
-                # search by session id via DB (enhanced pattern from message action)
+                # search by session id via DB (same pattern as message action)
                 session_id = port_data.get("session_id")
                 if not (access_token and chat_id) and flow_id and session_id:
                     try:
@@ -127,7 +127,6 @@ def _find_credentials(inputs: Dict[str, Any], settings: Dict[str, Any], flow_id:
                         for tg_node in telegram_nodes:
                             node_data = tg_node.data
                             if isinstance(node_data, dict):
-                                # Check lastExecution for matching session_id
                                 last_exec = node_data.get("lastExecution", {})
                                 if isinstance(last_exec, dict):
                                     outputs = last_exec.get("outputs", {})
@@ -135,17 +134,85 @@ def _find_credentials(inputs: Dict[str, Any], settings: Dict[str, Any], flow_id:
                                     if isinstance(message_data, dict) and message_data.get("session_id") == session_id:
                                         if not chat_id and "chat_id" in message_data:
                                             chat_id = message_data["chat_id"]
-                                            logger.info(f"Found matching chat_id from Telegram node session: {chat_id}")
-                                
-                                # Check settings for access_token (always check, not just when session matches)
                                 if not access_token:
                                     settings_data = node_data.get("settings", {})
                                     if "access_token" in settings_data:
                                         access_token = settings_data["access_token"]
-                                        logger.info(f"Found access_token from Telegram node settings")
                         db.close()
                     except Exception as e:
                         logger.error(f"Error searching for Telegram session data: {e}")
+
+    # If we still don't have the credentials, search all nodes in the flow (like message action does)
+    if (not access_token or not chat_id) and flow_id:
+        logger.info(f"Searching for Telegram input node in flow {flow_id}")
+        try:
+            from sqlalchemy.orm import Session
+            from ....core.database import get_db
+            from ....models.node_instance import NodeInstance
+            import json
+            
+            db = next(get_db())
+            
+            # Query the database for nodes in this flow
+            nodes = db.query(NodeInstance).filter(NodeInstance.flow_id == flow_id).all()
+            logger.info(f"Found {len(nodes)} nodes in flow {flow_id}")
+            
+            # Find the telegram_input node
+            for node in nodes:
+                logger.info(f"node.type_id: {node.type_id}")
+                if node.type_id == "telegram_input":
+                    logger.info(f"Found telegram_input node: {node.id}")
+                    node_data = node.data
+                    
+                    # Convert from JSON string if needed
+                    if isinstance(node_data, str):
+                        try:
+                            node_data = json.loads(node_data)
+                        except:
+                            logger.error("Failed to parse node data JSON")
+                            node_data = {}
+                    
+                    # Check for access_token in settings
+                    if not access_token and node_data and "settings" in node_data:
+                        node_settings = node_data["settings"]
+                        if isinstance(node_settings, str):
+                            try:
+                                node_settings = json.loads(node_settings)
+                            except:
+                                node_settings = {}
+                                
+                        access_token = node_settings.get("access_token")
+                        if access_token:
+                            logger.info("Found access_token in telegram_input node settings")
+                    
+                    # Check for chat_id in lastExecution
+                    if not chat_id and node_data and "lastExecution" in node_data:
+                        last_exec = node_data["lastExecution"]
+                        if isinstance(last_exec, str):
+                            try:
+                                last_exec = json.loads(last_exec)
+                            except:
+                                last_exec = {}
+                                
+                        if last_exec and "outputs" in last_exec and "message_data" in last_exec["outputs"]:
+                            message_data = last_exec["outputs"]["message_data"]
+                            if isinstance(message_data, str):
+                                try:
+                                    message_data = json.loads(message_data)
+                                except:
+                                    message_data = {}
+                                    
+                            if isinstance(message_data, dict) and "chat_id" in message_data:
+                                chat_id = message_data["chat_id"]
+                                logger.info(f"Found chat_id from telegram_input node lastExecution: {chat_id}")
+                    
+                    # Break if we found both
+                    if access_token and chat_id:
+                        break
+                        
+            db.close()
+        except Exception as e:
+            logger.error(f"Error searching for Telegram input node: {e}")
 
     # try int conversion
     if chat_id and isinstance(chat_id, str):
