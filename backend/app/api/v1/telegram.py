@@ -292,23 +292,28 @@ async def setup_telegram_webhook_endpoint(
 
 # NEW: SSE endpoint for real-time Telegram message updates
 @router.get("/listen/{flow_id}")
-async def listen_for_telegram_messages(
+async def telegram_sse_listen(
     flow_id: int,
+    execution_mode: str = Query("node_test", description="Execution mode: node_test, flow_test, or activated_24_7"),
     db: Session = Depends(get_db)
 ):
     """
-    Server-Sent Events endpoint for listening to Telegram messages in real-time
-    This replaces the synchronous waiting approach
+    SSE endpoint for Telegram webhook listening
+    Supports different execution modes:
+    - node_test: Individual node testing (single message, 60s timeout)
+    - flow_test: Flow testing (single message, 60s timeout) 
+    - activated_24_7: Continuous 24/7 processing (no timeout, dashboard activated)
     """
     try:
-        # Validate flow exists
         flow = db.query(Flow).filter(Flow.id == flow_id).first()
         if not flow:
             raise HTTPException(status_code=404, detail="Flow not found")
         
-        if flow.status != "active":
-            logger.info(f"Ignoring SSE connection for inactive flow {flow_id} (status: {flow.status})")
-            return {"ok": True, "message": "Flow is not active, SSE connection ignored"}
+        # For 24/7 activated mode, check if flow is active
+        # For test modes, allow regardless of activation status
+        if execution_mode == "activated_24_7" and flow.status != "active":
+            logger.info(f"Blocking 24/7 SSE connection for inactive flow {flow_id} (status: {flow.status})")
+            raise HTTPException(status_code=400, detail="Flow must be activated for 24/7 webhook listening")
         
         # Find Telegram trigger node
         telegram_trigger = db.query(NodeInstance).filter(
@@ -317,36 +322,24 @@ async def listen_for_telegram_messages(
         ).first()
         
         if not telegram_trigger:
-            raise HTTPException(
-                status_code=400,
-                detail="No Telegram trigger node found in this flow"
-            )
+            raise HTTPException(status_code=404, detail="No Telegram trigger found in flow")
         
-        # Get access token
-        settings = telegram_trigger.data.get("settings", {})
-        access_token = settings.get("access_token")
-        
-        if not access_token:
-            raise HTTPException(
-                status_code=400,
-                detail="Bot access token not configured"
-            )
-        
-        # Create context and call the SSE function
+        # Prepare context for SSE stream
         context = {
-            "settings": settings,
-            "access_token": access_token,
             "flow_id": flow_id,
-            "node_id": telegram_trigger.id
+            "node_id": telegram_trigger.id,
+            "execution_mode": execution_mode,
+            "is_test_mode": execution_mode in ["node_test", "flow_test"]
         }
         
+        logger.info(f"Starting SSE stream for flow {flow_id}, mode: {execution_mode}")
         return await create_telegram_sse_stream(context)
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"SSE endpoint error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to start SSE stream: {str(e)}")
+        logger.error(f"Error setting up SSE stream: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/webhook/u/{user_id}/b/{bot_id}/{secret}")
 @router.get("/webhook/u/{user_id}/b/{bot_id}/{secret}")
