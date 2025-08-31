@@ -33,6 +33,16 @@ async def telegram_webhook_dynamic(
         if request.method == "GET":
             return {"ok": True, "message": "Dynamic webhook endpoint is ready"}
         
+        # Check if flow is active before processing
+        flow = db.query(Flow).filter(Flow.id == flow_id).first()
+        if not flow:
+            logger.error(f"Flow {flow_id} not found")
+            return {"ok": False, "error": "Flow not found"}
+        
+        if flow.status != "active":
+            logger.info(f"Ignoring webhook for inactive flow {flow_id} (status: {flow.status})")
+            return {"ok": True, "message": "Flow is not active, webhook ignored"}
+        
         webhook_data = await request.json()
         logger.info(f"Received Telegram webhook for user {user_id}, flow {flow_id}, node {node_id}")
         
@@ -117,13 +127,18 @@ async def telegram_webhook(
         if request.method == "GET":
             return {"ok": True, "message": "Webhook endpoint is ready"}
         
-        webhook_data = await request.json()
-        logger.info(f"Received Telegram webhook for flow {flow_id}: {json.dumps(webhook_data, indent=2)}")
-        
+        # Check if flow is active before processing
         flow = db.query(Flow).filter(Flow.id == flow_id).first()
         if not flow:
             logger.error(f"Flow {flow_id} not found")
             return {"ok": False, "error": "Flow not found"}
+        
+        if flow.status != "active":
+            logger.info(f"Ignoring webhook for inactive flow {flow_id} (status: {flow.status})")
+            return {"ok": True, "message": "Flow is not active, webhook ignored"}
+        
+        webhook_data = await request.json()
+        logger.info(f"Received Telegram webhook for flow {flow_id}: {json.dumps(webhook_data, indent=2)}")
         
         telegram_trigger = db.query(NodeInstance).filter(
             NodeInstance.flow_id == flow_id,
@@ -224,6 +239,10 @@ async def setup_telegram_webhook_endpoint(
         if not flow:
             raise HTTPException(status_code=404, detail="Flow not found")
         
+        if flow.status != "active":
+            logger.info(f"Ignoring webhook setup for inactive flow {flow_id} (status: {flow.status})")
+            return {"ok": True, "message": "Flow is not active, webhook setup ignored"}
+        
         telegram_trigger = db.query(NodeInstance).filter(
             NodeInstance.flow_id == flow_id,
             NodeInstance.type_id == "telegram_input"
@@ -280,6 +299,10 @@ async def listen_for_telegram_messages(
         flow = db.query(Flow).filter(Flow.id == flow_id).first()
         if not flow:
             raise HTTPException(status_code=404, detail="Flow not found")
+        
+        if flow.status != "active":
+            logger.info(f"Ignoring SSE connection for inactive flow {flow_id} (status: {flow.status})")
+            return {"ok": True, "message": "Flow is not active, SSE connection ignored"}
         
         # Find Telegram trigger node
         telegram_trigger = db.query(NodeInstance).filter(
@@ -430,6 +453,15 @@ async def telegram_webhook_stable(
 
         # Execute flow
         try:
+            flow = db.query(Flow).filter(Flow.id == target_flow_id).first()
+            if not flow:
+                logger.error(f"Flow {target_flow_id} not found")
+                return {"ok": False, "error": "Flow not found"}
+            
+            if flow.status != "active":
+                logger.info(f"Ignoring webhook for inactive flow {target_flow_id} (status: {flow.status})")
+                return {"ok": True, "message": "Flow is not active, webhook ignored"}
+            
             flow_executor = create_flow_executor(db)
             await flow_executor.execute_flow(
                 flow_id=target_flow_id,

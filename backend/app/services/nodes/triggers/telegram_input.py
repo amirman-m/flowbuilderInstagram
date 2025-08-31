@@ -245,6 +245,7 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
     Scenarios:
     1) Webhook data processing (called from webhook endpoint) -> process and emit via SSE
     2) Regular execution (from UI): verify that a bot config (by config_name) exists and has a webhook URL, without exposing token
+    3) Flow activation: continuous 24/7 processing mode
     """
     start_time = datetime.now(timezone.utc)
     
@@ -256,7 +257,10 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
     node_id = context.get("node_id", "telegram_input")
     user_id = context.get("user_id", 1)  # TODO: use auth context
     
-    logger.info(f"Telegram node execution - flow {flow_id}, node {node_id}")
+    # NEW: Execution mode to distinguish test vs continuous
+    execution_mode = context.get("execution_mode", "single")  # "single", "flow_test", "continuous"
+    
+    logger.info(f"Telegram node execution - flow {flow_id}, node {node_id}, mode: {execution_mode}")
     
     # Webhook processing path
     webhook_data = context.get("webhook_data")
@@ -276,7 +280,8 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
                 return NodeExecutionResult(
                     outputs={
                         "webhook_status": "pending_setup",
-                        "message": "Provide a saved bot name (config_name) or configure one in settings."
+                        "message": "Provide a saved bot name (config_name) or configure one in settings.",
+                        "execution_mode": execution_mode
                     },
                     status="success",
                     started_at=start_time,
@@ -315,7 +320,8 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
                             "bot_id": match.get("bot_id"),
                             "webhook_url": webhook_url,
                         },
-                        "message": "Telegram bot is configured. Listening for messages."
+                        "message": f"Telegram bot is configured. Listening for messages ({'single message' if execution_mode == 'single' else 'continuous' if execution_mode == 'continuous' else 'flow test'}).",
+                        "execution_mode": execution_mode
                     },
                     status="success",
                     started_at=start_time,
@@ -342,7 +348,8 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
                 outputs={
                     "webhook_status": "configured",
                     "bot_config": config_data,
-                    "message": message
+                    "message": message,
+                    "execution_mode": execution_mode
                 },
                 status="success",
                 started_at=start_time,

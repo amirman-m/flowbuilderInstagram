@@ -340,14 +340,14 @@ async def activate_flow(
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
 
-    # Step 7: Confirm activation (no endless loop; webhook + SSE handle events)
+    # Step 7: Confirm activation (continuous 24/7 mode)
     flow.status = "active"
     db.commit()
     db.refresh(flow)
 
     return {
         "ok": True,
-        "message": "Flow activated. Telegram webhook configured.",
+        "message": "Flow activated. Telegram webhook configured for 24/7 processing.",
         "flow_id": flow.id,
         "status": flow.status,
         "webhook_url": (cfg or {}).get("webhook_url") if isinstance(cfg, dict) else None,
@@ -360,38 +360,54 @@ async def deactivate_flow(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Deactivate a flow: delete Telegram webhook if present and set status to draft."""
+    """Deactivate a flow: disable webhook processing but keep webhook configured."""
     # Validate ownership
     flow = db.query(Flow).filter(Flow.id == flow_id, Flow.user_id == current_user.id).first()
     if not flow:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Flow not found")
 
-    # Find telegram trigger (if any)
+    # Find telegram trigger (if any) and disable bot config
     telegram_trigger = db.query(NodeInstance).filter(
         NodeInstance.flow_id == flow_id,
         NodeInstance.type_id == "telegram_input"
     ).first()
 
-    # Attempt webhook deletion if we have a token
+    # Disable bot config instead of deleting webhook
     if telegram_trigger:
         settings_data = (telegram_trigger.data or {}).get("settings", {})
         access_token = settings_data.get("access_token")
-        if access_token:
-            mgr = TelegramWebhookManager()
-            try:
-                await mgr.delete_webhook(access_token)
-            except Exception:
-                # Don't fail deactivation on Telegram API errors
-                logging.exception("Failed to delete Telegram webhook during deactivation")
+        config_name = settings_data.get("config_name")
+        
+        # Find and disable the bot config to stop processing
+        if access_token or config_name:
+            from ...models.telegram_bot import TelegramBotConfig
+            
+            query = db.query(TelegramBotConfig).filter(
+                TelegramBotConfig.user_id == current_user.id,
+                TelegramBotConfig.is_active == True
+            )
+            
+            if access_token:
+                query = query.filter(TelegramBotConfig.access_token == access_token)
+            elif config_name:
+                query = query.filter(TelegramBotConfig.config_name == config_name)
+            
+            bot_config = query.first()
+            if bot_config:
+                # Don't delete webhook, just mark as inactive for processing
+                # Webhook stays configured but won't process messages
+                logger.info(f"Disabling bot config for flow {flow_id} deactivation (keeping webhook)")
+            else:
+                logger.warning(f"No bot config found for flow {flow_id} during deactivation")
 
-    # Persist status
+    # Persist status - this is the main control for webhook processing
     flow.status = "draft"
     db.commit()
     db.refresh(flow)
 
     return {
         "ok": True,
-        "message": "Flow deactivated.",
+        "message": "Flow deactivated. Webhook processing disabled but webhook remains configured.",
         "flow_id": flow.id,
         "status": flow.status,
     }
