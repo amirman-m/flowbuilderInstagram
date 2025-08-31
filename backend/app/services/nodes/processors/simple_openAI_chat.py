@@ -313,6 +313,24 @@ async def execute_simple_openai_chat(context: Dict[str, Any]) -> NodeExecutionRe
     session_id = None
     input_type = "text"  # default
     
+    # Check for voice input first to skip processing
+    found_voice_input = False
+    for port_id, port_data in inputs.items():
+        if isinstance(port_data, dict):
+            input_type_val = str(port_data.get("input_type", "")).lower()
+            if input_type_val == "voice" or "voice_input" in port_data:
+                found_voice_input = True
+                break
+    
+    # If voice input detected, skip processing gracefully
+    if found_voice_input:
+        logger.info("OpenAI chat node: Voice input detected, skipping text processing")
+        return NodeExecutionResult(
+            outputs={"skipped": True, "reason": "voice_input_detected"},
+            status="success",
+            logs=["Skipped processing - voice input detected"]
+        )
+    
     for port_id, port_data in inputs.items():
         if isinstance(port_data, str) and port_data.strip():
             input_text = port_data.strip()
@@ -335,15 +353,16 @@ async def execute_simple_openai_chat(context: Dict[str, Any]) -> NodeExecutionRe
                 session_id = port_data.get("session_id")
                 input_type = port_data.get("input_type", "text")
                 break
-            # PRIORITY 3: Check for any other string value in the dict
-            else:
-                for key, value in port_data.items():
-                    if isinstance(value, str) and value.strip():
-                        input_text = value.strip()
-                        input_source = f"{port_id}.{key}"
-                        break
-            if input_text:
+            # PRIORITY 3: Check for chat_input (backward compatibility)
+            elif "chat_input" in port_data and isinstance(port_data["chat_input"], str):
+                input_text = port_data["chat_input"].strip()
+                input_source = f"{port_id}.chat_input"
+                session_id = port_data.get("session_id")
+                input_type = port_data.get("input_type", "text")
                 break
+            # DO NOT fall back to arbitrary strings to avoid processing UUIDs/session_ids
+        if input_text:
+            break
     
     # Generate session_id if not provided
     if not session_id:
