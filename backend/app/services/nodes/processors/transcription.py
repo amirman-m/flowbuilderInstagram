@@ -176,7 +176,7 @@ async def execute_transcription(context: Dict[str, Any]) -> NodeExecutionResult:
                     file=audio_file,
                     response_format="text"
                 )
-                # Extract transcribed text
+                # Extract transcribed text as string
                 transcribed_text = transcription
                 print(f"Transcription successful (primary ext {file_extension}): {transcribed_text[:50]}...")
         finally:
@@ -232,25 +232,14 @@ async def execute_transcription(context: Dict[str, Any]) -> NodeExecutionResult:
                         transcribed_text = transcription
                         print(f"Transcription successful (fallback ext {alt_ext}): {transcribed_text[:50]}...")
 
-                    # Success on fallback: proceed to build response
+                    # Success on fallback: return transcribed text directly to match port schema
                     timestamp = datetime.now(timezone.utc).isoformat()
-                    output_data = {
-                        "session_id": session_id,
-                        "input_type": "voice",
-                        "ai_response": transcribed_text,
-                        "timestamp": timestamp,
-                        "metadata": {
-                            "model": "gpt-4o-transcribe",
-                            "input_source": input_source,
-                            "fallback_used": True,
-                            "fallback_extension": alt_ext,
-                        }
-                    }
                     return NodeExecutionResult(
-                        outputs={"ai_response": output_data},
+                        outputs={"ai_response": transcribed_text},
                         status="success",
                         logs=[
-                            f"Audio transcription generated via fallback {alt_ext}: {transcribed_text[:50]}{'...' if len(transcribed_text) > 50 else ''}"
+                            f"Audio transcription generated via fallback {alt_ext}: {transcribed_text[:50]}{'...' if len(transcribed_text) > 50 else ''}",
+                            f"metadata: model=gpt-4o-transcribe, input_source={input_source}, fallback_used=True, fallback_extension={alt_ext}, timestamp={timestamp}, session_id={session_id}"
                         ]
                     )
                 finally:
@@ -267,25 +256,13 @@ async def execute_transcription(context: Dict[str, Any]) -> NodeExecutionResult:
             error=f"Transcription API error: {err_msg}"
         )
     
-    # Create comprehensive output structure
+    # Return transcribed text directly to match declared output type (STRING)
     timestamp = datetime.now(timezone.utc).isoformat()
-    
-    output_data = {
-        "session_id": session_id,
-        "input_type": "voice",
-        "ai_response": transcribed_text,
-        "timestamp": timestamp,
-        "metadata": {
-            "model": "gpt-4o-transcribe",
-            "input_source": input_source
-        }
-    }
-    
-    # Return the comprehensive response
     return NodeExecutionResult(
-        outputs={"ai_response": output_data},
+        outputs={"ai_response": transcribed_text},
         status="success",
         logs=[
-            f"Audio transcription generated: {transcribed_text[:50]}{'...' if len(transcribed_text) > 50 else ''}"
+            f"Audio transcription generated: {transcribed_text[:50]}{'...' if len(transcribed_text) > 50 else ''}",
+            f"metadata: model=gpt-4o-transcribe, input_source={input_source}, timestamp={timestamp}, session_id={session_id}"
         ]
     )
