@@ -6,7 +6,6 @@ import { Box, Typography, IconButton, Tooltip } from '@mui/material';
 import { 
   PlayArrow as ExecuteIcon,
   Delete as DeleteIcon,
-  Settings as SettingsIcon,
   CheckCircle as SuccessIcon,
   Error as ErrorIcon,
   Warning as WarningIcon,
@@ -29,7 +28,6 @@ interface CompactNodePresentationProps {
   // Event handlers
   onExecute: () => void;
   onDelete: () => void;
-  onSettings?: () => void;
   
   // Port configuration from backend
   inputPorts?: Array<{id: string; name: string; label: string}>;
@@ -38,7 +36,6 @@ interface CompactNodePresentationProps {
   // Optional customization
   showExecuteButton?: boolean;
   showDeleteButton?: boolean;
-  showSettingsButton?: boolean;
   disabled?: boolean;
 }
 
@@ -50,12 +47,10 @@ export const CompactNodePresentation: React.FC<CompactNodePresentationProps> = (
   isExecuting,
   onExecute,
   onDelete,
-  onSettings,
   inputPorts = [],
   outputPorts = [],
   showExecuteButton = true,
   showDeleteButton = true,
-  showSettingsButton = false,
   disabled = false
 }) => {
   const nodeColor = getNodeColor(colorName);
@@ -175,38 +170,6 @@ export const CompactNodePresentation: React.FC<CompactNodePresentationProps> = (
           flexShrink: 0
         }}
       >
-        {/* Settings Button */}
-        {showSettingsButton && onSettings && (
-          <Tooltip title="Node settings">
-            <span>
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSettings();
-                }}
-                disabled={disabled}
-                sx={{
-                  width: 20,
-                  height: 20,
-                  backgroundColor: '#f3f4f6',
-                  color: '#6b7280',
-                  '&:hover': {
-                    backgroundColor: '#3b82f6',
-                    color: '#ffffff'
-                  },
-                  '&:disabled': {
-                    backgroundColor: '#e5e7eb',
-                    color: '#9ca3af'
-                  }
-                }}
-              >
-                <SettingsIcon sx={{ fontSize: 12 }} />
-              </IconButton>
-            </span>
-          </Tooltip>
-        )}
-
         {/* Execute Button */}
         {showExecuteButton && (
           <Tooltip title={isExecuting ? 'Executing...' : 'Execute node'}>
