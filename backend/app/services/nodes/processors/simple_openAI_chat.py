@@ -6,7 +6,7 @@ from app.services.utils.chat_context import extract_chat_context, should_use_cha
 from app.services.chat_history import ChatHistoryService, ChatMessage
 from app.services.bot_validation import is_bot_active
 from langchain_openai import ChatOpenAI
-from langchain.schema import HumanMessage, SystemMessage
+from langchain.schema import HumanMessage, SystemMessage, AIMessage
 import os
 import uuid
 import logging
@@ -225,7 +225,7 @@ async def execute_chat_mode(
             if msg.role == "user":
                 messages.append(HumanMessage(content=msg.content))
             elif msg.role == "assistant":
-                messages.append(SystemMessage(content=msg.content))  # Use SystemMessage for assistant history
+                messages.append(AIMessage(content=msg.content))  # Use AIMessage for assistant history
         
         # Add current user message
         messages.append(HumanMessage(content=input_text))
