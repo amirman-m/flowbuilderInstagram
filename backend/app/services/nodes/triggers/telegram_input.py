@@ -282,9 +282,12 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
     webhook_data = context.get("webhook_data")
     if webhook_data:
         logger.info("Processing webhook data for flow execution")
-        # Preserve bot_id from trigger_data when present
-        td = (webhook_data.get("trigger_data", {}) or {}) if isinstance(webhook_data, dict) else {}
-        _bot_id = td.get("bot_id") or td.get("telegram_bot_id")
+        # Preserve bot_id from the execution context trigger_data (sibling of webhook_data)
+        ctx_trigger = (context.get("trigger_data", {}) or {}) if isinstance(context, dict) else {}
+        _bot_id = ctx_trigger.get("bot_id") or ctx_trigger.get("telegram_bot_id")
+        if not _bot_id and isinstance(webhook_data, dict):
+            td = (webhook_data.get("trigger_data", {}) or {})
+            _bot_id = td.get("bot_id") or td.get("telegram_bot_id")
         return await process_webhook_message(webhook_data, access_token or "", flow_id, bot_id=_bot_id)
     
     # Node/Flow testing execution: always allowed regardless of flow activation status
