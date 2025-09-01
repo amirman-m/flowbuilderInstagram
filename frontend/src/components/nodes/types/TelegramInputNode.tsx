@@ -3,11 +3,6 @@ import {
   Box,
   Typography,
   Alert,
-  Button,
-  TextField,
-  Paper,
-  CircularProgress,
-  MenuItem,
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
@@ -37,148 +32,82 @@ const API_BASE_URL = (() => {
 
 export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
   const { data, id } = props;
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
-  const [botName, setBotName] = useState<string>('telegram');
-  const [accessToken, setAccessToken] = useState('');
-  const [isValidating, setIsValidating] = useState(false);
-  const [validationMessage, setValidationMessage] = useState('');
-  const [validationStatus, setValidationStatus] = useState<'none' | 'success' | 'error'>('none');
-  const [isFetchingConfigs, setIsFetchingConfigs] = useState(false);
-  const [existingConfigs, setExistingConfigs] = useState<{ config_name: string; bot_username?: string | null }[]>([]);
-  const [selectedExistingName, setSelectedExistingName] = useState<string>('');
+  const [hasFlowConfig, setHasFlowConfig] = useState(false);
+  const [flowConfigData, setFlowConfigData] = useState<any>(null);
+  const [isCheckingConfig, setIsCheckingConfig] = useState(false);
 
   // SSE connection reference
   const eventSourceRef = useRef<EventSource | null>(null);
 
   const nodeData = data as NodeDataWithHandlers;
-  const { instance, onNodeUpdate, onExecutionComplete, flowId } = nodeData;
+  const { instance, onNodeUpdate, flowId } = nodeData;
 
   // Use execution data hook to get fresh execution results
   const executionData = useExecutionData(nodeData);
 
-  // Get current settings from instance data
-  const currentSettings = instance.data?.settings || {};
 
-  // Initialize access token from settings
+  // Check for flow-level Telegram configuration on mount
   useEffect(() => {
-    if (currentSettings.access_token) {
-      setAccessToken(currentSettings.access_token);
-    }
-    if (currentSettings.config_name) {
-      setBotName(currentSettings.config_name);
-    }
-  }, [currentSettings.access_token]);
+    checkFlowTelegramConfig();
+  }, [flowId]);
 
-  // Fetch existing configs when dialog opens
-  useEffect(() => {
-    const fetchConfigs = async () => {
-      try {
-        setIsFetchingConfigs(true);
-        const res = await fetch(`${API_BASE_URL}/telegram-bot/configs`);
-        if (!res.ok) throw new Error(`Failed to load configs (${res.status})`);
-        const data = await res.json();
-        const items = Array.isArray(data.items) ? data.items : [];
-        setExistingConfigs(items.map((i: any) => ({
-          config_name: String(i.config_name),
-          bot_username: i.bot_username ?? null,
-        })));
-      } catch (e) {
-        console.error('Failed to fetch Telegram bot configs', e);
-      } finally {
-        setIsFetchingConfigs(false);
+  // Check if flow has Telegram configuration
+  const checkFlowTelegramConfig = async () => {
+    if (!flowId) return;
+    
+    try {
+      setIsCheckingConfig(true);
+      const response = await fetch(`${API_BASE_URL}/flows/${flowId}/telegram-settings`, {
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setHasFlowConfig(data.has_telegram_config);
+        setFlowConfigData(data.config_data);
+      } else {
+        setHasFlowConfig(false);
+        setFlowConfigData(null);
       }
-    };
-    if (settingsDialogOpen) fetchConfigs();
-  }, [settingsDialogOpen]);
-
-  // Settings handlers
-  const closeSettingsDialog = () => {
-    setSettingsDialogOpen(false);
-    setValidationStatus('none');
-    setValidationMessage('');
+    } catch (error) {
+      console.error('Failed to check flow Telegram config:', error);
+      setHasFlowConfig(false);
+      setFlowConfigData(null);
+    } finally {
+      setIsCheckingConfig(false);
+    }
   };
-  const openSettingsDialog = () => setSettingsDialogOpen(true);
 
-  const updateSettings = (newSettings: any) => {
+  // Show settings error message
+  const showSettingsError = () => {
     if (onNodeUpdate) {
       onNodeUpdate(id, {
         data: {
           ...instance.data,
-          settings: { ...currentSettings, ...newSettings }
+          lastExecution: {
+            timestamp: new Date().toISOString(),
+            status: NodeExecutionStatus.ERROR,
+            startedAt: new Date().toISOString(),
+            error: 'Please configure Telegram bot in Flow Settings first',
+            outputs: {}
+          }
         }
       });
     }
   };
 
-  const resetSettings = () => {
-    setAccessToken('');
-    setBotName('telegram');
-    setSelectedExistingName('');
-    updateSettings({ access_token: '', config_name: 'telegram' });
-    setValidationStatus('none');
-    setValidationMessage('');
-  };
 
-  // Validate bot token using new API
-  const validateBotToken = async (token: string): Promise<boolean> => {
-    if (!token || token.trim() === '') {
-      setValidationStatus('error');
-      setValidationMessage('Please enter a bot token');
-      return false;
-    }
-
-    setIsValidating(true);
-    setValidationStatus('none');
-    setValidationMessage('');
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/telegram-bot/validate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          access_token: token
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      if (result.success) {
-        setValidationStatus('success');
-        setValidationMessage(result.message);
-        return true;
-      } else {
-        setValidationStatus('error');
-        setValidationMessage(result.message);
-        return false;
-      }
-    } catch (error) {
-      console.error('Error validating bot token:', error);
-      setValidationStatus('error');
-      setValidationMessage('Failed to validate bot token. Please check your connection.');
-      return false;
-    } finally {
-      setIsValidating(false);
-    }
-  };
-
-  // Guard before execution: ensure access token exists and is valid
+  // Guard before execution: ensure flow has Telegram configuration
   const handleBeforeExecute = async (): Promise<boolean> => {
-    // If using existing config, no need to validate token client-side
-    if (selectedExistingName) return true;
-    const token = (instance?.data?.settings as any)?.access_token || accessToken;
-    if (!token || String(token).trim() === '') {
-      openSettingsDialog();
+    // Refresh config check
+    await checkFlowTelegramConfig();
+    
+    if (!hasFlowConfig) {
+      showSettingsError();
       return false;
     }
-
-    // Validate token before proceeding
-    return await validateBotToken(token);
+    
+    return true;
   };
 
   // Execute handler - shows waiting dialog and starts listening
@@ -371,6 +300,36 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
   // Custom content for execution display
   const renderCustomContent = () => (
     <>
+      {/* Flow Configuration Status */}
+      {!isCheckingConfig && (
+        <Box sx={{
+          mt: 1,
+          p: 1,
+          backgroundColor: hasFlowConfig ? '#e8f5e8' : '#fff3e0',
+          borderRadius: 1,
+          border: `1px solid ${hasFlowConfig ? '#4caf50' : '#ff9800'}`
+        }}>
+          <Typography variant="caption" sx={{ fontSize: '0.7rem', color: '#666' }}>
+            Configuration:
+          </Typography>
+          <Typography
+            variant="caption"
+            sx={{
+              fontSize: '0.75rem',
+              color: hasFlowConfig ? '#2e7d32' : '#e65100',
+              display: 'block',
+              mt: 0.5,
+              fontWeight: 500
+            }}
+          >
+            {hasFlowConfig 
+              ? `Bot configured: @${flowConfigData?.bot_username || 'unknown'}`
+              : 'No bot configured - use Flow Settings'
+            }
+          </Typography>
+        </Box>
+      )}
+
       {/* Execution Results Display */}
       {executionData.displayData && (
         <Box sx={{
@@ -465,180 +424,6 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
       {/* Custom content with status indicators */}
       {renderCustomContent()}
 
-      {/* Settings Dialog */}
-      {settingsDialogOpen && (
-        <Box
-          sx={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-          }}
-          onClick={closeSettingsDialog}
-        >
-          <Paper
-            sx={{
-              p: 3,
-              minWidth: 400,
-              maxWidth: 500,
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              Telegram Bot Settings
-            </Typography>
-
-            {/* Existing config selector */}
-            <TextField
-              select
-              fullWidth
-              label="Use Existing Bot"
-              value={selectedExistingName}
-              onChange={(e) => {
-                const val = e.target.value as string;
-                setSelectedExistingName(val);
-                if (val) {
-                  // When selecting existing, mirror its name into botName for clarity
-                  setBotName(val);
-                }
-              }}
-              sx={{ mb: 2 }}
-              helperText={isFetchingConfigs ? 'Loading existing bots...' : (existingConfigs.length ? 'Select an existing bot to reuse' : 'No saved bots yet')}
-              InputProps={{ endAdornment: isFetchingConfigs ? <CircularProgress size={18} /> : undefined }}
-            >
-              <MenuItem value="">Create new</MenuItem>
-              {existingConfigs.map((cfg) => (
-                <MenuItem key={cfg.config_name} value={cfg.config_name}>
-                  {cfg.config_name}{cfg.bot_username ? ` (${cfg.bot_username})` : ''}
-                </MenuItem>
-              ))}
-            </TextField>
-
-            <TextField
-              fullWidth
-              label="Bot Name"
-              value={botName}
-              onChange={(e) => setBotName(e.target.value)}
-              placeholder="Enter a friendly name (e.g., marketing-bot)"
-              sx={{ mb: 2 }}
-              helperText="This name helps you reuse the same bot across flows"
-              disabled={!!selectedExistingName}
-            />
-
-            <TextField
-              fullWidth
-              label="Bot Access Token"
-              value={accessToken}
-              onChange={(e) => setAccessToken(e.target.value)}
-              placeholder="Enter your Telegram bot token"
-              sx={{ mb: 2 }}
-              helperText="Get your bot token from @BotFather on Telegram"
-              error={validationStatus === 'error'}
-              disabled={!!selectedExistingName}
-            />
-
-            {/* Validation feedback */}
-            {validationMessage && (
-              <Alert
-                severity={validationStatus === 'success' ? 'success' : 'error'}
-                sx={{ mb: 2 }}
-              >
-                {validationMessage}
-              </Alert>
-            )}
-
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-              <Button onClick={resetSettings} color="error">
-                Reset
-              </Button>
-              <Button onClick={closeSettingsDialog} variant="outlined">
-                Cancel
-              </Button>
-              <Button
-                onClick={async () => {
-                  // If using existing, skip validation and call setup with name only
-                  const usingExisting = !!selectedExistingName;
-                  const proceed = usingExisting ? true : await validateBotToken(accessToken);
-                  if (proceed) {
-                    try {
-                      // Persist local node settings snapshot (for UI only)
-                      if (usingExisting) {
-                        updateSettings({ access_token: '', config_name: selectedExistingName });
-                      } else {
-                        updateSettings({ access_token: accessToken, config_name: (botName && botName.trim()) ? botName.trim() : 'telegram' });
-                      }
-
-                      // Immediately set up webhook (backend will check current status first)
-                      const response = await fetch(`${API_BASE_URL}/telegram-bot/setup`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(usingExisting ? {
-                          access_token: null,
-                          flow_id: parseInt(flowId || '1'),
-                          node_id: id,
-                          config_name: selectedExistingName
-                        } : {
-                          access_token: accessToken,
-                          flow_id: parseInt(flowId || '1'),
-                          node_id: id,
-                          config_name: (botName && botName.trim()) ? botName.trim() : 'telegram'
-                        })
-                      });
-
-                      if (!response.ok) {
-                        const errText = await response.text();
-                        throw new Error(`Setup failed (${response.status}): ${errText}`);
-                      }
-
-                      const result = await response.json();
-                      if (!result.success) {
-                        throw new Error(result.message || 'Failed to set up Telegram webhook');
-                      }
-
-                      // Reflect configured status in node data
-                      if (onNodeUpdate) {
-                        onNodeUpdate(id, {
-                          data: {
-                            ...instance.data,
-                            lastExecution: {
-                              timestamp: new Date().toISOString(),
-                              status: NodeExecutionStatus.SUCCESS,
-                              startedAt: new Date().toISOString(),
-                              outputs: {
-                                webhook_status: 'configured',
-                                bot_config: result.config_data,
-                                message: result.message
-                              }
-                            }
-                          }
-                        });
-                      }
-
-                      // Close dialog on success
-                      closeSettingsDialog();
-                    } catch (e) {
-                      console.error('Webhook setup error:', e);
-                      setValidationStatus('error');
-                      setValidationMessage(e instanceof Error ? e.message : 'Failed to set up Telegram webhook');
-                      return;
-                    }
-                  }
-                }}
-                variant="contained"
-                disabled={isValidating}
-              >
-                {isValidating ? 'Validating...' : 'Save'}
-              </Button>
-            </Box>
-          </Paper>
-        </Box>
-      )}
     </>
   );
 };

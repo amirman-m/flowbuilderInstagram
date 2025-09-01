@@ -42,6 +42,7 @@ import { NodeInspector } from '../components/inspector';
 import { ChatBotExecutionDialog } from '../components/dialogs/ChatBotExecutionDialog';
 import { FlowExecutionDialog } from '../components/dialogs/FlowExecutionDialog';
 import { TelegramExecutionDialog } from '../components/dialogs/TelegramExecutionDialog';
+import { TelegramSettingsDialog } from '../components/dialogs/TelegramSettingsDialog';
 import { loadNodeConfigurations } from '../config/nodeConfiguration';
 import { useConnectionValidation } from '../hooks/useConnectionValidation';
 import { useSnackbar } from '../components/SnackbarProvider';
@@ -80,6 +81,9 @@ const FlowBuilderInner: React.FC = () => {
     setExecutionDialogOpen, setTriggerNodeId, setTriggerNodeType,
     updateNode, deleteNode, syncExecutionResults
   } = useFlowBuilderStore();
+
+  // Settings dialog state
+  const [telegramSettingsOpen, setTelegramSettingsOpen] = React.useState(false);
 
   // React Flow change handlers
   const onNodesChange = useCallback((changes: any) => {
@@ -797,7 +801,10 @@ const FlowBuilderInner: React.FC = () => {
 
           <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
             <Tooltip title="Flow Settings">
-              <IconButton sx={{ color: 'text.secondary' }}>
+              <IconButton 
+                sx={{ color: 'text.secondary' }}
+                onClick={() => setTelegramSettingsOpen(true)}
+              >
                 <SettingsIcon />
               </IconButton>
             </Tooltip>
@@ -940,6 +947,19 @@ const FlowBuilderInner: React.FC = () => {
           onExecute={handleFlowExecution}
         />
       )}
+
+      {/* Telegram Settings Dialog */}
+      <TelegramSettingsDialog
+        open={telegramSettingsOpen}
+        onClose={() => setTelegramSettingsOpen(false)}
+        flowId={flowId || 'new'}
+        onSettingsSaved={() => {
+          showSnackbar({
+            message: 'Telegram settings saved successfully',
+            severity: 'success'
+          });
+        }}
+      />
     </Box>
   );
 };
