@@ -243,21 +243,120 @@ async def unregister_sse_connection(flow_id: int, connection_id: str):
             del _sse_connections[flow_id]
         logger.info(f"Unregistered SSE connection {connection_id} for flow {flow_id}")
 
-async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecutionResult:
+async def validate_telegram_bot_setup(context: Dict[str, Any]) -> NodeExecutionResult:
     """
-    Execute Telegram input trigger node using new modular TelegramBotService
-    
-    Execution Contexts:
-    1) Webhook data processing (called from webhook endpoint) -> process and emit via SSE
-    2) Node test execution (from UI): setup webhook, listen for ONE message for testing
-    3) Flow test execution: setup webhook, listen for ONE message for flow testing
-    4) 24/7 activation: continuous processing (controlled by flow.status)
+    Validate and setup Telegram bot configuration (for Settings)
+    This function only handles token validation and webhook setup, not execution
     """
     start_time = datetime.now(timezone.utc)
     
     # Get context
     settings = context.get("settings", {})
     access_token = context.get("access_token") or settings.get("access_token")
+    config_name = context.get("config_name") or settings.get("config_name")
+    flow_id = context.get("flow_id", 1)
+    node_id = context.get("node_id", "telegram_input")
+    user_id = context.get("user_id", 1)  # TODO: use auth context
+    
+    logger.info(f"Telegram bot setup validation - flow {flow_id}, node {node_id}")
+    
+    try:
+        bot_service = TelegramBotService()
+        from app.core.database import SessionLocal
+        db = SessionLocal()
+        try:
+            # If using existing config by name
+            if (config_name and str(config_name).strip()):
+                configs = bot_service.list_user_configs(db, user_id)
+                match = next((c for c in configs if c.get("config_name") == config_name), None)
+                if not match:
+                    return NodeExecutionResult(
+                        outputs={},
+                        status="error",
+                        error=f"No bot config found named '{config_name}'",
+                        started_at=start_time,
+                        completed_at=datetime.now(timezone.utc)
+                    )
+                
+                return NodeExecutionResult(
+                    outputs={
+                        "setup_status": "configured",
+                        "bot_config": {
+                            "config_name": match.get("config_name"),
+                            "bot_username": match.get("bot_username"),
+                            "bot_id": match.get("bot_id"),
+                            "webhook_url": match.get("webhook_url"),
+                        },
+                        "message": "Existing bot configuration loaded successfully."
+                    },
+                    status="success",
+                    started_at=start_time,
+                    completed_at=datetime.now(timezone.utc)
+                )
+            
+            # Setup new bot with access token
+            if not access_token:
+                return NodeExecutionResult(
+                    outputs={},
+                    status="error",
+                    error="Access token is required for new bot setup",
+                    started_at=start_time,
+                    completed_at=datetime.now(timezone.utc)
+                )
+            
+            success, message, config_data = await bot_service.validate_and_setup_bot(
+                db=db,
+                user_id=user_id,
+                access_token=access_token,
+                flow_id=flow_id,
+                node_id=node_id,
+            )
+            
+            if not success:
+                return NodeExecutionResult(
+                    outputs={},
+                    status="error",
+                    error=message,
+                    started_at=start_time,
+                    completed_at=datetime.now(timezone.utc)
+                )
+            
+            return NodeExecutionResult(
+                outputs={
+                    "setup_status": "configured",
+                    "bot_config": config_data,
+                    "message": "Bot configured and webhook setup completed successfully."
+                },
+                status="success",
+                started_at=start_time,
+                completed_at=datetime.now(timezone.utc)
+            )
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Error in Telegram bot setup: {str(e)}")
+        return NodeExecutionResult(
+            outputs={},
+            status="error",
+            error=f"Failed to setup Telegram bot: {str(e)}",
+            started_at=start_time,
+            completed_at=datetime.now(timezone.utc)
+        )
+
+async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecutionResult:
+    """
+    Execute Telegram input trigger node - only handles webhook listening
+    Assumes bot is already configured via Settings
+    
+    Execution Contexts:
+    1) Webhook data processing (called from webhook endpoint) -> process and emit via SSE
+    2) Node test execution (from UI): listen for ONE message for testing individual node
+    3) Flow test execution: listen for ONE message for flow testing
+    """
+    start_time = datetime.now(timezone.utc)
+    
+    # Get context
+    settings = context.get("settings", {})
     config_name = context.get("config_name") or settings.get("config_name")
     flow_id = context.get("flow_id", 1)
     node_id = context.get("node_id", "telegram_input")
@@ -288,92 +387,60 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
         if not _bot_id and isinstance(webhook_data, dict):
             td = (webhook_data.get("trigger_data", {}) or {})
             _bot_id = td.get("bot_id") or td.get("telegram_bot_id")
-        return await process_webhook_message(webhook_data, access_token or "", flow_id, bot_id=_bot_id)
+        # Get access_token from settings for webhook processing
+        access_token = settings.get("access_token", "")
+        return await process_webhook_message(webhook_data, access_token, flow_id, bot_id=_bot_id)
     
-    # Node/Flow testing execution: always allowed regardless of flow activation status
+    # Node/Flow testing execution: check if bot is already configured
     try:
         bot_service = TelegramBotService()
         from app.core.database import SessionLocal
         db = SessionLocal()
         try:
-            # If neither access token nor config name given, instruct UI
-            if not (access_token or (config_name and str(config_name).strip())):
-                return NodeExecutionResult(
-                    outputs={
-                        "webhook_status": "pending_setup",
-                        "message": "Provide a saved bot name (config_name) or configure one in settings.",
-                        "execution_mode": execution_mode
-                    },
-                    status="success",
-                    started_at=start_time,
-                    completed_at=datetime.now(timezone.utc)
-                )
-            
-            # If config_name provided, verify existence and readiness
-            if (config_name and str(config_name).strip()):
-                configs = bot_service.list_user_configs(db, user_id)
-                match = next((c for c in configs if c.get("config_name") == config_name), None)
-                if not match:
-                    return NodeExecutionResult(
-                        outputs={},
-                        status="error",
-                        error=f"No bot config found named '{config_name}'",
-                        started_at=start_time,
-                        completed_at=datetime.now(timezone.utc)
-                    )
-                webhook_url = match.get("webhook_url")
-                if not webhook_url:
-                    return NodeExecutionResult(
-                        outputs={},
-                        status="error",
-                        error="Bot config exists but webhook is not configured",
-                        started_at=start_time,
-                        completed_at=datetime.now(timezone.utc)
-                    )
-                
-                # Return ready status for testing (regardless of flow activation)
-                test_message = "individual node" if execution_mode == "node_test" else "flow"
-                return NodeExecutionResult(
-                    outputs={
-                        "webhook_status": "configured",
-                        "bot_config": {
-                            "config_name": match.get("config_name"),
-                            "bot_username": match.get("bot_username"),
-                            "bot_id": match.get("bot_id"),
-                            "webhook_url": webhook_url,
-                        },
-                        "message": f"Telegram bot configured. Ready for {test_message} testing - listening for single message.",
-                        "execution_mode": execution_mode,
-                        "is_test_mode": True
-                    },
-                    status="success",
-                    started_at=start_time,
-                    completed_at=datetime.now(timezone.utc)
-                )
-            
-            # Fallback: if only access_token present, setup bot config
-            success, message, config_data = await bot_service.validate_and_setup_bot(
-                db=db,
-                user_id=user_id,
-                access_token=access_token,
-                flow_id=flow_id,
-                node_id=node_id,
-            )
-            if not success:
+            # Check if bot is configured for this user/flow/node
+            if not (config_name and str(config_name).strip()):
                 return NodeExecutionResult(
                     outputs={},
                     status="error",
-                    error=message,
+                    error="Please set the access token in Settings.",
                     started_at=start_time,
                     completed_at=datetime.now(timezone.utc)
                 )
             
+            # Verify bot configuration exists and is ready
+            configs = bot_service.list_user_configs(db, user_id)
+            match = next((c for c in configs if c.get("config_name") == config_name), None)
+            if not match:
+                return NodeExecutionResult(
+                    outputs={},
+                    status="error",
+                    error="Please set the access token in Settings.",
+                    started_at=start_time,
+                    completed_at=datetime.now(timezone.utc)
+                )
+            
+            webhook_url = match.get("webhook_url")
+            if not webhook_url:
+                return NodeExecutionResult(
+                    outputs={},
+                    status="error",
+                    error="Please set the access token in Settings.",
+                    started_at=start_time,
+                    completed_at=datetime.now(timezone.utc)
+                )
+            
+            # Bot is configured - ready to listen for webhook
             test_message = "individual node" if execution_mode == "node_test" else "flow"
             return NodeExecutionResult(
                 outputs={
-                    "webhook_status": "configured",
-                    "bot_config": config_data,
-                    "message": f"Bot configured successfully. Ready for {test_message} testing - listening for single message.",
+                    "webhook_status": "listening",
+                    "bot_config": {
+                        "config_name": match.get("config_name"),
+                        "bot_username": match.get("bot_username"),
+                        "bot_id": match.get("bot_id"),
+                        "webhook_url": webhook_url,
+                    },
+                    "message": f"Listening for Telegram message... Send a message to your bot for {test_message} testing.",
                     "execution_mode": execution_mode,
                     "is_test_mode": True
                 },

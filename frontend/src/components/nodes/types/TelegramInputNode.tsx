@@ -51,7 +51,7 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
   const eventSourceRef = useRef<EventSource | null>(null);
 
   const nodeData = data as NodeDataWithHandlers;
-  const { instance, onNodeUpdate, onExecutionComplete, flowId } = nodeData;
+  const { instance, onNodeUpdate, flowId } = nodeData;
 
   // Use execution data hook to get fresh execution results
   const executionData = useExecutionData(nodeData);
@@ -167,24 +167,57 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
     }
   };
 
-  // Guard before execution: ensure access token exists and is valid
+  // Guard before execution: ensure bot is configured via Settings
   const handleBeforeExecute = async (): Promise<boolean> => {
-    // If using existing config, no need to validate token client-side
-    if (selectedExistingName) return true;
-    const token = (instance?.data?.settings as any)?.access_token || accessToken;
-    if (!token || String(token).trim() === '') {
-      openSettingsDialog();
+    const configName = (instance?.data?.settings as any)?.config_name;
+    if (!configName || String(configName).trim() === '') {
+      if (onNodeUpdate) {
+        onNodeUpdate(id, {
+          data: {
+            ...instance.data,
+            lastExecution: {
+              timestamp: new Date().toISOString(),
+              status: NodeExecutionStatus.ERROR,
+              startedAt: new Date().toISOString(),
+              error: 'Please set the access token in Settings.',
+              outputs: {}
+            }
+          }
+        });
+      }
       return false;
     }
-
-    // Validate token before proceeding
-    return await validateBotToken(token);
+    return true;
   };
 
-  // Execute handler - shows waiting dialog and starts listening
+  // Execute handler - only handles webhook listening (assumes bot is configured)
   const handleExecute = async (): Promise<void> => {
     try {
-      // Update node to show "waiting for message" status
+      // Execute the node to verify configuration and start listening
+      const response = await fetch(`${API_BASE_URL}/nodes/execute/telegram_input`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          settings: currentSettings,
+          flow_id: parseInt(flowId || '1'),
+          node_id: id,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.status === 'error') {
+        throw new Error(result.error);
+      }
+
+      // Update node with execution result
       if (onNodeUpdate) {
         onNodeUpdate(id, {
           data: {
@@ -193,19 +226,16 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
               timestamp: new Date().toISOString(),
               status: NodeExecutionStatus.RUNNING,
               startedAt: new Date().toISOString(),
-              outputs: {
-                webhook_status: 'listening',
-                message: 'Waiting for Telegram message... Send a message to your bot.'
-              }
+              outputs: result.outputs || {}
             }
           }
         });
       }
 
-      // Start listening immediately
+      // Start SSE listening for webhook messages
       startListening();
     } catch (error) {
-      console.error('Error starting listener:', error);
+      console.error('Error executing Telegram node:', error);
       if (onNodeUpdate) {
         onNodeUpdate(id, {
           data: {
@@ -458,8 +488,10 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
       <CompactNodeContainer
         {...props}
         customColorName="electric"
+        showSettingsButton={true}
         onBeforeExecute={handleBeforeExecute}
         onCustomExecute={handleExecute}
+        onCustomSettings={openSettingsDialog}
       />
 
       {/* Custom content with status indicators */}
@@ -567,17 +599,11 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
                   const proceed = usingExisting ? true : await validateBotToken(accessToken);
                   if (proceed) {
                     try {
-                      // Persist local node settings snapshot (for UI only)
-                      if (usingExisting) {
-                        updateSettings({ access_token: '', config_name: selectedExistingName });
-                      } else {
-                        updateSettings({ access_token: accessToken, config_name: (botName && botName.trim()) ? botName.trim() : 'telegram' });
-                      }
-
-                      // Immediately set up webhook (backend will check current status first)
+                      // Call backend setup validation function
                       const response = await fetch(`${API_BASE_URL}/telegram-bot/setup`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
                         body: JSON.stringify(usingExisting ? {
                           access_token: null,
                           flow_id: parseInt(flowId || '1'),
@@ -601,27 +627,35 @@ export const TelegramInputNode: React.FC<NodeComponentProps> = (props) => {
                         throw new Error(result.message || 'Failed to set up Telegram webhook');
                       }
 
-                      // Reflect configured status in node data
-                      if (onNodeUpdate) {
-                        onNodeUpdate(id, {
-                          data: {
-                            ...instance.data,
-                            lastExecution: {
-                              timestamp: new Date().toISOString(),
-                              status: NodeExecutionStatus.SUCCESS,
-                              startedAt: new Date().toISOString(),
-                              outputs: {
-                                webhook_status: 'configured',
-                                bot_config: result.config_data,
-                                message: result.message
-                              }
+                      // Update local node settings with config_name (not access_token for security)
+                      const finalConfigName = usingExisting ? selectedExistingName : ((botName && botName.trim()) ? botName.trim() : 'telegram');
+                      updateSettings({ 
+                        config_name: finalConfigName,
+                        access_token: usingExisting ? '' : accessToken // Store token only for new configs
+                      });
+
+                      // Show success status
+                      setValidationStatus('success');
+                      setValidationMessage('Bot configuration saved successfully. You can now execute the node.');
+
+                      // Auto-save the flow to persist settings
+                      window.dispatchEvent(new CustomEvent('autoSaveFlow', {
+                        detail: { 
+                          reason: 'Telegram bot settings updated',
+                          callback: (error?: Error) => {
+                            if (error) {
+                              console.error('Auto-save failed:', error);
+                            } else {
+                              console.log('Flow auto-saved after Telegram settings update');
                             }
                           }
-                        });
-                      }
+                        }
+                      }));
 
-                      // Close dialog on success
-                      closeSettingsDialog();
+                      // Close dialog after short delay to show success message
+                      setTimeout(() => {
+                        closeSettingsDialog();
+                      }, 1500);
                     } catch (e) {
                       console.error('Webhook setup error:', e);
                       setValidationStatus('error');
