@@ -65,18 +65,30 @@ async def telegram_webhook_dynamic(
             logger.error(f"Telegram trigger node {node_id} not found in flow {flow_id}")
             return {"ok": False, "error": "Telegram trigger node not found"}
         
-        access_token = telegram_trigger.data.get("settings", {}).get("access_token")
-        if not access_token:
-            logger.error(f"No access token found for node {node_id}")
-            return {"ok": False, "error": "No access token configured"}
-        
-        # Resolve bot_id from active config for this user/access_token
-        bot_cfg = db.query(TelegramBotConfig).filter(
+        # Resolve access token and bot_id from flow-level config first, fallback to node-level
+        access_token: Optional[str] = None
+        resolved_bot_id: Optional[str] = None
+        flow_bot_cfg = db.query(TelegramBotConfig).filter(
             TelegramBotConfig.user_id == user_id,
-            TelegramBotConfig.access_token == access_token,
+            TelegramBotConfig.default_flow_id == flow_id,
             TelegramBotConfig.is_active == True,
         ).first()
-        resolved_bot_id = (bot_cfg.bot_id if bot_cfg else None)
+        if flow_bot_cfg:
+            access_token = flow_bot_cfg.access_token
+            resolved_bot_id = flow_bot_cfg.bot_id
+            logger.info(f"Using flow-level Telegram config '{flow_bot_cfg.config_name}' for flow {flow_id}")
+        else:
+            access_token = (telegram_trigger.data or {}).get("settings", {}).get("access_token")
+            if not access_token:
+                logger.error(f"No access token found for node {node_id}")
+                return {"ok": False, "error": "No access token configured"}
+            # Try to resolve bot_id from user's active configs by access_token
+            bot_cfg = db.query(TelegramBotConfig).filter(
+                TelegramBotConfig.user_id == user_id,
+                TelegramBotConfig.access_token == access_token,
+                TelegramBotConfig.is_active == True,
+            ).first()
+            resolved_bot_id = (bot_cfg.bot_id if bot_cfg else None)
         
         # Process webhook message
         result = await process_webhook_message(webhook_data, access_token, flow_id, bot_id=resolved_bot_id)
@@ -155,18 +167,30 @@ async def telegram_webhook(
             logger.error(f"No Telegram trigger found in flow {flow_id}")
             return {"ok": False, "error": "No Telegram trigger found"}
         
-        access_token = telegram_trigger.data.get("settings", {}).get("access_token")
-        if not access_token:
-            logger.error(f"No access token found for Telegram trigger in flow {flow_id}")
-            return {"ok": False, "error": "No access token configured"}
-        
-        # Resolve bot_id from DB for this flow's user
-        bot_cfg = db.query(TelegramBotConfig).filter(
+        # Prefer flow-level TelegramBotConfig; fallback to node-level token
+        access_token: Optional[str] = None
+        resolved_bot_id: Optional[str] = None
+        flow_bot_cfg = db.query(TelegramBotConfig).filter(
             TelegramBotConfig.user_id == flow.user_id,
-            TelegramBotConfig.access_token == access_token,
+            TelegramBotConfig.default_flow_id == flow_id,
             TelegramBotConfig.is_active == True,
         ).first()
-        resolved_bot_id = (bot_cfg.bot_id if bot_cfg else None)
+        if flow_bot_cfg:
+            access_token = flow_bot_cfg.access_token
+            resolved_bot_id = flow_bot_cfg.bot_id
+            logger.info(f"Using flow-level Telegram config '{flow_bot_cfg.config_name}' for flow {flow_id}")
+        else:
+            access_token = (telegram_trigger.data or {}).get("settings", {}).get("access_token")
+            if not access_token:
+                logger.error(f"No access token found for Telegram trigger in flow {flow_id}")
+                return {"ok": False, "error": "No access token configured"}
+            # Resolve bot_id from DB for this flow's user by access_token
+            bot_cfg = db.query(TelegramBotConfig).filter(
+                TelegramBotConfig.user_id == flow.user_id,
+                TelegramBotConfig.access_token == access_token,
+                TelegramBotConfig.is_active == True,
+            ).first()
+            resolved_bot_id = (bot_cfg.bot_id if bot_cfg else None)
         
         # Process the webhook message and notify SSE connections
         result = await process_webhook_message(webhook_data, access_token, flow_id, bot_id=resolved_bot_id)

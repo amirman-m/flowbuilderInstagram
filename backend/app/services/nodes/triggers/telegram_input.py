@@ -429,7 +429,9 @@ async def create_telegram_sse_stream(context: Dict[str, Any]) -> StreamingRespon
     No webhook setup here; assumes webhook already configured at the stable URL.
     """
     flow_id = context.get("flow_id", 1)
-    logger.info(f"Starting SSE stream for flow {flow_id}")
+    execution_mode = context.get("execution_mode", "node_test")
+    is_test_mode = context.get("is_test_mode", execution_mode in ["node_test", "flow_test"])  # default from mode
+    logger.info(f"Starting SSE stream for flow {flow_id} (mode={execution_mode}, test={is_test_mode})")
 
     async def sse_stream():
         connection_id = str(uuid.uuid4())
@@ -440,31 +442,47 @@ async def create_telegram_sse_stream(context: Dict[str, Any]) -> StreamingRespon
             await register_sse_connection(flow_id, connection_id, message_queue)
             
             # Send initial webhook ready event
-            yield f"data: {json.dumps({'type': 'webhook_ready', 'message': 'Webhook active - waiting for Telegram message...'})}\n\n"
+            yield f"data: {json.dumps({'type': 'webhook_ready', 'message': 'Webhook active - waiting for Telegram message...', 'mode': execution_mode})}\n\n"
             
             # Wait loop with keepalive pings
-            timeout_seconds = 60
-            start_time_ts = datetime.now(timezone.utc)
-            
-            while True:
-                try:
-                    remaining_time = timeout_seconds - (datetime.now(timezone.utc) - start_time_ts).total_seconds()
-                    if remaining_time <= 0:
-                        yield f"data: {json.dumps({'type': 'timeout', 'message': f'Timeout: No message received in {timeout_seconds} seconds'})}\n\n"
-                        break
-                    
+            per_ping_timeout = 20.0  # seconds between pings
+            if is_test_mode:
+                total_timeout_seconds = 60
+                start_time_ts = datetime.now(timezone.utc)
+                while True:
                     try:
-                        message = await asyncio.wait_for(message_queue.get(), timeout=min(remaining_time, 5.0))
-                        yield f"data: {json.dumps(message)}\n\n"
-                        if message.get('type') == 'telegram_message':
+                        remaining_time = total_timeout_seconds - (datetime.now(timezone.utc) - start_time_ts).total_seconds()
+                        if remaining_time <= 0:
+                            yield f"data: {json.dumps({'type': 'timeout', 'message': f'Timeout: No message received in {total_timeout_seconds} seconds'})}\n\n"
                             break
-                    except asyncio.TimeoutError:
-                        yield f"data: {json.dumps({'type': 'ping', 'timestamp': datetime.now(timezone.utc).isoformat()})}\n\n"
-                        continue
-                except Exception as e:
-                    logger.error(f"Error in SSE stream: {e}")
-                    yield f"data: {json.dumps({'type': 'error', 'message': f'Stream error: {str(e)}'})}\n\n"
-                    break
+                        try:
+                            message = await asyncio.wait_for(message_queue.get(), timeout=min(remaining_time, per_ping_timeout))
+                            yield f"data: {json.dumps(message)}\n\n"
+                            if message.get('type') == 'telegram_message':
+                                # End test stream after first telegram message
+                                break
+                        except asyncio.TimeoutError:
+                            yield f"data: {json.dumps({'type': 'ping', 'timestamp': datetime.now(timezone.utc).isoformat()})}\n\n"
+                            continue
+                    except Exception as e:
+                        logger.error(f"Error in SSE test stream: {e}")
+                        yield f"data: {json.dumps({'type': 'error', 'message': f'Stream error: {str(e)}'})}\n\n"
+                        break
+            else:
+                # 24/7 mode: continuous stream with periodic heartbeats, no overall timeout
+                while True:
+                    try:
+                        try:
+                            message = await asyncio.wait_for(message_queue.get(), timeout=per_ping_timeout)
+                            yield f"data: {json.dumps(message)}\n\n"
+                        except asyncio.TimeoutError:
+                            # Heartbeat
+                            yield f"data: {json.dumps({'type': 'ping', 'timestamp': datetime.now(timezone.utc).isoformat()})}\n\n"
+                            continue
+                    except Exception as e:
+                        logger.error(f"Error in SSE continuous stream: {e}")
+                        yield f"data: {json.dumps({'type': 'error', 'message': f'Stream error: {str(e)}'})}\n\n"
+                        break
         except Exception as e:
             logger.error(f"Error setting up SSE stream: {e}")
             yield f"data: {json.dumps({'type': 'error', 'message': f'Setup error: {str(e)}'})}\n\n"
