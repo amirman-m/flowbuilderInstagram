@@ -314,13 +314,27 @@ async def activate_flow(
             ),
         )
 
-    # Step 5: Validate webhook and access token
-    trigger_data = trigger.data or {}
-    settings_data = trigger_data.get("settings", {})
-    access_token = settings_data.get("access_token")
-    config_name = settings_data.get("config_name")  # optional friendly config
+    # Step 5: Check for flow-level telegram config first, then node-level
+    from ..models.telegram_bot import TelegramBotConfig
+    flow_bot_config = db.query(TelegramBotConfig).filter(
+        TelegramBotConfig.user_id == current_user.id,
+        TelegramBotConfig.default_flow_id == flow_id,
+        TelegramBotConfig.is_active == True
+    ).first()
+    
+    if flow_bot_config:
+        # Use flow-level config
+        access_token = flow_bot_config.access_token
+        config_name = flow_bot_config.config_name
+        logger.info(f"Using flow-level telegram config for activation: {config_name}")
+    else:
+        # Fallback to node-level config
+        trigger_data = trigger.data or {}
+        settings_data = trigger_data.get("settings", {})
+        access_token = settings_data.get("access_token")
+        config_name = settings_data.get("config_name")
+        
     if not access_token and not config_name:
-        # allow config_name to resolve token via TelegramBotService
         raise HTTPException(status_code=400, detail="Bot access token not configured on Telegram trigger node.")
 
     # Use TelegramBotService to validate token, persist config, and ensure webhook
