@@ -104,6 +104,11 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
         # Create session ID
         session_id = str(uuid.uuid4())
         
+        # Derive bot_id from explicit param or trigger_data in webhook_data
+        effective_bot_id = bot_id or (update.get("trigger_data", {}) or {}).get("bot_id") or (update.get("trigger_data", {}) or {}).get("telegram_bot_id")
+        if effective_bot_id:
+            logger.info(f"telegram_input: using bot_id from webhook context: {effective_bot_id}")
+        
         # Extract text from message
         text_content = message.get("text")
         
@@ -117,12 +122,12 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
                     "telegram_message_id": message.get("message_id"),
                     "from_user": message.get("from", {}).get("username", "unknown"),
                     "chat_type": message.get("chat", {}).get("type", "private"),
-                    **({"bot_id": bot_id, "telegram_bot_id": bot_id} if bot_id else {})
+                    **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
                 },
                 "input_text": text_content,  # OpenAI node expects 'input_text'
                 "chat_input": text_content,  # Keep original for backward compatibility
                 "input_type": "text",
-                **({"bot_id": bot_id, "telegram_bot_id": bot_id} if bot_id else {})
+                **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
             }
             log_msg = f"Telegram text message from chat {chat_id}: \"{text_content[:50]}{'...' if len(text_content) > 50 else ''}\""
             
@@ -137,7 +142,7 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
                     "telegram_message_id": message.get("message_id"),
                     "from_user": message.get("from", {}).get("username", "unknown"),
                     "chat_type": message.get("chat", {}).get("type", "private"),
-                    **({"bot_id": bot_id, "telegram_bot_id": bot_id} if bot_id else {})
+                    **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
                 },
                 "voice_input": {
                     "file_id": voice_info.get("file_id"),
@@ -147,7 +152,7 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
                     "file_size": voice_info.get("file_size")
                 },
                 "input_type": "voice",
-                **({"bot_id": bot_id, "telegram_bot_id": bot_id} if bot_id else {})
+                **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
             }
             log_msg = f"Telegram voice message from chat {chat_id}: {voice_info.get('duration', 0)}s"
         
@@ -171,7 +176,7 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
                     "telegram_message_id": message.get("message_id"),
                     "from_user": message.get("from", {}).get("username", "unknown"),
                     "chat_type": message.get("chat", {}).get("type", "private"),
-                    **({"bot_id": bot_id, "telegram_bot_id": bot_id} if bot_id else {})
+                    **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
                 },
                 # Provide both the selected best photo and the full list for downstream use
                 "photo_input": {
@@ -184,7 +189,7 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
                     "chat_input": caption,
                 } if caption else {}),
                 "input_type": "photo",
-                **({"bot_id": bot_id, "telegram_bot_id": bot_id} if bot_id else {})
+                **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
             }
             preview = f" with caption: \"{caption[:40]}...\"" if caption and len(caption) > 40 else (f" with caption: \"{caption}\"" if caption else "")
             dims = f"{(best_photo or {}).get('width', '?')}x{(best_photo or {}).get('height', '?')}"
@@ -277,7 +282,10 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
     webhook_data = context.get("webhook_data")
     if webhook_data:
         logger.info("Processing webhook data for flow execution")
-        return await process_webhook_message(webhook_data, access_token or "", flow_id)
+        # Preserve bot_id from trigger_data when present
+        td = (webhook_data.get("trigger_data", {}) or {}) if isinstance(webhook_data, dict) else {}
+        _bot_id = td.get("bot_id") or td.get("telegram_bot_id")
+        return await process_webhook_message(webhook_data, access_token or "", flow_id, bot_id=_bot_id)
     
     # Node/Flow testing execution: always allowed regardless of flow activation status
     try:

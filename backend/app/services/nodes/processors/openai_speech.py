@@ -121,7 +121,7 @@ def _mime_for_format(fmt: str) -> str:
     if m == "pcm":
         # 16-bit PCM in a raw container; leave as audio/wav alternative? stick to audio/wav if needed
         return "audio/pcm"
-    return "audio/mpeg"
+    return "audio/opus"
 
 
 async def execute_openai_speech(context: Dict[str, Any]) -> NodeExecutionResult:
