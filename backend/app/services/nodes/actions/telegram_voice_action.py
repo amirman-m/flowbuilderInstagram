@@ -89,8 +89,36 @@ def _extract_inputs_from_context(context: Dict[str, Any]) -> Tuple[Dict[str, Any
 
 
 def _find_credentials(inputs: Dict[str, Any], settings: Dict[str, Any], flow_id: Optional[int]) -> Tuple[Optional[str], Optional[Any]]:
-    access_token = settings.get("access_token")
+    access_token = None
     chat_id = settings.get("chat_id")
+    
+    # Check for flow-level telegram config first
+    if flow_id:
+        try:
+            from app.core.database import get_db
+            from app.models.telegram_bot import TelegramBotConfig
+            db = next(get_db())
+            
+            # Get user_id from context or hardcoded for now
+            user_id = 1  # TODO: get from auth context
+            
+            flow_bot_config = db.query(TelegramBotConfig).filter(
+                TelegramBotConfig.user_id == user_id,
+                TelegramBotConfig.default_flow_id == flow_id,
+                TelegramBotConfig.is_active == True
+            ).first()
+            
+            if flow_bot_config:
+                access_token = flow_bot_config.access_token
+                logger.info(f"Using flow-level telegram config: {flow_bot_config.config_name}")
+            
+            db.close()
+        except Exception as e:
+            logger.error(f"Error checking flow-level telegram config: {e}")
+    
+    # Fallback to node settings
+    if not access_token:
+        access_token = settings.get("access_token")
 
     if not access_token or not chat_id:
         logger.info(f"Searching for chat_id and access_token in inputs: {list(inputs.keys())}")

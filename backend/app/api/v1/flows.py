@@ -315,7 +315,7 @@ async def activate_flow(
         )
 
     # Step 5: Check for flow-level telegram config first, then node-level
-    from ..models.telegram_bot import TelegramBotConfig
+    from ...models.telegram_bot import TelegramBotConfig
     flow_bot_config = db.query(TelegramBotConfig).filter(
         TelegramBotConfig.user_id == current_user.id,
         TelegramBotConfig.default_flow_id == flow_id,

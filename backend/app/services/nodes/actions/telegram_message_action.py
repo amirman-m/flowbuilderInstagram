@@ -143,11 +143,39 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
                     error="No valid message text found in inputs"
                 )
         
-        # Get access_token and chat_id
-        access_token = settings.get("access_token")
+        # Get access_token and chat_id - check flow-level config first
+        access_token = None
         chat_id = settings.get("chat_id")
         
-        # If access_token or chat_id not in settings, try to find them in connected nodes
+        # Check for flow-level telegram config first
+        if flow_id:
+            try:
+                from app.core.database import get_db
+                from app.models.telegram_bot import TelegramBotConfig
+                db = next(get_db())
+                
+                # Get user_id from context or hardcoded for now
+                user_id = context.get("user_id", 1)
+                
+                flow_bot_config = db.query(TelegramBotConfig).filter(
+                    TelegramBotConfig.user_id == user_id,
+                    TelegramBotConfig.default_flow_id == flow_id,
+                    TelegramBotConfig.is_active == True
+                ).first()
+                
+                if flow_bot_config:
+                    access_token = flow_bot_config.access_token
+                    logger.info(f"Using flow-level telegram config: {flow_bot_config.config_name}")
+                
+                db.close()
+            except Exception as e:
+                logger.error(f"Error checking flow-level telegram config: {e}")
+        
+        # Fallback to node settings
+        if not access_token:
+            access_token = settings.get("access_token")
+        
+        # If access_token or chat_id not found, try to find them in connected nodes
         if not access_token or not chat_id:
             logger.info(f"Searching for chat_id and access_token in inputs: {list(inputs.keys())}")
             
