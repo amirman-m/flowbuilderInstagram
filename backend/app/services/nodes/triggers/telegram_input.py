@@ -296,21 +296,42 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
         from app.core.database import SessionLocal
         db = SessionLocal()
         try:
-            # If neither access token nor config name given, instruct UI
-            if not (access_token or (config_name and str(config_name).strip())):
+            # Check for flow-level telegram config first
+            from app.models.telegram_bot import TelegramBotConfig
+            flow_bot_config = db.query(TelegramBotConfig).filter(
+                TelegramBotConfig.user_id == user_id,
+                TelegramBotConfig.default_flow_id == flow_id,
+                TelegramBotConfig.is_active == True
+            ).first()
+            
+            if flow_bot_config:
+                # Use flow-level config
+                access_token = flow_bot_config.access_token
+                config_name = flow_bot_config.config_name
+                logger.info(f"Using flow-level telegram config: {config_name}")
+            elif not (access_token or (config_name and str(config_name).strip())):
                 return NodeExecutionResult(
                     outputs={
                         "webhook_status": "pending_setup",
-                        "message": "Provide a saved bot name (config_name) or configure one in settings.",
+                        "message": "Configure Telegram bot in Flow Settings or provide a saved bot name.",
                         "execution_mode": execution_mode
                     },
-                    status="success",
+                    status="error",
+                    error="Bot access token not configured on Telegram trigger node.",
                     started_at=start_time,
                     completed_at=datetime.now(timezone.utc)
                 )
             
-            # If config_name provided, verify existence and readiness
-            if (config_name and str(config_name).strip()):
+            # Verify bot config exists and is ready
+            if flow_bot_config:
+                # Use flow-level config data
+                match = {
+                    "config_name": flow_bot_config.config_name,
+                    "bot_username": flow_bot_config.bot_username,
+                    "bot_id": flow_bot_config.bot_id,
+                    "webhook_url": flow_bot_config.webhook_url
+                }
+            elif (config_name and str(config_name).strip()):
                 configs = bot_service.list_user_configs(db, user_id)
                 match = next((c for c in configs if c.get("config_name") == config_name), None)
                 if not match:
@@ -321,25 +342,34 @@ async def execute_telegram_input_trigger(context: Dict[str, Any]) -> NodeExecuti
                         started_at=start_time,
                         completed_at=datetime.now(timezone.utc)
                     )
-                webhook_url = match.get("webhook_url")
-                if not webhook_url:
-                    return NodeExecutionResult(
-                        outputs={},
-                        status="error",
-                        error="Bot config exists but webhook is not configured",
-                        started_at=start_time,
-                        completed_at=datetime.now(timezone.utc)
-                    )
-                
-                # Return ready status for testing (regardless of flow activation)
-                test_message = "individual node" if execution_mode == "node_test" else "flow"
+            else:
                 return NodeExecutionResult(
-                    outputs={
-                        "webhook_status": "configured",
-                        "bot_config": {
-                            "config_name": match.get("config_name"),
-                            "bot_username": match.get("bot_username"),
-                            "bot_id": match.get("bot_id"),
+                    outputs={},
+                    status="error",
+                    error="Bot access token not configured on Telegram trigger node.",
+                    started_at=start_time,
+                    completed_at=datetime.now(timezone.utc)
+                )
+            
+            webhook_url = match.get("webhook_url")
+            if not webhook_url:
+                return NodeExecutionResult(
+                    outputs={},
+                    status="error",
+                    error="Bot config exists but webhook is not configured",
+                    started_at=start_time,
+                    completed_at=datetime.now(timezone.utc)
+                )
+            
+            # Return ready status for testing (regardless of flow activation)
+            test_message = "individual node" if execution_mode == "node_test" else "flow"
+            return NodeExecutionResult(
+                outputs={
+                    "webhook_status": "configured",
+                    "bot_config": {
+                        "config_name": match.get("config_name"),
+                        "bot_username": match.get("bot_username"),
+                        "bot_id": match.get("bot_id"),
                             "webhook_url": webhook_url,
                         },
                         "message": f"Telegram bot configured. Ready for {test_message} testing - listening for single message.",
