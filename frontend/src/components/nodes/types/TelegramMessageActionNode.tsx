@@ -17,7 +17,7 @@ import {
 } from '@mui/icons-material';
 import { NodeComponentProps, NodeDataWithHandlers } from '../registry';
 import { CompactNodeContainer } from '../core/CompactNodeContainer';
-import { useNodeConfiguration, useExecutionData } from '../hooks';
+import { useExecutionData } from '../hooks';
 import { nodeService } from '../../../services/nodeService';
 import { useParams } from 'react-router-dom';
 
@@ -31,7 +31,6 @@ const TelegramLogo: React.FC<{ size?: number }> = ({ size = 24 }) => (
 export const TelegramMessageActionNode: React.FC<NodeComponentProps> = (props) => {
   const { data, id } = props;
   const { flowId } = useParams<{ flowId: string }>();
-  const [validationState, setValidationState] = useState<'error' | 'success' | 'none'>('none');
   const [isExecuting, setIsExecuting] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [localAccessToken, setLocalAccessToken] = useState('');
@@ -43,8 +42,6 @@ export const TelegramMessageActionNode: React.FC<NodeComponentProps> = (props) =
   const nodeData = data as NodeDataWithHandlers;
   const { nodeType, instance } = nodeData;
   
-  // Use our new modular hooks
-  const nodeConfig = useNodeConfiguration(nodeType?.id || 'telegram_message_action');
   const executionData = useExecutionData(nodeData);
   
   // Get current settings from instance
@@ -60,19 +57,7 @@ export const TelegramMessageActionNode: React.FC<NodeComponentProps> = (props) =
     }
   }, [currentSettings.access_token, currentSettings.chat_id]);
   
-  // Validate settings whenever they change
-  useEffect(() => {
-    // For this node, settings are optional as they can be obtained from Telegram Input node
-    // Just validate format if provided
-    const token = currentSettings?.access_token || localAccessToken;
-    const chatIdValue = currentSettings?.chat_id || localChatId;
-    
-    if ((token && token.length < 10) || (chatIdValue && !/^-?\d+$/.test(chatIdValue))) {
-      setValidationState('error');
-    } else {
-      setValidationState('success');
-    }
-  }, [currentSettings, localAccessToken, localChatId]);
+  // Settings are optional; assume validity and allow execution with empty fields to use upstream values
 
   // Function to collect input data from connected nodes
   const collectInputsFromConnectedNodes = async (): Promise<Record<string, any>> => {
@@ -150,10 +135,6 @@ export const TelegramMessageActionNode: React.FC<NodeComponentProps> = (props) =
   }, [id, nodeType, currentSettings, localAccessToken, localChatId, flowId, isExecuting, collectInputsFromConnectedNodes]);
   
   // Settings handlers
-  const handleSettingsClick = useCallback(() => {
-    setSettingsOpen(true);
-  }, []);
-  
   const handleSettingsSave = useCallback(() => {
     if (nodeData.onNodeUpdate) {
       nodeData.onNodeUpdate(id, {

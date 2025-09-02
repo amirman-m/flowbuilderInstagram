@@ -42,6 +42,7 @@ import { NodeInspector } from '../components/inspector';
 import { ChatBotExecutionDialog } from '../components/dialogs/ChatBotExecutionDialog';
 import { FlowExecutionDialog } from '../components/dialogs/FlowExecutionDialog';
 import { TelegramExecutionDialog } from '../components/dialogs/TelegramExecutionDialog';
+import { ScheduledExecutionDialog } from '../components/dialogs/ScheduledExecutionDialog';
 import { TelegramSettingsDialog } from '../components/dialogs/TelegramSettingsDialog';
 import { loadNodeConfigurations } from '../config/nodeConfiguration';
 import { useConnectionValidation } from '../hooks/useConnectionValidation';
@@ -921,6 +922,15 @@ const FlowBuilderInner: React.FC = () => {
       {/* Flow Execution Dialogs (conditional) */}
       {executionDialogOpen && triggerNodeType === 'telegram_input' ? (
         <TelegramExecutionDialog
+          open={executionDialogOpen}
+          onClose={() => setExecutionDialogOpen(false)}
+          flowName={flow?.name || 'Untitled Flow'}
+          triggerNodeId={triggerNodeId}
+          triggerNodeType={triggerNodeType}
+          onExecute={handleFlowExecution}
+        />
+      ) : executionDialogOpen && triggerNodeType === 'scheduled_message' ? (
+        <ScheduledExecutionDialog
           open={executionDialogOpen}
           onClose={() => setExecutionDialogOpen(false)}
           flowName={flow?.name || 'Untitled Flow'}
