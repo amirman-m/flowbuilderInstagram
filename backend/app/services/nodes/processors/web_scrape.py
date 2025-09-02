@@ -58,103 +58,53 @@ def get_web_scrape_node_type() -> NodeType:
     return NodeType(
         id="web_scrape",
         name="Web Scraper",
-        description="Fetches a web page and extracts readable text, metadata, and links.",
+        description="Scrapes content from a web page. Perfect for extracting articles, blog posts, or any web content for social media automation.",
         category=NodeCategory.PROCESSOR,
-        version="1.0.0",
+        version="2.0.0",
         icon="public",
         color="#4CAF50",
-        tags=["web", "scrape", "crawler", "html", "content", "metadata", "links"],
+        tags=["web", "scrape", "content", "automation"],
         ports=NodePorts(
             inputs=[
                 NodePort(
-                    id="url",
-                    name="url",
-                    label="URL",
-                    description="URL of the page to scrape",
-                    dataType=NodeDataType.STRING,
-                    required=True,
+                    id="input_text",
+                    name="input_text",
+                    label="Input",
+                    description="Input from previous nodes (URL detection or trigger data)",
+                    data_type=[NodeDataType.STRING, NodeDataType.OBJECT],
+                    required=False,
                 )
             ],
             outputs=[
                 NodePort(
-                    id="raw_html",
-                    name="raw_html",
-                    label="Raw HTML",
-                    description="Raw HTML content of the page",
-                    dataType=NodeDataType.STRING,
-                    required=False,
-                ),
-                NodePort(
-                    id="main_text",
-                    name="main_text",
-                    label="Main Text",
-                    description="Readable main text extracted from the page",
-                    dataType=NodeDataType.STRING,
-                    required=False,
-                ),
-                NodePort(
-                    id="metadata",
-                    name="metadata",
-                    label="Metadata",
-                    description="Structured metadata including title, description, language, canonical URL, and fetch stats",
-                    dataType=NodeDataType.OBJECT,
-                    required=False,
-                ),
-                NodePort(
-                    id="links",
-                    name="links",
-                    label="Links",
-                    description="List of links found on the page",
-                    dataType=NodeDataType.ARRAY,
-                    required=False,
-                ),
+                    id="input_text",
+                    name="input_text", 
+                    label="Scraped Content",
+                    description="Extracted content from the web page",
+                    data_type=[NodeDataType.STRING],
+                    required=True,
+                )
             ],
         ),
-        settingsSchema={
+        settings_schema={
             "type": "object",
             "properties": {
-                "render_js": {
+                "url": {
                     "type": "string",
-                    "description": "JS rendering mode: auto | never | always (headless rendering not enabled in this minimal version)",
-                    "enum": ["auto", "never", "always"],
-                    "default": "auto",
+                    "title": "Website URL",
+                    "description": "The URL of the website to scrape content from",
+                    "format": "uri",
+                    "default": ""
                 },
-                "timeout_seconds": {
-                    "type": "number",
-                    "description": "HTTP timeout in seconds",
-                    "default": 15,
-                    "minimum": 3,
-                    "maximum": 60,
-                },
-                "user_agent": {
+                "output_format": {
                     "type": "string",
-                    "description": "Custom User-Agent to use for requests",
-                    "default": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
-                },
-                "obey_robots": {
-                    "type": "boolean",
-                    "description": "Respect robots.txt for the given URL",
-                    "default": True,
-                },
-                "follow_redirects": {
-                    "type": "boolean",
-                    "description": "Follow HTTP redirects",
-                    "default": True,
-                },
-                "max_size_bytes": {
-                    "type": "number",
-                    "description": "Maximum response size to download (bytes)",
-                    "default": 2_000_000,
-                    "minimum": 50_000,
-                    "maximum": 20_000_000,
-                },
-                "accept_language": {
-                    "type": "string",
-                    "description": "Accept-Language header",
-                    "default": "en-US,en;q=0.9",
-                },
+                    "title": "Output Format",
+                    "description": "Format of the extracted content",
+                    "enum": ["html", "markdown", "plain_text"],
+                    "default": "html"
+                }
             },
-            "required": ["timeout_seconds", "user_agent"],
+            "required": ["url"],
         },
     )
 
@@ -180,103 +130,175 @@ async def _check_robots(url: str, user_agent: str) -> bool:
         return True
 
 
+def _is_url(text: str) -> bool:
+    """Check if text is a valid URL"""
+    return isinstance(text, str) and text.strip().startswith(("http://", "https://"))
+
+
+def _extract_url_from_input(inputs: Dict[str, Any]) -> str:
+    """Extract URL from various input formats"""
+    # Check direct input_text
+    input_text = inputs.get("input_text", "")
+    if _is_url(input_text):
+        return input_text.strip()
+    
+    # Check ai_response 
+    ai_response = inputs.get("ai_response", "")
+    if _is_url(ai_response):
+        return ai_response.strip()
+    
+    # Check message_data from scheduled_message
+    message_data = inputs.get("message_data", {})
+    if isinstance(message_data, dict):
+        # Check input_text within message_data
+        nested_input = message_data.get("input_text", "")
+        if _is_url(nested_input):
+            return nested_input.strip()
+    
+    return ""
+
+
+def _format_content(content: str, output_format: str) -> str:
+    """Format extracted content based on user preference"""
+    if output_format == "plain_text":
+        # Remove HTML tags and extra whitespace
+        import re
+        clean_text = re.sub(r'<[^>]+>', '', content)
+        clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+        return clean_text
+    elif output_format == "markdown":
+        # Convert HTML to markdown using simple rules
+        import re
+        # Basic HTML to markdown conversion
+        content = re.sub(r'<h([1-6])>(.*?)</h[1-6]>', r'\n# \2\n', content)
+        content = re.sub(r'<p>(.*?)</p>', r'\1\n\n', content)
+        content = re.sub(r'<strong>(.*?)</strong>', r'**\1**', content)
+        content = re.sub(r'<em>(.*?)</em>', r'*\1*', content)
+        content = re.sub(r'<a[^>]*href="([^"]*)"[^>]*>(.*?)</a>', r'[\2](\1)', content)
+        content = re.sub(r'<[^>]+>', '', content)  # Remove remaining tags
+        content = re.sub(r'\n\s*\n', '\n\n', content)  # Clean up spacing
+        return content.strip()
+    else:
+        # Return as HTML (default)
+        return content
+
+
 async def execute_web_scrape(context: Dict[str, Any]) -> NodeExecutionResult:
+    """
+    Execute web scraping with simplified user-friendly logic:
+    1. Check if input is from scheduled trigger (scheduled=true)
+    2. If input contains URL, use it; otherwise use URL from settings
+    3. Scrape and format content according to user preference
+    4. Return as input_text for next nodes
+    """
+    start_time = datetime.now(timezone.utc)
     inputs = context.get("inputs", {})
     settings = context.get("settings", {})
+    
+    # Get URL from settings (required)
+    settings_url = settings.get("url", "").strip()
+    output_format = settings.get("output_format", "html")
+    
+    # Determine final URL to scrape
+    final_url = settings_url
+    
+    # Check for scheduled trigger or URL in inputs
+    message_data = inputs.get("message_data", {})
+    is_scheduled = False
+    
+    if isinstance(message_data, dict):
+        is_scheduled = message_data.get("scheduled", False)
+    
+    if is_scheduled:
+        # For scheduled triggers, start scraping with settings URL
+        logs = [f"Scheduled trigger detected - using URL from settings: {settings_url}"]
+    else:
+        # Check if input contains a URL that should replace settings URL
+        input_url = _extract_url_from_input(inputs)
+        if input_url:
+            final_url = input_url
+            logs = [f"URL detected in input - using: {input_url}"]
+        else:
+            logs = [f"No URL in input - using settings URL: {settings_url}"]
+    
+    if not final_url:
+        return NodeExecutionResult(
+            outputs={},
+            status="error",
+            error="No URL provided. Please set a URL in the node settings.",
+            started_at=start_time,
+            completed_at=datetime.now(timezone.utc)
+        )
+    
+    if not _is_url(final_url):
+        return NodeExecutionResult(
+            outputs={},
+            status="error", 
+            error=f"Invalid URL format: {final_url}",
+            started_at=start_time,
+            completed_at=datetime.now(timezone.utc)
+        )
 
-    # Resolve URL from inputs (accept raw string or object with url property)
-    url = None
-    for _, value in inputs.items():
-        if isinstance(value, str) and value.strip().startswith("http"):
-            url = value.strip()
-            break
-        if isinstance(value, dict) and isinstance(value.get("url"), str):
-            candidate = value.get("url").strip()
-            if candidate.startswith("http"):
-                url = candidate
-                break
-
-    if not url:
-        return NodeExecutionResult(outputs={}, status="error", error="No valid URL provided on input port.")
-
-    user_agent = settings.get("user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36")
-    timeout_seconds = float(settings.get("timeout_seconds", 15))
-    obey_robots = bool(settings.get("obey_robots", True))
-    follow_redirects = bool(settings.get("follow_redirects", True))
-    max_size_bytes = int(settings.get("max_size_bytes", 2_000_000))
-    accept_language = settings.get("accept_language", "en-US,en;q=0.9")
-
-    # robots.txt
-    if obey_robots:
-        allowed = await _check_robots(url, user_agent)
-        if not allowed:
-            return NodeExecutionResult(outputs={}, status="error", error=f"Blocked by robots.txt: {url}")
-
-    headers = {
-        "User-Agent": user_agent,
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": accept_language,
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
-        "DNT": "1",
-        "Upgrade-Insecure-Requests": "1",
-    }
-
-    start = datetime.now(timezone.utc)
-    logs: List[str] = []
-
+    # Scrape the web page
     try:
-        async with httpx.AsyncClient(timeout=timeout_seconds, follow_redirects=follow_redirects, headers=headers) as client:
-            resp = await client.get(url)
-            status = resp.status_code
-            content_type = resp.headers.get("content-type", "")
-            logs.append(f"Fetched {url} status={status} content-type={content_type}")
-            if status >= 400:
-                return NodeExecutionResult(outputs={}, status="error", error=f"HTTP {status} fetching {url}", logs=logs)
-            # Limit size
-            content = resp.content[:max_size_bytes]
-            html = content.decode(errors="ignore")
-
-        # Extract main text using trafilatura
-        extracted_text = trafilatura.extract(html, include_comments=False, include_tables=False, no_fallback=False) or ""
-
-        # Basic metadata via trafilatura metadata extraction
-        metadata = trafilatura.metadata.extract_metadata(html) if hasattr(trafilatura, 'metadata') else None
-        meta_obj = {}
-        if metadata:
-            # Convert to serializable dict (trafilatura returns object with attributes)
-            meta_obj = {k: getattr(metadata, k, None) for k in (
-                'title', 'author', 'date', 'sitename', 'url', 'hostname', 'description', 'language')}
-
-        # Links
-        parser = _LinkExtractor(resp.url if hasattr(resp, 'url') else url)
-        parser.feed(html)
-        links = parser.links
-
-        completed = datetime.now(timezone.utc)
-        output_metadata = {
-            "url": url,
-            "canonical_url": meta_obj.get("url") or url,
-            "fetched_at": completed.isoformat(),
-            "status_code": status,
-            "content_type": content_type,
-            "title": meta_obj.get("title"),
-            "description": meta_obj.get("description"),
-            "language": meta_obj.get("language"),
-            "site_name": meta_obj.get("sitename"),
-            "timings_ms": int((completed - start).total_seconds() * 1000),
-            "size_bytes": len(html.encode('utf-8')),
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
         }
-
-        outputs = {
-            "raw_html": html,
-            "main_text": extracted_text,
-            "metadata": output_metadata,
-            "links": links,
-        }
-
-        return NodeExecutionResult(outputs=outputs, status="success", logs=logs, started_at=start, completed_at=completed)
-
+        
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers=headers) as client:
+            response = await client.get(final_url)
+            
+            if response.status_code >= 400:
+                return NodeExecutionResult(
+                    outputs={},
+                    status="error",
+                    error=f"Failed to fetch URL: HTTP {response.status_code}",
+                    logs=logs + [f"HTTP {response.status_code} error"],
+                    started_at=start_time,
+                    completed_at=datetime.now(timezone.utc)
+                )
+            
+            html_content = response.text
+            logs.append(f"Successfully fetched {len(html_content)} characters from {final_url}")
+        
+        # Extract main content using trafilatura
+        extracted_content = trafilatura.extract(
+            html_content,
+            include_comments=False,
+            include_tables=True,
+            no_fallback=False
+        ) or ""
+        
+        if not extracted_content:
+            return NodeExecutionResult(
+                outputs={},
+                status="error",
+                error="No content could be extracted from the webpage",
+                logs=logs + ["Content extraction failed"],
+                started_at=start_time,
+                completed_at=datetime.now(timezone.utc)
+            )
+        
+        # Format content according to user preference
+        formatted_content = _format_content(extracted_content, output_format)
+        logs.append(f"Content extracted and formatted as {output_format} ({len(formatted_content)} characters)")
+        
+        return NodeExecutionResult(
+            outputs={"input_text": formatted_content},
+            status="success",
+            logs=logs,
+            started_at=start_time,
+            completed_at=datetime.now(timezone.utc)
+        )
+        
     except Exception as e:
-        logs.append(f"Error: {type(e).__name__}: {str(e)}")
-        return NodeExecutionResult(outputs={}, status="error", error=str(e), logs=logs, started_at=start, completed_at=datetime.now(timezone.utc))
+        return NodeExecutionResult(
+            outputs={},
+            status="error",
+            error=f"Web scraping failed: {str(e)}",
+            logs=logs + [f"Error: {str(e)}"],
+            started_at=start_time,
+            completed_at=datetime.now(timezone.utc)
+        )
