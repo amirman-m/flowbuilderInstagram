@@ -15,6 +15,7 @@ import { SendTelegramVoiceNode } from './types/SendTelegramVoiceNode';
 import { TranscriptionNode } from './types/TranscriptionNode';
 import { TelegramInputNode } from './types/TelegramInputNode';
 import { TelegramMessageActionNode } from './types/TelegramMessageActionNode';
+import { ScheduledMessageNode } from './types/ScheduledMessageNode';
 import { getCategoryColor } from '../../styles/nodeTheme';
 
 // Import other node components
@@ -84,6 +85,7 @@ export const nodeComponentRegistry: Record<string, React.FC<NodeComponentProps>>
   'chat_input': ChatInputNode,
   'voice_input': VoiceInputNode,
   'telegram_input': TelegramInputNode,
+  'scheduled_message': ScheduledMessageNode,
   'simple-openai-chat': OpenAIChatNode,
   'simple-deepseek-chat': DeepSeekChatNode,
   'transcription': TranscriptionNode,

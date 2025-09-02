@@ -5,6 +5,7 @@ from .core.database import engine, Base
 from .api.v1.api import api_router
 from .core.node_registry import node_registry
 import logging
+from .services.scheduler_service import start_scheduler, shutdown_scheduler
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -48,3 +49,23 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
+
+
+@app.on_event("startup")
+async def on_startup():
+    # Start global scheduler for scheduled flows
+    try:
+        start_scheduler()
+        logger.info("Scheduler started on app startup")
+    except Exception as e:
+        logger.error(f"Failed to start scheduler: {e}")
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    # Gracefully shutdown scheduler
+    try:
+        shutdown_scheduler(wait=False)
+        logger.info("Scheduler shut down on app shutdown")
+    except Exception as e:
+        logger.error(f"Failed to shutdown scheduler: {e}")

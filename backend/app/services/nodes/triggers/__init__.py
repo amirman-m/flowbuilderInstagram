@@ -2,6 +2,7 @@ from app.core.node_registry import NodeRegistry
 from .chat_input import get_chat_input_node_type, execute_chat_input_trigger
 from .voice_input import get_voice_input_node_type, execute_voice_input_trigger
 from .telegram_input import get_telegram_input_node_type, execute_telegram_input_trigger
+from .scheduled_message import get_scheduled_message_node_type, execute_scheduled_message_trigger
 
 def register_trigger_nodes(registry: NodeRegistry):
     """Register all trigger nodes"""
@@ -16,4 +17,8 @@ def register_trigger_nodes(registry: NodeRegistry):
     # Register Telegram Input node
     node_type = get_telegram_input_node_type()
     registry.register_node(node_type, execute_telegram_input_trigger)
+    
+    # Register Scheduled Message node
+    node_type = get_scheduled_message_node_type()
+    registry.register_node(node_type, execute_scheduled_message_trigger)
 

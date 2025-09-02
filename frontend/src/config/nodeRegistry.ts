@@ -50,6 +50,17 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
         hasStatusIndicator: true
       }
     },
+    "scheduled_message": {
+      category: NodeCategory.TRIGGER,
+      subcategory: "Automation",
+      componentName: "ScheduledMessageNode",
+      features: {
+        hasSettings: true,
+        hasExecution: true,
+        hasCustomUI: true,
+        hasStatusIndicator: true
+      }
+    },
     
     "simple-openai-chat": {
       category: NodeCategory.PROCESSOR,

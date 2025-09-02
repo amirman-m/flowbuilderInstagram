@@ -133,11 +133,12 @@ export const TelegramMessageActionNode: React.FC<NodeComponentProps> = (props) =
       
       console.log('🚀 Executing Telegram message send with context:', executionContext);
       
-      // Execute the node via the modular service
+      // Execute the node via the modular service (include settings!)
       const result = await nodeService.execution.executeNode(
         Number(flowId), // Ensure flowId is a number
-        id, 
-        executionContext.inputs
+        id,
+        executionContext.inputs,
+        executionContext.settings
       );
       console.log('✅ Telegram message send execution completed:', result);
       

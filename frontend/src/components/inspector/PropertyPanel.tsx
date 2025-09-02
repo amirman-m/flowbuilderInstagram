@@ -24,7 +24,7 @@ import {
   Delete as DeleteIcon,
   Refresh as ResetIcon
 } from '@mui/icons-material';
-import { JSONSchema7, JSONSchema7Definition } from 'json-schema';
+import { JSONSchema7 } from 'json-schema';
 import { NodeType, NodeValidationError } from '../../types/nodes';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
@@ -61,6 +61,9 @@ interface FieldProps {
   
   /** Whether field is required */
   required?: boolean;
+  
+  /** Whether the field should be disabled */
+  disabled?: boolean;
 }
 
 // Initialize AJV for validation
@@ -73,7 +76,8 @@ const Field: React.FC<FieldProps> = ({
   value,
   onChange,
   error,
-  required = false
+  required = false,
+  disabled = false
 }) => {
   const fieldId = `field-${name}`;
   const hasError = Boolean(error);
@@ -94,6 +98,7 @@ const Field: React.FC<FieldProps> = ({
                 value={value || ''}
                 onChange={(e) => onChange(e.target.value)}
                 label={`${schema.title || name}${required ? ' *' : ''}`}
+                disabled={disabled}
               >
                 {schema.enum.map((option) => (
                   <MenuItem key={String(option)} value={String(option)}>
@@ -121,6 +126,7 @@ const Field: React.FC<FieldProps> = ({
               minRows={isSystemPrompt ? 6 : (schema.format === 'textarea' ? 3 : 1)}
               maxRows={isSystemPrompt ? 10 : (schema.format === 'textarea' ? 6 : undefined)}
               type={schema.format === 'password' ? 'password' : 'text'}
+              disabled={disabled}
               sx={isSystemPrompt ? {
                 '& .MuiInputBase-root': {
                   fontFamily: 'monospace',
@@ -155,6 +161,7 @@ const Field: React.FC<FieldProps> = ({
               max: schema.maximum,
               step: stepValue
             }}
+            disabled={disabled}
           />
         );
 
@@ -165,6 +172,7 @@ const Field: React.FC<FieldProps> = ({
               <Switch
                 checked={Boolean(value)}
                 onChange={(e) => onChange(e.target.checked)}
+                disabled={disabled}
               />
             }
             label={
@@ -201,8 +209,8 @@ const Field: React.FC<FieldProps> = ({
             schema={schema}
             value={value}
             onChange={onChange}
-            error={error}
             required={required}
+            disabled={disabled}
           />
         );
 
@@ -241,7 +249,7 @@ const Field: React.FC<FieldProps> = ({
   );
 };
 
-const ArrayField: React.FC<FieldProps> = ({ name, schema, value, onChange, error, required }) => {
+const ArrayField: React.FC<FieldProps> = ({ name, schema, value, onChange, required }) => {
   const arrayValue = Array.isArray(value) ? value : [];
   const itemSchema = Array.isArray(schema.items) ? schema.items[0] : schema.items;
 
@@ -313,7 +321,7 @@ const ArrayField: React.FC<FieldProps> = ({ name, schema, value, onChange, error
   );
 };
 
-const ObjectField: React.FC<FieldProps> = ({ name, schema, value, onChange, error, required }) => {
+const ObjectField: React.FC<FieldProps> = ({ name, schema, value, onChange, required, disabled }) => {
   const objectValue = value && typeof value === 'object' ? value : {};
   const properties = schema.properties || {};
   const requiredFields = schema.required || [];
@@ -347,6 +355,7 @@ const ObjectField: React.FC<FieldProps> = ({ name, schema, value, onChange, erro
             value={objectValue[propName]}
             onChange={(newValue) => updateProperty(propName, newValue)}
             required={requiredFields.includes(propName)}
+            disabled={disabled}
           />
         ))}
       </AccordionDetails>
@@ -478,17 +487,23 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
       </Box>
 
       {/* Settings fields */}
-      {Object.entries(properties).map(([key, schema]) => (
-        <Field
-          key={key}
-          name={key}
-          schema={schema as JSONSchema7}
-          value={localSettings[key]}
-          onChange={(value) => handleSettingChange(key, value)}
-          error={errorMap[key]}
-          required={requiredFields.includes(key)}
-        />
-      ))}
+      {Object.entries(properties).map(([key, schema]) => {
+        const isHistoryLimit = key === 'history_limit';
+        const modeValue = localSettings['mode'];
+        const shouldDisable = isHistoryLimit && modeValue !== 'chat';
+        return (
+          <Field
+            key={key}
+            name={key}
+            schema={schema as JSONSchema7}
+            value={localSettings[key]}
+            onChange={(value) => handleSettingChange(key, value)}
+            error={errorMap[key]}
+            required={requiredFields.includes(key)}
+            disabled={shouldDisable}
+          />
+        );
+      })}
 
       {/* Validation summary */}
       {validationResult && !validationResult.isValid && (

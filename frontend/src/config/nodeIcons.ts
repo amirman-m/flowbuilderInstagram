@@ -13,6 +13,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import PublicIcon from '@mui/icons-material/Public';
 import LanguageIcon from '@mui/icons-material/Language';
+import ScheduleIcon from '@mui/icons-material/Schedule';
 // Custom icons
 import DeepSeekIcon from '../components/icons/DeepSeekIcon';
 import OpenAIIcon from '../components/icons/OpenAIIcon';
@@ -28,6 +29,7 @@ export const NODE_ICONS: Record<string, NodeIconComponent> = {
   'chat_input': ChatIcon,
   'voice_input': MicIcon,
   'telegram_input': TelegramIcon,
+  'scheduled_message': ScheduleIcon,
   
   // Processor nodes
   'simple-openai-chat': OpenAIIcon,

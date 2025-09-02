@@ -13,3 +13,4 @@ export { TelegramInputNodeExecutor } from './TelegramInputNodeExecutor';
 export { OpenAISpeechNodeExecutor } from './OpenAISpeechNodeExecutor';
 export { LanguageDetectionNodeExecutor } from './LanguageDetectionNodeExecutor';
 export { LanguageTranslatorNodeExecutor } from './LanguageTranslatorNodeExecutor';
+export { ScheduledMessageNodeExecutor } from './ScheduledMessageNodeExecutor';

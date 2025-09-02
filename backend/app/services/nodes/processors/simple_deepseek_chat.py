@@ -76,6 +76,13 @@ def get_simple_deepseek_chat_node_type() -> NodeType:
                     "default": "completion",
                     "enum": ["completion", "chat"]
                 },
+                "history_limit": {
+                    "type": "integer",
+                    "description": "Maximum number of past messages to keep for chat history (used in chat mode)",
+                    "minimum": 1,
+                    "maximum": 35,
+                    "default": 20
+                },
                 "temperature": {
                     "type": "number",
                     "description": "Controls randomness (0-2). Lower is more deterministic, higher is more creative.",
@@ -83,6 +90,7 @@ def get_simple_deepseek_chat_node_type() -> NodeType:
                     "maximum": 2,
                     "default": 0.7
                 }
+                
             },
             "required": ["model", "system_prompt"]
         }
@@ -214,7 +222,8 @@ async def execute_deepseek_chat_mode(
     input_source: str,
     input_type: str,
     chat_id: str,
-    bot_id: str
+    bot_id: str,
+    history_limit: int
 ) -> NodeExecutionResult:
     """
     Execute DeepSeek in chat mode (multi-turn with history)
@@ -301,7 +310,7 @@ async def execute_deepseek_chat_mode(
         chat_history.append(ChatMessage("assistant", ai_response))
         
         # Save updated history
-        save_success = ChatHistoryService.save_chat_history(chat_id, bot_id, chat_history)
+        save_success = ChatHistoryService.save_chat_history(chat_id, bot_id, chat_history, limit=history_limit)
         if not save_success:
             logger.warning(f"Failed to save chat history for chat_id={chat_id}, bot_id={bot_id}")
         
@@ -432,6 +441,7 @@ async def execute_simple_deepseek_chat(context: Dict[str, Any]) -> NodeExecution
     model = settings.get("model", "deepseek-chat")
     system_prompt = settings.get("system_prompt", "You are a helpful assistant.")
     temperature = settings.get("temperature", 0.7)
+    history_limit = settings.get("history_limit", 20)
     
     # Determine input type based on content analysis (only if not already set from connected node)
     if input_type == "text":  # Only override default, preserve from connected node
@@ -490,7 +500,8 @@ async def execute_simple_deepseek_chat(context: Dict[str, Any]) -> NodeExecution
             input_source=input_source,
             input_type=input_type,
             chat_id=chat_id,
-            bot_id=bot_id
+            bot_id=bot_id,
+            history_limit=history_limit
         )
     else:
         return await execute_deepseek_completion_mode(

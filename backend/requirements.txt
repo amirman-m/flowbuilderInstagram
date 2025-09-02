@@ -21,3 +21,4 @@ trafilatura==1.6.3
 beautifulsoup4==4.12.2
 transformers==4.55.4
 sentencepiece==0.2.0
+APScheduler==3.10.4

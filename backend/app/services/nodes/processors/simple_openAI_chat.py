@@ -73,6 +73,13 @@ def get_simple_openai_chat_node_type() -> NodeType:
                     "description": "completion: single message → one reply; chat: remembers conversation.",
                     "default": "completion",
                     "enum": ["completion", "chat"]
+                },               
+                "history_limit": {
+                    "type": "integer",
+                    "description": "Maximum number of past messages to keep for chat history (used in chat mode)",
+                    "minimum": 1,
+                    "maximum": 35,
+                    "default": 20
                 },
                 "temperature": {
                     "type": "number",
@@ -88,6 +95,7 @@ def get_simple_openai_chat_node_type() -> NodeType:
                     "maximum": 4096,
                     "default": 1024
                 }
+                
             },
             "required": ["model", "system_prompt"]
         }
@@ -192,7 +200,8 @@ async def execute_chat_mode(
     input_source: str,
     input_type: str,
     chat_id: str,
-    bot_id: str
+    bot_id: str,
+    history_limit: int
 ) -> NodeExecutionResult:
     """
     Execute OpenAI in chat mode (multi-turn with history)
@@ -250,7 +259,7 @@ async def execute_chat_mode(
         chat_history.append(ChatMessage("assistant", ai_response))
         
         # Save updated history
-        save_success = ChatHistoryService.save_chat_history(chat_id, bot_id, chat_history)
+        save_success = ChatHistoryService.save_chat_history(chat_id, bot_id, chat_history, limit=history_limit)
         if not save_success:
             logger.warning(f"Failed to save chat history for chat_id={chat_id}, bot_id={bot_id}")
         
@@ -382,6 +391,7 @@ async def execute_simple_openai_chat(context: Dict[str, Any]) -> NodeExecutionRe
     system_prompt = settings.get("system_prompt", "You are a helpful assistant.")
     temperature = settings.get("temperature", 0.7)
     max_tokens = settings.get("max_tokens", 1024)
+    history_limit = settings.get("history_limit", 20)
     
     # Determine input type based on content analysis (only if not already set from connected node)
     if input_type == "text":  # Only override default, preserve from connected node
@@ -439,7 +449,8 @@ async def execute_simple_openai_chat(context: Dict[str, Any]) -> NodeExecutionRe
             input_source=input_source,
             input_type=input_type,
             chat_id=chat_id,
-            bot_id=bot_id
+            bot_id=bot_id,
+            history_limit=history_limit
         )
     else:
         return await execute_completion_mode(

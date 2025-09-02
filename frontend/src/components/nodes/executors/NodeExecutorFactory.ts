@@ -14,6 +14,7 @@ import { TelegramInputNodeExecutor } from './TelegramInputNodeExecutor';
 import { OpenAISpeechNodeExecutor } from './OpenAISpeechNodeExecutor';
 import { LanguageDetectionNodeExecutor } from './LanguageDetectionNodeExecutor';
 import { LanguageTranslatorNodeExecutor } from './LanguageTranslatorNodeExecutor';
+import { ScheduledMessageNodeExecutor } from './ScheduledMessageNodeExecutor';
 
 /**
  * Factory for creating appropriate NodeExecutor instances
@@ -42,6 +43,7 @@ export class NodeExecutorFactory {
     NodeExecutorFactory.registerExecutor('openai_speech', OpenAISpeechNodeExecutor);
     NodeExecutorFactory.registerExecutor('multilingual-e5-language-detection', LanguageDetectionNodeExecutor);
     NodeExecutorFactory.registerExecutor('language-translator-m2m100', LanguageTranslatorNodeExecutor);
+    NodeExecutorFactory.registerExecutor('scheduled_message', ScheduledMessageNodeExecutor);
   }
 
   /**

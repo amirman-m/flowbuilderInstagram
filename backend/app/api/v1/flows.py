@@ -14,6 +14,8 @@ from ...models.nodes import NodeInstance, NodeConnection , NodeCategory
 from ...services.flow_execution import create_flow_executor, FlowExecutionError
 from ...services import flow_service
 from ...services.telegram_bot_service import TelegramBotService, TelegramWebhookManager
+from ...services.scheduler_service import schedule_flow, unschedule_flow
+from ...core.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -304,55 +306,90 @@ async def activate_flow(
 
     trigger = trigger_nodes[0]
 
-    # Step 4: Validate trigger type (only telegram_input allowed)
-    if trigger.type_id != "telegram_input":
+    # Step 4: Validate trigger type (support telegram_input or scheduled_message)
+    if trigger.type_id not in ("telegram_input", "scheduled_message"):
         raise HTTPException(
             status_code=400,
             detail=(
-                "Only telegram_input trigger is supported for activation. "
+                "Only telegram_input and scheduled_message triggers are supported for activation. "
                 f"Found '{trigger.type_id}'. Nodes like chat_input and voice_input are interactive and cannot be background-activated."
             ),
         )
 
-    # Step 5: Check for flow-level telegram config first, then node-level
-    from ...models.telegram_bot import TelegramBotConfig
-    flow_bot_config = db.query(TelegramBotConfig).filter(
-        TelegramBotConfig.user_id == current_user.id,
-        TelegramBotConfig.default_flow_id == flow_id,
-        TelegramBotConfig.is_active == True
-    ).first()
-    
-    if flow_bot_config:
-        # Use flow-level config
-        access_token = flow_bot_config.access_token
-        config_name = flow_bot_config.config_name
-        logger.info(f"Using flow-level telegram config for activation: {config_name}")
+    cfg = None
+    # Step 5: Branch by trigger type
+    if trigger.type_id == "telegram_input":
+        # Check for flow-level telegram config first, then node-level
+        from ...models.telegram_bot import TelegramBotConfig
+        flow_bot_config = db.query(TelegramBotConfig).filter(
+            TelegramBotConfig.user_id == current_user.id,
+            TelegramBotConfig.default_flow_id == flow_id,
+            TelegramBotConfig.is_active == True
+        ).first()
+
+        if flow_bot_config:
+            # Use flow-level config
+            access_token = flow_bot_config.access_token
+            config_name = flow_bot_config.config_name
+            logger.info(f"Using flow-level telegram config for activation: {config_name}")
+        else:
+            # Fallback to node-level config
+            trigger_data = trigger.data or {}
+            settings_data = trigger_data.get("settings", {})
+            access_token = settings_data.get("access_token")
+            config_name = settings_data.get("config_name")
+
+        if not access_token and not config_name:
+            raise HTTPException(status_code=400, detail="Bot access token not configured on Telegram trigger node.")
+
+        # Use TelegramBotService to validate token, persist config, and ensure webhook
+        svc = TelegramBotService()
+        try:
+            ok, msg, cfg = await svc.validate_and_setup_bot(
+                db=db,
+                user_id=current_user.id,
+                access_token=access_token,
+                flow_id=flow_id,
+                node_id=trigger.id,
+                config_name=config_name,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Telegram setup failed: {str(e)}")
+
+        if not ok:
+            raise HTTPException(status_code=400, detail=msg)
     else:
-        # Fallback to node-level config
-        trigger_data = trigger.data or {}
-        settings_data = trigger_data.get("settings", {})
-        access_token = settings_data.get("access_token")
-        config_name = settings_data.get("config_name")
-        
-    if not access_token and not config_name:
-        raise HTTPException(status_code=400, detail="Bot access token not configured on Telegram trigger node.")
+        # scheduled_message: register periodic execution job
+        trigger_settings = (trigger.data or {}).get("settings", {})
+        time_unit = trigger_settings.get("time_unit", "minutes")
+        time_value = int(trigger_settings.get("time_value", 10))
 
-    # Use TelegramBotService to validate token, persist config, and ensure webhook
-    svc = TelegramBotService()
-    try:
-        ok, msg, cfg = await svc.validate_and_setup_bot(
-            db=db,
-            user_id=current_user.id,
-            access_token=access_token,
+        # Create job that executes the flow end-to-end with scheduled flag
+        def run_coro_factory(flow_id_param: int, user_id_param: int):
+            async def _runner():
+                db_local = SessionLocal()
+                try:
+                    executor = create_flow_executor(db_local)
+                    await executor.execute_flow(
+                        flow_id=flow_id_param,
+                        user_id=user_id_param,
+                        trigger_inputs={
+                            "is_scheduled_execution": True
+                        }
+                    )
+                except Exception:
+                    logger.exception(f"Scheduled execution failed for flow {flow_id_param}")
+                finally:
+                    db_local.close()
+            return _runner
+
+        schedule_flow(
             flow_id=flow_id,
-            node_id=trigger.id,
-            config_name=config_name,
+            user_id=current_user.id,
+            time_unit=time_unit,
+            time_value=time_value,
+            run_coro_factory=run_coro_factory,
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Telegram setup failed: {str(e)}")
-
-    if not ok:
-        raise HTTPException(status_code=400, detail=msg)
 
     # Step 7: Confirm activation (continuous 24/7 mode)
     flow.status = "active"
@@ -361,7 +398,11 @@ async def activate_flow(
 
     return {
         "ok": True,
-        "message": "Flow activated. Telegram webhook configured for 24/7 processing.",
+        "message": (
+            "Flow activated. Telegram webhook configured for 24/7 processing."
+            if trigger.type_id == "telegram_input" else
+            "Flow activated. Scheduled execution enabled."
+        ),
         "flow_id": flow.id,
         "status": flow.status,
         "webhook_url": (cfg or {}).get("webhook_url") if isinstance(cfg, dict) else None,
@@ -418,6 +459,12 @@ async def deactivate_flow(
     flow.status = "draft"
     db.commit()
     db.refresh(flow)
+
+    # Unschedule any scheduled job for this flow
+    try:
+        unschedule_flow(flow_id)
+    except Exception:
+        logger.warning(f"Unschedule failed (flow {flow_id})")
 
     return {
         "ok": True,

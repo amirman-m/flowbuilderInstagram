@@ -69,15 +69,16 @@ class ChatHistoryService:
             db.close()
     
     @staticmethod
-    def save_chat_history(chat_id: str, bot_id: str, messages: List[ChatMessage]) -> bool:
+    def save_chat_history(chat_id: str, bot_id: str, messages: List[ChatMessage], limit: Optional[int] = None) -> bool:
         """
         Save chat history for a specific chat_id and bot_id
-        Automatically limits to MAX_CHAT_HISTORY messages (removes oldest first)
+        Automatically limits to provided limit or MAX_CHAT_HISTORY messages (removes oldest first)
         
         Args:
             chat_id: Telegram chat ID or user identifier
             bot_id: Bot ID from telegram_bot_configs
             messages: List of ChatMessage objects to save
+            limit: Optional override for maximum number of messages to keep
             
         Returns:
             True if successful, False otherwise
@@ -85,9 +86,12 @@ class ChatHistoryService:
         try:
             db = ChatHistoryService._get_db_session()
             
-            # Limit messages to MAX_CHAT_HISTORY (keep most recent)
-            if len(messages) > MAX_CHAT_HISTORY:
-                messages = messages[-MAX_CHAT_HISTORY:]
+            # Determine effective limit
+            effective_limit = limit or MAX_CHAT_HISTORY
+
+            # Limit messages to effective limit (keep most recent)
+            if len(messages) > effective_limit:
+                messages = messages[-effective_limit:]
             
             # Convert messages to JSON format
             messages_json = [msg.to_dict() for msg in messages]
