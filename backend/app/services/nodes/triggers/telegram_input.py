@@ -196,8 +196,38 @@ class LeftChatMemberHandler(MessageHandler):
     
     @staticmethod
     def process(message: Dict[str, Any], session_id: str, chat_id: int, effective_bot_id: Optional[str]) -> Tuple[Dict[str, Any], str]:
-        # TODO: Implement leave event processing
-        raise NotImplementedError("Leave event processing not yet implemented")
+        left_member = message.get("left_chat_member", {})
+        leave_details = []
+        if isinstance(left_member, dict):
+            leave_details.append({
+                "user_id": left_member.get("id"),
+                "username": left_member.get("username", "No username"),
+                "first_name": left_member.get("first_name", "User"),
+                "last_name": left_member.get("last_name", ""),
+                "is_bot": left_member.get("is_bot", False),
+                "event_type": "leave"
+            })
+        
+        message_data = {
+            "session_id": session_id,
+            "chat_id": chat_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "metadata": {
+                "telegram_message_id": message.get("message_id"),
+                "from_user": message.get("from", {}).get("username", "unknown"),
+                "chat_type": message.get("chat", {}).get("type", "private"),
+                "webhook_data": message,  # Include full webhook data for Left Chat Member Checker
+                **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
+            },
+            "left_chat_member": left_member,  # Direct access for Left Chat Member Checker
+            "leave_details": leave_details,
+            "input_type": "leave_event",
+            **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
+        }
+        
+        username = leave_details[0].get("username", leave_details[0].get("first_name", "Unknown")) if leave_details else "Unknown"
+        log_msg = f"Telegram leave event from chat {chat_id}: {username} left the chat"
+        return message_data, log_msg
 
 # Registry of all message handlers
 MESSAGE_HANDLERS = [
@@ -329,6 +359,8 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
                     supported_types.append("photo")
                 elif handler_class == JoinEventHandler:
                     supported_types.append("join events")
+                elif handler_class == LeftChatMemberHandler:
+                    supported_types.append("leave events")
                 # Skip unimplemented handlers
             
             return NodeExecutionResult(

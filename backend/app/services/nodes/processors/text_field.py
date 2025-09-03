@@ -151,8 +151,8 @@ async def execute_text_field(context: Dict[str, Any]) -> NodeExecutionResult:
             # Prepend username if checkbox is active and username exists
             final_text_content = text_content
             if username_to_prepend:
-                final_text_content = f"@{username_to_prepend} {text_content}"
-                log_message = f"Text Field added input_text with username: '@{username_to_prepend} {text_content[:30]}{'...' if len(text_content) > 30 else ''}'"
+                final_text_content = f"{username_to_prepend} {text_content}"
+                log_message = f"Text Field added input_text with username: '{username_to_prepend} {text_content[:30]}{'...' if len(text_content) > 30 else ''}'"
             else:
                 log_message = f"Text Field added input_text: '{text_content[:50]}{'...' if len(text_content) > 50 else ''}'"
             

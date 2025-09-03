@@ -67,7 +67,7 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
     """
     try:
         # Debug: Log the entire context to see what we're receiving
-        logger.info(f"🔍 FULL EXECUTION CONTEXT: {context}")
+        logger.info(f" FULL EXECUTION CONTEXT: {context}")
         
         # Get settings and inputs
         settings = context.get("settings", {})
@@ -84,12 +84,12 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
             logger.info("Using flattened inputs from top-level context (fallback)")
          
         # Debug: Log each key separately
-        logger.info(f"🔍 Context keys: {list(context.keys())}")
-        logger.info("🔍 System keys considered: {'node_id','flow_id','settings','flowId','inputs'}")
-        logger.info(f"🔍 Extracted inputs: {list(inputs.keys())}")
-        logger.info(f"🔍 flow_id from context.get('flow_id'): {context.get('flow_id')}")
-        logger.info(f"🔍 flowId from context.get('flowId'): {context.get('flowId')}")
-        logger.info(f"🔍 Final flow_id value: {flow_id}")
+        logger.info(f" Context keys: {list(context.keys())}")
+        logger.info(" System keys considered: {'node_id','flow_id','settings','flowId','inputs'}")
+        logger.info(f" Extracted inputs: {list(inputs.keys())}")
+        logger.info(f" flow_id from context.get('flow_id'): {context.get('flow_id')}")
+        logger.info(f" flowId from context.get('flowId'): {context.get('flowId')}")
+        logger.info(f" Final flow_id value: {flow_id}")
 
         
         # Find the first string input from any connected node
@@ -207,7 +207,7 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
                             try:
                                 from sqlalchemy.orm import Session
                                 from ....core.database import get_db
-                                from ....models.node_instance import NodeInstance
+                                from ....models.nodes import NodeInstance
                                 db = next(get_db())
                                 
                                 # Query for telegram_input nodes in this flow
@@ -274,7 +274,7 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
                 # Make API request to get all nodes in the flow - use direct DB query
                 from sqlalchemy.orm import Session
                 from app.core.database import get_db
-                from app.models.nodes import NodeInstance
+                from ....models.nodes import NodeInstance
                 db = next(get_db())
                 
                 # Query the database for nodes in this flow
@@ -382,8 +382,8 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
         response = requests.post(url, json=payload)
         
         if response.status_code == 200:
-            logger.info("✅ Successfully sent Telegram message to chat {chat_id}")
-            logger.info(f"✅ Message: {message[:100]}...")
+            logger.info(" Successfully sent Telegram message to chat {chat_id}")
+            logger.info(f" Message: {message[:100]}...")
             result = response.json()
                 
             # Create output data with metadata
