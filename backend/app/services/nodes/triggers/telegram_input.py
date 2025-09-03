@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 from fastapi.responses import StreamingResponse
 from ....models.nodes import NodeType, NodeCategory, NodeDataType, NodePort, NodePorts, NodeExecutionResult
 from ...telegram_bot_service import TelegramBotService
@@ -12,6 +12,202 @@ logger = logging.getLogger(__name__)
 
 # Global SSE connection registry
 _sse_connections: Dict[int, Dict[str, asyncio.Queue]] = {}
+
+# ============================================================================
+# MODULAR MESSAGE TYPE HANDLERS
+# ============================================================================
+
+class MessageHandler:
+    """Base class for Telegram message type handlers"""
+    
+    @staticmethod
+    def can_handle(message: Dict[str, Any]) -> bool:
+        """Check if this handler can process the message type"""
+        raise NotImplementedError
+    
+    @staticmethod
+    def process(message: Dict[str, Any], session_id: str, chat_id: int, effective_bot_id: Optional[str]) -> Tuple[Dict[str, Any], str]:
+        """Process the message and return (message_data, log_message)"""
+        raise NotImplementedError
+
+class TextMessageHandler(MessageHandler):
+    """Handler for text messages"""
+    
+    @staticmethod
+    def can_handle(message: Dict[str, Any]) -> bool:
+        return "text" in message and message.get("text")
+    
+    @staticmethod
+    def process(message: Dict[str, Any], session_id: str, chat_id: int, effective_bot_id: Optional[str]) -> Tuple[Dict[str, Any], str]:
+        text_content = message.get("text")
+        message_data = {
+            "session_id": session_id,
+            "chat_id": chat_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "metadata": {
+                "telegram_message_id": message.get("message_id"),
+                "from_user": message.get("from", {}).get("username", "unknown"),
+                "chat_type": message.get("chat", {}).get("type", "private"),
+                **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
+            },
+            "input_text": text_content,
+            "chat_input": text_content,
+            "input_type": "text",
+            **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
+        }
+        log_msg = f"Telegram text message from chat {chat_id}: \"{text_content[:50]}{'...' if len(text_content) > 50 else ''}\""
+        return message_data, log_msg
+
+class VoiceMessageHandler(MessageHandler):
+    """Handler for voice messages"""
+    
+    @staticmethod
+    def can_handle(message: Dict[str, Any]) -> bool:
+        return "voice" in message
+    
+    @staticmethod
+    def process(message: Dict[str, Any], session_id: str, chat_id: int, effective_bot_id: Optional[str]) -> Tuple[Dict[str, Any], str]:
+        voice_info = message["voice"]
+        message_data = {
+            "session_id": session_id,
+            "chat_id": chat_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "metadata": {
+                "telegram_message_id": message.get("message_id"),
+                "from_user": message.get("from", {}).get("username", "unknown"),
+                "chat_type": message.get("chat", {}).get("type", "private"),
+                **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
+            },
+            "voice_input": {
+                "file_id": voice_info.get("file_id"),
+                "file_unique_id": voice_info.get("file_unique_id"),
+                "duration": voice_info.get("duration"),
+                "mime_type": voice_info.get("mime_type"),
+                "file_size": voice_info.get("file_size")
+            },
+            "input_type": "voice",
+            **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
+        }
+        log_msg = f"Telegram voice message from chat {chat_id}: {voice_info.get('duration', 0)}s"
+        return message_data, log_msg
+
+class PhotoMessageHandler(MessageHandler):
+    """Handler for photo messages"""
+    
+    @staticmethod
+    def can_handle(message: Dict[str, Any]) -> bool:
+        return "photo" in message
+    
+    @staticmethod
+    def process(message: Dict[str, Any], session_id: str, chat_id: int, effective_bot_id: Optional[str]) -> Tuple[Dict[str, Any], str]:
+        photos = message.get("photo", []) or []
+        best_photo = None
+        if photos:
+            best_photo = max(
+                photos,
+                key=lambda p: (p.get("width", 0) or 0) * (p.get("height", 0) or 0)
+            )
+        caption = message.get("caption")
+        message_data = {
+            "session_id": session_id,
+            "chat_id": chat_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "metadata": {
+                "telegram_message_id": message.get("message_id"),
+                "from_user": message.get("from", {}).get("username", "unknown"),
+                "chat_type": message.get("chat", {}).get("type", "private"),
+                **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
+            },
+            "photo_input": {
+                "best": best_photo,
+                "all": photos,
+            },
+            **({"input_text": caption, "chat_input": caption} if caption else {}),
+            "input_type": "photo",
+            **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
+        }
+        preview = f" with caption: \"{caption[:40]}...\"" if caption and len(caption) > 40 else (f" with caption: \"{caption}\"" if caption else "")
+        dims = f"{(best_photo or {}).get('width', '?')}x{(best_photo or {}).get('height', '?')}"
+        log_msg = f"Telegram photo message from chat {chat_id}: best={dims}{preview}"
+        return message_data, log_msg
+
+class JoinEventHandler(MessageHandler):
+    """Handler for user join events (new_chat_members)"""
+    
+    @staticmethod
+    def can_handle(message: Dict[str, Any]) -> bool:
+        return "new_chat_members" in message and message.get("new_chat_members")
+    
+    @staticmethod
+    def process(message: Dict[str, Any], session_id: str, chat_id: int, effective_bot_id: Optional[str]) -> Tuple[Dict[str, Any], str]:
+        new_members = message.get("new_chat_members", [])
+        join_details = []
+        for user in new_members:
+            if isinstance(user, dict):
+                join_details.append({
+                    "user_id": user.get("id"),
+                    "username": user.get("username", "No username"),
+                    "first_name": user.get("first_name", "New User"),
+                    "last_name": user.get("last_name", ""),
+                    "is_bot": user.get("is_bot", False),
+                    "event_type": "join"
+                })
+        
+        message_data = {
+            "session_id": session_id,
+            "chat_id": chat_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "metadata": {
+                "telegram_message_id": message.get("message_id"),
+                "from_user": message.get("from", {}).get("username", "unknown"),
+                "chat_type": message.get("chat", {}).get("type", "private"),
+                "webhook_data": message,  # Include full webhook data for Group Event Checker
+                **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
+            },
+            "new_chat_members": new_members,  # Direct access for Group Event Checker
+            "join_details": join_details,
+            "input_type": "join_event",
+            **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
+        }
+        
+        usernames = [detail.get("username", detail.get("first_name", "Unknown")) for detail in join_details]
+        log_msg = f"Telegram join event from chat {chat_id}: {len(join_details)} new member(s) - {', '.join(usernames)}"
+        return message_data, log_msg
+
+# Future handlers - placeholders for extensibility
+class FileMessageHandler(MessageHandler):
+    """Handler for file/document messages (future implementation)"""
+    
+    @staticmethod
+    def can_handle(message: Dict[str, Any]) -> bool:
+        return "document" in message
+    
+    @staticmethod
+    def process(message: Dict[str, Any], session_id: str, chat_id: int, effective_bot_id: Optional[str]) -> Tuple[Dict[str, Any], str]:
+        # TODO: Implement file/document processing
+        raise NotImplementedError("File/document processing not yet implemented")
+
+class LeftChatMemberHandler(MessageHandler):
+    """Handler for user leave events (future implementation)"""
+    
+    @staticmethod
+    def can_handle(message: Dict[str, Any]) -> bool:
+        return "left_chat_member" in message
+    
+    @staticmethod
+    def process(message: Dict[str, Any], session_id: str, chat_id: int, effective_bot_id: Optional[str]) -> Tuple[Dict[str, Any], str]:
+        # TODO: Implement leave event processing
+        raise NotImplementedError("Leave event processing not yet implemented")
+
+# Registry of all message handlers
+MESSAGE_HANDLERS = [
+    TextMessageHandler,
+    VoiceMessageHandler,
+    PhotoMessageHandler,
+    JoinEventHandler,
+    FileMessageHandler,
+    LeftChatMemberHandler,
+]
 
 async def notify_sse_connections(flow_id: int, event_data: Dict[str, Any]):
     """
@@ -78,7 +274,7 @@ async def setup_telegram_webhook(access_token: str, webhook_url: str) -> bool:
 
 async def process_webhook_message(webhook_data: Dict[str, Any], access_token: str, flow_id: int = None, bot_id: Optional[str] = None) -> NodeExecutionResult:
     """
-    Process incoming Telegram webhook message and extract data
+    Process incoming Telegram webhook message using modular handlers
     """
     try:
         # Parse Telegram update
@@ -109,97 +305,36 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
         if effective_bot_id:
             logger.info(f"telegram_input: using bot_id from webhook context: {effective_bot_id}")
         
-        # Extract text from message
-        text_content = message.get("text")
-        
-        if text_content:
-            # For text messages - format for compatibility with OpenAI chat node
-            message_data = {
-                "session_id": session_id,
-                "chat_id": chat_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "metadata": {
-                    "telegram_message_id": message.get("message_id"),
-                    "from_user": message.get("from", {}).get("username", "unknown"),
-                    "chat_type": message.get("chat", {}).get("type", "private"),
-                    **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
-                },
-                "input_text": text_content,  # OpenAI node expects 'input_text'
-                "chat_input": text_content,  # Keep original for backward compatibility
-                "input_type": "text",
-                **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
-            }
-            log_msg = f"Telegram text message from chat {chat_id}: \"{text_content[:50]}{'...' if len(text_content) > 50 else ''}\""
-            
-        # Check for voice message
-        elif "voice" in message:
-            voice_info = message["voice"]
-            message_data = {
-                "session_id": session_id,
-                "chat_id": chat_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "metadata": {
-                    "telegram_message_id": message.get("message_id"),
-                    "from_user": message.get("from", {}).get("username", "unknown"),
-                    "chat_type": message.get("chat", {}).get("type", "private"),
-                    **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
-                },
-                "voice_input": {
-                    "file_id": voice_info.get("file_id"),
-                    "file_unique_id": voice_info.get("file_unique_id"),
-                    "duration": voice_info.get("duration"),
-                    "mime_type": voice_info.get("mime_type"),
-                    "file_size": voice_info.get("file_size")
-                },
-                "input_type": "voice",
-                **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
-            }
-            log_msg = f"Telegram voice message from chat {chat_id}: {voice_info.get('duration', 0)}s"
-        
-        # Check for photo message (array of sizes)
-        elif "photo" in message:
-            photos = message.get("photo", []) or []
-            # Choose the largest photo by area (width*height); Telegram ensures ascending size order,
-            # but we compute robustly in case of inconsistencies
-            best_photo = None
-            if photos:
-                best_photo = max(
-                    photos,
-                    key=lambda p: (p.get("width", 0) or 0) * (p.get("height", 0) or 0)
-                )
-            caption = message.get("caption")
-            message_data = {
-                "session_id": session_id,
-                "chat_id": chat_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "metadata": {
-                    "telegram_message_id": message.get("message_id"),
-                    "from_user": message.get("from", {}).get("username", "unknown"),
-                    "chat_type": message.get("chat", {}).get("type", "private"),
-                    **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
-                },
-                # Provide both the selected best photo and the full list for downstream use
-                "photo_input": {
-                    "best": best_photo,
-                    "all": photos,
-                },
-                # If a caption exists, also surface it as input_text/chat_input for compatibility
-                **({
-                    "input_text": caption,
-                    "chat_input": caption,
-                } if caption else {}),
-                "input_type": "photo",
-                **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
-            }
-            preview = f" with caption: \"{caption[:40]}...\"" if caption and len(caption) > 40 else (f" with caption: \"{caption}\"" if caption else "")
-            dims = f"{(best_photo or {}).get('width', '?')}x{(best_photo or {}).get('height', '?')}"
-            log_msg = f"Telegram photo message from chat {chat_id}: best={dims}{preview}"
-        
+        # Try each handler until one can process the message
+        for handler_class in MESSAGE_HANDLERS:
+            if handler_class.can_handle(message):
+                try:
+                    message_data, log_msg = handler_class.process(message, session_id, chat_id, effective_bot_id)
+                    break
+                except NotImplementedError:
+                    # Skip handlers that are not yet implemented
+                    continue
+                except Exception as e:
+                    logger.error(f"Error in {handler_class.__name__}: {str(e)}")
+                    continue
         else:
+            # No handler could process this message type
+            supported_types = []
+            for handler_class in MESSAGE_HANDLERS:
+                if handler_class == TextMessageHandler:
+                    supported_types.append("text")
+                elif handler_class == VoiceMessageHandler:
+                    supported_types.append("voice")
+                elif handler_class == PhotoMessageHandler:
+                    supported_types.append("photo")
+                elif handler_class == JoinEventHandler:
+                    supported_types.append("join events")
+                # Skip unimplemented handlers
+            
             return NodeExecutionResult(
                 outputs={},
                 status="error",
-                error="Unsupported message type (only text, voice, and photo are supported)"
+                error=f"Unsupported message type. Supported types: {', '.join(supported_types)}"
             )
         
         # Notify SSE connections if flow_id provided

@@ -306,6 +306,7 @@ class FlowExecutor:
                                      node_outputs: Dict[str, Dict[str, Any]]):
         """
         Execute connected nodes following the connections from current node.
+        Only executes nodes connected to output ports that actually have data (conditional routing).
         
         Args:
             current_node_id: ID of the current node that was just executed
@@ -315,6 +316,10 @@ class FlowExecutor:
             executed_nodes: Set of already executed node IDs
             node_outputs: Dictionary storing outputs from executed nodes
         """
+        # Get outputs from the current node
+        current_outputs = node_outputs.get(current_node_id, {})
+        logger.info(f"📤 Current node {current_node_id} outputs: {current_outputs}")
+        
         # Find all connections where current node is the source
         outgoing_connections = [
             conn for conn in connections_data 
@@ -329,6 +334,11 @@ class FlowExecutor:
             target_port_id = connection['targetPortId']
             
             logger.info(f"🔌 Processing connection: {current_node_id}[{source_port_id}] -> {target_node_id}[{target_port_id}]")
+            
+            # CONDITIONAL ROUTING: Only execute if the source port has data
+            if source_port_id not in current_outputs:
+                logger.info(f"⏭️ Skipping connection to {target_node_id} - source port '{source_port_id}' has no data (conditional routing)")
+                continue
             
             # Skip if target node already executed
             if target_node_id in executed_nodes:
@@ -348,7 +358,7 @@ class FlowExecutor:
             )
             
             # Execute target node
-            logger.info(f"⚡ Executing connected node: {target_node_id} (type: {target_node['typeId']})")
+            logger.info(f"⚡ Executing connected node: {target_node_id} (type: {target_node['typeId']}) - triggered by port '{source_port_id}'")
             result = await self._execute_node_modular(target_node, target_inputs)
             
             # Store results

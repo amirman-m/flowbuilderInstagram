@@ -14,6 +14,7 @@ import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import PublicIcon from '@mui/icons-material/Public';
 import LanguageIcon from '@mui/icons-material/Language';
 import ScheduleIcon from '@mui/icons-material/Schedule';
+import TextFieldsIcon from '@mui/icons-material/TextFields';
 // Custom icons
 import DeepSeekIcon from '../components/icons/DeepSeekIcon';
 import OpenAIIcon from '../components/icons/OpenAIIcon';
@@ -41,6 +42,7 @@ export const NODE_ICONS: Record<string, NodeIconComponent> = {
   'web_scrape': PublicIcon,
   'multilingual-e5-language-detection': LanguageIcon,
   'language-translator-m2m100': LanguageIcon,
+  'text_field': TextFieldsIcon,
   
   // Action nodes
   'send_telegram_message': SendIcon,

@@ -205,6 +205,17 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
         hasStatusIndicator: true
       }
     },
+    "text_field": {
+      category: NodeCategory.PROCESSOR,
+      subcategory: "Text Processing",
+      componentName: "TextFieldNode",
+      features: {
+        hasSettings: true,
+        hasExecution: true,
+        hasCustomUI: false,
+        hasStatusIndicator: true
+      }
+    },
     // Add more nodes here in the future
     
   };
