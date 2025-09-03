@@ -205,6 +205,17 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
         hasStatusIndicator: true
       }
     },
+    "telegram_left_chat_member_checker": {
+      category: NodeCategory.PROCESSOR,
+      subcategory: "Operations",
+      componentName: "TelegramLeftChatMemberCheckerNode",
+      features: {
+        hasSettings: false,
+        hasExecution: true,
+        hasCustomUI: true,
+        hasStatusIndicator: true
+      }
+    },
     "text_field": {
       category: NodeCategory.PROCESSOR,
       subcategory: "Text Processing",

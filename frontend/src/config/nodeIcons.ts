@@ -15,6 +15,7 @@ import PublicIcon from '@mui/icons-material/Public';
 import LanguageIcon from '@mui/icons-material/Language';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import TextFieldsIcon from '@mui/icons-material/TextFields';
+import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 // Custom icons
 import DeepSeekIcon from '../components/icons/DeepSeekIcon';
 import OpenAIIcon from '../components/icons/OpenAIIcon';
@@ -43,6 +44,8 @@ export const NODE_ICONS: Record<string, NodeIconComponent> = {
   'multilingual-e5-language-detection': LanguageIcon,
   'language-translator-m2m100': LanguageIcon,
   'text_field': TextFieldsIcon,
+  'telegram_group_event_checker': TelegramIcon,
+  'telegram_left_chat_member_checker': ExitToAppIcon,
   
   // Action nodes
   'send_telegram_message': SendIcon,
