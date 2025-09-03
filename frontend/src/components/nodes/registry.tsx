@@ -15,6 +15,7 @@ import { SendTelegramVoiceNode } from './types/SendTelegramVoiceNode';
 import { TranscriptionNode } from './types/TranscriptionNode';
 import { TelegramInputNode } from './types/TelegramInputNode';
 import { TelegramMessageActionNode } from './types/TelegramMessageActionNode';
+import { TelegramGroupEventCheckerNode } from './types/TelegramGroupEventCheckerNode';
 import { ScheduledMessageNode } from './types/ScheduledMessageNode';
 import { getCategoryColor } from '../../styles/nodeTheme';
 
@@ -94,6 +95,7 @@ export const nodeComponentRegistry: Record<string, React.FC<NodeComponentProps>>
   'send_telegram_message': TelegramMessageActionNode,
   'send_telegram_voice': SendTelegramVoiceNode,
   'switch-input-type': SwitchInputTypeNode,
+  'telegram_group_event_checker': TelegramGroupEventCheckerNode,
   'web_scrape': WebScrapeNode,
   'multilingual-e5-language-detection': LanguageDetectionNode,
   'language-translator-m2m100': LanguageTranslatorNode,

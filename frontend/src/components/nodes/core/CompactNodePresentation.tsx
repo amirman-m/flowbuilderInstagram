@@ -37,6 +37,11 @@ interface CompactNodePresentationProps {
   showExecuteButton?: boolean;
   showDeleteButton?: boolean;
   disabled?: boolean;
+  // Optional: override handle colors (CSS background values)
+  inputHandleGradientCss?: string;
+  outputHandleGradientCss?: string;
+  // Optional: override per-output-port gradients by port id
+  outputHandleGradientMap?: Record<string, string>;
 }
 
 export const CompactNodePresentation: React.FC<CompactNodePresentationProps> = ({
@@ -51,7 +56,10 @@ export const CompactNodePresentation: React.FC<CompactNodePresentationProps> = (
   outputPorts = [],
   showExecuteButton = true,
   showDeleteButton = true,
-  disabled = false
+  disabled = false,
+  inputHandleGradientCss,
+  outputHandleGradientCss,
+  outputHandleGradientMap
 }) => {
   const nodeColor = getNodeColor(colorName);
   const colorVariables = generateColorVariables(colorName);
@@ -272,7 +280,7 @@ export const CompactNodePresentation: React.FC<CompactNodePresentationProps> = (
               transform: 'translateY(-50%)',
               width: 12,
               height: 12,
-              background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+              background: inputHandleGradientCss || 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
               border: '2px solid white',
               borderRadius: '50%',
               zIndex: 10000,
@@ -289,6 +297,9 @@ export const CompactNodePresentation: React.FC<CompactNodePresentationProps> = (
       {/* Dynamic Output Handles */}
       {outputPorts.map((port, index) => {
         const topPercent = ((index + 1) / (outputPorts.length + 1)) * 100;
+        const portGradient = (outputHandleGradientMap && outputHandleGradientMap[port.id])
+          ? outputHandleGradientMap[port.id]
+          : (outputHandleGradientCss || 'linear-gradient(135deg, #10b981, #059669)');
         return (
           <Handle
             key={`output-${port.id}`}
@@ -301,7 +312,7 @@ export const CompactNodePresentation: React.FC<CompactNodePresentationProps> = (
               transform: 'translateY(-50%)',
               width: 12,
               height: 12,
-              background: 'linear-gradient(135deg, #10b981, #059669)',
+              background: portGradient,
               border: '2px solid white',
               borderRadius: '50%',
               zIndex: 10000,

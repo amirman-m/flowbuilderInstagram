@@ -15,22 +15,30 @@ import { useRequiredInputsGuard } from '../hooks/useRequiredInputsGuard';
 
 export interface CompactNodeContainerProps extends NodeComponentProps {
   customColorName?: string;
+  customNodeName?: string;
   showExecuteButton?: boolean;
   showDeleteButton?: boolean;
   onCustomExecute?: () => void;
   onBeforeExecute?: () => Promise<boolean> | boolean;
   showOutputLabels?: boolean;
+  inputHandleGradientCss?: string;
+  outputHandleGradientCss?: string;
+  outputHandleGradientMap?: Record<string, string>;
 }
 
 export const CompactNodeContainer: React.FC<CompactNodeContainerProps> = ({
   id,
   data,
   customColorName,
+  customNodeName,
   showExecuteButton = true,
   showDeleteButton = true,
   onCustomExecute,
   onBeforeExecute,
-  showOutputLabels = false
+  showOutputLabels = false,
+  inputHandleGradientCss,
+  outputHandleGradientCss,
+  outputHandleGradientMap
 }) => {
   const { nodeType, instance, onNodeUpdate, onNodeDelete } = data;
 
@@ -107,6 +115,7 @@ export const CompactNodeContainer: React.FC<CompactNodeContainerProps> = ({
     nodeId: id,
     nodeType,
     customColorName,
+    customNodeName,
     onExecute: async () => {
       // Optional guard from node component: can cancel execution
       if (onBeforeExecute) {
@@ -172,6 +181,9 @@ export const CompactNodeContainer: React.FC<CompactNodeContainerProps> = ({
       showExecuteButton={showExecuteButton && presentationData.showExecuteButton}
       showDeleteButton={showDeleteButton && presentationData.showDeleteButton}
       disabled={presentationData.disabled}
+      inputHandleGradientCss={inputHandleGradientCss}
+      outputHandleGradientCss={outputHandleGradientCss}
+      outputHandleGradientMap={outputHandleGradientMap}
     />
   );
 };

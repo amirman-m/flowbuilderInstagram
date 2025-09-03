@@ -10,6 +10,7 @@ export { VoiceInputNodeExecutor } from './VoiceInputNodeExecutor';
 export { DownloadTelegramVoiceNodeExecutor } from './DownloadTelegramVoiceNodeExecutor';
 export { SwitchInputTypeNodeExecutor } from './SwitchInputTypeNodeExecutor';
 export { TelegramInputNodeExecutor } from './TelegramInputNodeExecutor';
+export { TelegramGroupEventCheckerNodeExecutor } from './TelegramGroupEventCheckerNodeExecutor';
 export { OpenAISpeechNodeExecutor } from './OpenAISpeechNodeExecutor';
 export { LanguageDetectionNodeExecutor } from './LanguageDetectionNodeExecutor';
 export { LanguageTranslatorNodeExecutor } from './LanguageTranslatorNodeExecutor';

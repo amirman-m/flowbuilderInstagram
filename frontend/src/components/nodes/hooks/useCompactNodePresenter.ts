@@ -30,6 +30,7 @@ export interface UseCompactNodePresenterProps {
   onExecute?: () => void;
   onDelete?: () => void;
   customColorName?: string;
+  customNodeName?: string;
 }
 
 export interface UseCompactNodePresenterReturn {
@@ -44,7 +45,8 @@ export const useCompactNodePresenter = ({
   nodeType,
   onExecute,
   onDelete,
-  customColorName
+  customColorName,
+  customNodeName
 }: UseCompactNodePresenterProps): UseCompactNodePresenterReturn => {
   const [executionStatus, setExecutionStatus] = useState<NodeExecutionStatus>(NodeExecutionStatus.PENDING);
   const [isExecuting, setIsExecuting] = useState(false);
@@ -106,7 +108,7 @@ export const useCompactNodePresenter = ({
   // Build presentation data
   const presentationData: CompactNodePresentationData = {
     nodeId,
-    nodeName: nodeType?.name || 'Unknown Node',
+    nodeName: customNodeName || nodeType?.name || 'Unknown Node',
     nodeIcon: getNodeIcon(),
     colorName,
     executionStatus,

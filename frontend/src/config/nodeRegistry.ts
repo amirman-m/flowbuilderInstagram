@@ -194,6 +194,17 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
         hasStatusIndicator: true
       }
     },
+    "telegram_group_event_checker": {
+      category: NodeCategory.PROCESSOR,
+      subcategory: "Operations",
+      componentName: "TelegramGroupEventCheckerNode",
+      features: {
+        hasSettings: false,
+        hasExecution: true,
+        hasCustomUI: true,
+        hasStatusIndicator: true
+      }
+    },
     // Add more nodes here in the future
     
   };
