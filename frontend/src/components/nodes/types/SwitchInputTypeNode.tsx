@@ -16,6 +16,11 @@ export const SwitchInputTypeNode: React.FC<NodeComponentProps> = (props) => {
       <CompactNodeContainer
         {...props}
         customColorName="coral"
+        outputHandleGradientMap={{
+          'text': 'linear-gradient(135deg, #10b981, #059669)',       // green
+          'voice': 'linear-gradient(135deg, #7c3aed, #6d28d9)',      // purple
+          'other': 'linear-gradient(135deg, #ea580c, #c2410c)'       // orange
+        }}
         showExecuteButton={true}
         showDeleteButton={true}
       />
