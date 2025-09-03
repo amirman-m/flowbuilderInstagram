@@ -374,8 +374,7 @@ async def execute_telegram_output_message(context: Dict[str, Any]) -> NodeExecut
         url = f"https://api.telegram.org/bot{access_token}/sendMessage"
         payload = {
             "chat_id": chat_id,
-            "text": message,
-            "parse_mode": "Markdown"  # Optional: Use "HTML" or "Markdown" for formatting
+            "text": message
             }
             
         logger.info(f"Sending message to Telegram chat {chat_id}")

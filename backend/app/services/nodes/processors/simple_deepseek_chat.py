@@ -103,7 +103,9 @@ async def execute_deepseek_completion_mode(
     temperature: float,
     session_id: str,
     input_source: str,
-    input_type: str
+    input_type: str,
+    chat_id: str = None,
+    bot_id: str = None
 ) -> NodeExecutionResult:
     """
     Execute DeepSeek in completion mode (single-turn)
@@ -183,6 +185,8 @@ async def execute_deepseek_completion_mode(
             "input_type": input_type,
             "ai_response": ai_response,
             "timestamp": timestamp,
+            **({"chat_id": chat_id} if chat_id else {}),
+            **({"bot_id": bot_id} if bot_id else {}),
             "metadata": {
                 "mode": "completion",
                 "model": model,
@@ -511,5 +515,7 @@ async def execute_simple_deepseek_chat(context: Dict[str, Any]) -> NodeExecution
             temperature=temperature,
             session_id=session_id,
             input_source=input_source,
-            input_type=input_type
+            input_type=input_type,
+            chat_id=chat_id,
+            bot_id=bot_id
         )

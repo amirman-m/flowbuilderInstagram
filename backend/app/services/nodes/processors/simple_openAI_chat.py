@@ -109,7 +109,9 @@ async def execute_completion_mode(
     max_tokens: int,
     session_id: str,
     input_source: str,
-    input_type: str
+    input_type: str,
+    chat_id: str = None,
+    bot_id: str = None
 ) -> NodeExecutionResult:
     """
     Execute OpenAI in completion mode (single-turn)
@@ -160,6 +162,8 @@ async def execute_completion_mode(
             "input_type": input_type,
             "ai_response": ai_response,
             "timestamp": timestamp,
+            **({"chat_id": chat_id} if chat_id else {}),
+            **({"bot_id": bot_id} if bot_id else {}),
             "metadata": {
                 "mode": "completion",
                 "model": model,
@@ -461,5 +465,7 @@ async def execute_simple_openai_chat(context: Dict[str, Any]) -> NodeExecutionRe
             max_tokens=max_tokens,
             session_id=session_id,
             input_source=input_source,
-            input_type=input_type
+            input_type=input_type,
+            chat_id=chat_id,
+            bot_id=bot_id
         )
