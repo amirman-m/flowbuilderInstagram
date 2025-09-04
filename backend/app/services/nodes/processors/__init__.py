@@ -12,7 +12,7 @@ from .language_translator import get_language_translator_node_type, execute_lang
 from .telegram_group_event_checker import get_telegram_group_event_checker_node_type, execute_telegram_group_event_checker
 from .telegram_left_chat_member_checker import get_telegram_left_chat_member_checker_node_type, execute_telegram_left_chat_member_checker
 from .text_field import get_text_field_node_type, execute_text_field
-
+from .openai_image_generation import get_openai_image_generation_node_type, execute_openai_image_generation
 
 
 def register_processor_nodes(registry: NodeRegistry):
@@ -68,3 +68,8 @@ def register_processor_nodes(registry: NodeRegistry):
     # Register Text Field node
     node_type = get_text_field_node_type()
     registry.register_node(node_type, execute_text_field)
+
+    # Register OpenAI Image Generation node       
+    openai_image_node_type = get_openai_image_generation_node_type()
+    registry.register_node(openai_image_node_type, execute_openai_image_generation)
+       

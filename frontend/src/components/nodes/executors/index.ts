@@ -10,6 +10,7 @@ export { VoiceInputNodeExecutor } from './VoiceInputNodeExecutor';
 export { DownloadTelegramVoiceNodeExecutor } from './DownloadTelegramVoiceNodeExecutor';
 export { DownloadTelegramPhotoNodeExecutor } from './DownloadTelegramPhotoNodeExecutor';
 export { SendTelegramPhotoNodeExecutor } from './SendTelegramPhotoNodeExecutor';
+export { OpenAIImageGenerationNodeExecutor } from './OpenAIImageGenerationNodeExecutor';
 export { SwitchInputTypeNodeExecutor } from './SwitchInputTypeNodeExecutor';
 export { TelegramInputNodeExecutor } from './TelegramInputNodeExecutor';
 export { TelegramGroupEventCheckerNodeExecutor } from './TelegramGroupEventCheckerNodeExecutor';

@@ -108,6 +108,13 @@ export const useExecutionData = (data: NodeDataWithHandlers) => {
       || instanceData?.lastExecution?.completedAt 
       || instanceData?.lastExecution?.startedAt;
     
+    // Resolve error message if present
+    const resolvedError: string | undefined =
+      (data as any)?.error ||
+      executionResult?.error ||
+      (lastExecution as any)?.error ||
+      instanceData?.lastExecution?.error;
+    
     // Extract specific output values based on node type
     const getOutputValue = (portId: string) => {
       return currentOutputs[portId];
@@ -158,6 +165,7 @@ export const useExecutionData = (data: NodeDataWithHandlers) => {
       outputs: currentOutputs,
       getOutputValue,
       displayData: getDisplayData(),
+      error: resolvedError,
       
       // Instance data (for settings, etc.)
       instance,

@@ -249,6 +249,17 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
         hasStatusIndicator: true
       }
     },
+    "openai_image_generation": {
+      category: NodeCategory.PROCESSOR,
+      subcategory: "Text to Image",
+      componentName: "OpenAIImageGenerationNode",
+      features: {
+        hasSettings: true,
+        hasExecution: true,
+        hasCustomUI: true,
+        hasStatusIndicator: true
+      }
+    },
     // Add more nodes here in the future
     
   };

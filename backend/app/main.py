@@ -21,7 +21,11 @@ except Exception as e:
     logger.error("Application will continue but database operations may fail")
 
 # Initialize node registry (this will register all built-in nodes)
-print(f"Initialized node registry with {len(node_registry.get_all_node_types())} node types")
+all_nodes = node_registry.get_all_node_types()
+print(f"Initialized node registry with {len(all_nodes)} node types")
+print("Registered node types:")
+for node in all_nodes:
+    print(f"  - {node.id} ({node.category.value}): {node.name}")
 
 app = FastAPI(
     title=settings.project_name,
