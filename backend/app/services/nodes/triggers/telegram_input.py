@@ -175,8 +175,8 @@ class JoinEventHandler(MessageHandler):
         return message_data, log_msg
 
 # Future handlers - placeholders for extensibility
-class FileMessageHandler(MessageHandler):
-    """Handler for file/document messages (future implementation)"""
+class DocumentMessageHandler(MessageHandler):
+    """Handler for document messages"""
     
     @staticmethod
     def can_handle(message: Dict[str, Any]) -> bool:
@@ -184,8 +184,91 @@ class FileMessageHandler(MessageHandler):
     
     @staticmethod
     def process(message: Dict[str, Any], session_id: str, chat_id: int, effective_bot_id: Optional[str]) -> Tuple[Dict[str, Any], str]:
-        # TODO: Implement file/document processing
-        raise NotImplementedError("File/document processing not yet implemented")
+        document_info = message["document"]
+        caption = message.get("caption")
+        
+        message_data = {
+            "session_id": session_id,
+            "chat_id": chat_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "metadata": {
+                "telegram_message_id": message.get("message_id"),
+                "from_user": message.get("from", {}).get("username", "unknown"),
+                "chat_type": message.get("chat", {}).get("type", "private"),
+                "webhook_data": message,
+                **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
+            },
+            "document_input": {
+                "file_id": document_info.get("file_id"),
+                "file_unique_id": document_info.get("file_unique_id"),
+                "file_name": document_info.get("file_name", "unknown"),
+                "mime_type": document_info.get("mime_type"),
+                "file_size": document_info.get("file_size")
+            },
+            **({"input_text": caption, "chat_input": caption} if caption else {}),
+            "input_type": "document",
+            **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
+        }
+        
+        file_name = document_info.get("file_name", "unknown")
+        file_size = document_info.get("file_size", 0)
+        caption_preview = f" with caption: \"{caption[:40]}...\"" if caption and len(caption) > 40 else (f" with caption: \"{caption}\"" if caption else "")
+        log_msg = f"Telegram document message from chat {chat_id}: {file_name} ({file_size} bytes){caption_preview}"
+        return message_data, log_msg
+
+class FileMessageHandler(MessageHandler):
+    """Handler for general file messages (non-document files)"""
+    
+    @staticmethod
+    def can_handle(message: Dict[str, Any]) -> bool:
+        # Handle other file types like video, audio, animation, sticker, etc.
+        return any(key in message for key in ["video", "audio", "animation", "sticker", "video_note"])
+    
+    @staticmethod
+    def process(message: Dict[str, Any], session_id: str, chat_id: int, effective_bot_id: Optional[str]) -> Tuple[Dict[str, Any], str]:
+        # Determine file type and extract info
+        file_type = None
+        file_info = None
+        
+        for media_type in ["video", "audio", "animation", "sticker", "video_note"]:
+            if media_type in message:
+                file_type = media_type
+                file_info = message[media_type]
+                break
+        
+        caption = message.get("caption")
+        
+        message_data = {
+            "session_id": session_id,
+            "chat_id": chat_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "metadata": {
+                "telegram_message_id": message.get("message_id"),
+                "from_user": message.get("from", {}).get("username", "unknown"),
+                "chat_type": message.get("chat", {}).get("type", "private"),
+                "webhook_data": message,
+                **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
+            },
+            "file_input": {
+                "file_type": file_type,
+                "file_id": file_info.get("file_id"),
+                "file_unique_id": file_info.get("file_unique_id"),
+                "duration": file_info.get("duration"),
+                "mime_type": file_info.get("mime_type"),
+                "file_size": file_info.get("file_size"),
+                **({"width": file_info.get("width"), "height": file_info.get("height")} if file_type in ["video", "animation"] else {}),
+                **({"title": file_info.get("title"), "performer": file_info.get("performer")} if file_type == "audio" else {})
+            },
+            **({"input_text": caption, "chat_input": caption} if caption else {}),
+            "input_type": "file",
+            **({"bot_id": effective_bot_id, "telegram_bot_id": effective_bot_id} if effective_bot_id else {})
+        }
+        
+        file_size = file_info.get("file_size", 0)
+        duration = file_info.get("duration", 0)
+        caption_preview = f" with caption: \"{caption[:40]}...\"" if caption and len(caption) > 40 else (f" with caption: \"{caption}\"" if caption else "")
+        log_msg = f"Telegram {file_type} message from chat {chat_id}: {duration}s, {file_size} bytes{caption_preview}"
+        return message_data, log_msg
 
 class LeftChatMemberHandler(MessageHandler):
     """Handler for user leave events (future implementation)"""
@@ -235,6 +318,7 @@ MESSAGE_HANDLERS = [
     VoiceMessageHandler,
     PhotoMessageHandler,
     JoinEventHandler,
+    DocumentMessageHandler,
     FileMessageHandler,
     LeftChatMemberHandler,
 ]
@@ -361,6 +445,10 @@ async def process_webhook_message(webhook_data: Dict[str, Any], access_token: st
                     supported_types.append("join events")
                 elif handler_class == LeftChatMemberHandler:
                     supported_types.append("leave events")
+                elif handler_class == DocumentMessageHandler:
+                    supported_types.append("documents")
+                elif handler_class == FileMessageHandler:
+                    supported_types.append("files")
                 # Skip unimplemented handlers
             
             return NodeExecutionResult(

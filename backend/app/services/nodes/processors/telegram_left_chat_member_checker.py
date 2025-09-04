@@ -13,7 +13,7 @@ def get_telegram_left_chat_member_checker_node_type() -> NodeType:
         category=NodeCategory.PROCESSOR,
         version="1.0.0",
         icon="exit_to_app",
-        color="#FF4444",  # Red color for leave events
+        color="#FF6B35",  # Orange color matching group event checker
         ports=NodePorts(
             inputs=[
                 NodePort(

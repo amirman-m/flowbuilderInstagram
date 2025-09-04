@@ -6,6 +6,7 @@ export { OpenAIChatNode } from '../types/OpenAIChatNode';
 export { DeepSeekChatNode } from '../types/DeepSeekChatNode';
 export { TelegramMessageActionNode } from '../types/TelegramMessageActionNode';
 export { DownloadTelegramVoiceNode } from '../types/DownloadTelegramVoiceNode';
+export { DownloadTelegramPhotoNode } from '../types/DownloadTelegramPhotoNode';
 export { SwitchInputTypeNode } from '../types/SwitchInputTypeNode';
 export { OpenAISpeechNode } from '../types/OpenAISpeechNode';
 export { WebScrapeNode } from '../types/WebScrapeNode';

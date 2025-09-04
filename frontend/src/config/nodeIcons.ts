@@ -10,6 +10,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import InfoIcon from '@mui/icons-material/Info';
 import DownloadIcon from '@mui/icons-material/Download';
+import ImageIcon from '@mui/icons-material/Image';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import PublicIcon from '@mui/icons-material/Public';
 import LanguageIcon from '@mui/icons-material/Language';
@@ -39,6 +40,7 @@ export const NODE_ICONS: Record<string, NodeIconComponent> = {
   'simple-deepseek-chat': DeepSeekIcon,
   'transcription': RecordVoiceOverIcon,
   'download_telegram_voice': DownloadIcon,
+  'download_telegram_photo': ImageIcon,
   'switch-input-type': SwapHorizIcon,
   'web_scrape': PublicIcon,
   'multilingual-e5-language-detection': LanguageIcon,

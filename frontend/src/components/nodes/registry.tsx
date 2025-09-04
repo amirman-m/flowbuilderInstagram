@@ -10,7 +10,7 @@ import {
   Schedule
 } from '@mui/icons-material';
 import { NodeInstance, NodeExecutionStatus, NodeType, NodeCategory } from '../../types/nodes';
-import { ChatInputNode, VoiceInputNode, OpenAIChatNode, DeepSeekChatNode, DownloadTelegramVoiceNode, SwitchInputTypeNode, OpenAISpeechNode, WebScrapeNode, LanguageDetectionNode, LanguageTranslatorNode } from './types';
+import { ChatInputNode, VoiceInputNode, OpenAIChatNode, DeepSeekChatNode, DownloadTelegramVoiceNode, DownloadTelegramPhotoNode, SwitchInputTypeNode, OpenAISpeechNode, WebScrapeNode, LanguageDetectionNode, LanguageTranslatorNode } from './types';
 import { TextFieldNode } from './types/TextFieldNode';
 import { SendTelegramVoiceNode } from './types/SendTelegramVoiceNode';
 import { TranscriptionNode } from './types/TranscriptionNode';
@@ -93,6 +93,7 @@ export const nodeComponentRegistry: Record<string, React.FC<NodeComponentProps>>
   'simple-deepseek-chat': DeepSeekChatNode,
   'transcription': TranscriptionNode,
   'download_telegram_voice': DownloadTelegramVoiceNode,
+  'download_telegram_photo': DownloadTelegramPhotoNode,
   'openai_speech': OpenAISpeechNode,
   'send_telegram_message': TelegramMessageActionNode,
   'send_telegram_voice': SendTelegramVoiceNode,

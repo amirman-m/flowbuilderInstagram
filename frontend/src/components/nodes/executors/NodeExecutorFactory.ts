@@ -8,6 +8,7 @@ import { OpenAIChatNodeExecutor } from './OpenAIChatNodeExecutor';
 import { TranscriptionNodeExecutor } from './TranscriptionNodeExecutor';
 import { VoiceInputNodeExecutor } from './VoiceInputNodeExecutor';
 import { DownloadTelegramVoiceNodeExecutor } from './DownloadTelegramVoiceNodeExecutor';
+import { DownloadTelegramPhotoNodeExecutor } from './DownloadTelegramPhotoNodeExecutor';
 import { NodeInstance, NodeType } from '../../../types/nodes';
 import { SwitchInputTypeNodeExecutor } from './SwitchInputTypeNodeExecutor';
 import { TelegramInputNodeExecutor } from './TelegramInputNodeExecutor';
@@ -41,6 +42,7 @@ export class NodeExecutorFactory {
     NodeExecutorFactory.registerExecutor('transcription', TranscriptionNodeExecutor);
     NodeExecutorFactory.registerExecutor('voice_input', VoiceInputNodeExecutor);
     NodeExecutorFactory.registerExecutor('download_telegram_voice', DownloadTelegramVoiceNodeExecutor);
+    NodeExecutorFactory.registerExecutor('download_telegram_photo', DownloadTelegramPhotoNodeExecutor);
     NodeExecutorFactory.registerExecutor('switch-input-type', SwitchInputTypeNodeExecutor);
     NodeExecutorFactory.registerExecutor('telegram_input', TelegramInputNodeExecutor);
     NodeExecutorFactory.registerExecutor('telegram_group_event_checker', TelegramGroupEventCheckerNodeExecutor);

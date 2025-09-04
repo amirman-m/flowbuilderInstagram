@@ -19,7 +19,10 @@ export const SwitchInputTypeNode: React.FC<NodeComponentProps> = (props) => {
         outputHandleGradientMap={{
           'text': 'linear-gradient(135deg, #10b981, #059669)',       // green
           'voice': 'linear-gradient(135deg, #7c3aed, #6d28d9)',      // purple
-          'other': 'linear-gradient(135deg, #ea580c, #c2410c)'       // orange
+          'photo': 'linear-gradient(135deg, #3b82f6, #2563eb)',      // blue
+          'document': 'linear-gradient(135deg, #ec4899, #db2777)',   // pink/fuchsia
+          'file': 'linear-gradient(135deg, #f59e0b, #d97706)',       // amber
+          'other': 'linear-gradient(135deg, #ea580c, #c2410c)'       // orange (temporary until backend removes it)
         }}
         showExecuteButton={true}
         showDeleteButton={true}
@@ -50,8 +53,17 @@ export const SwitchInputTypeNode: React.FC<NodeComponentProps> = (props) => {
           } else if (text.toLowerCase().includes('voice')) {
             bgColor = '#6d28d9'; // purple
             borderColor = '#7c3aed';
+          } else if (text.toLowerCase().includes('photo')) {
+            bgColor = '#1e40af'; // dark blue
+            borderColor = '#3b82f6';
+          } else if (text.toLowerCase().includes('document')) {
+            bgColor = '#9d174d'; // dark pink
+            borderColor = '#ec4899';
+          } else if (text.toLowerCase().includes('file')) {
+            bgColor = '#92400e'; // dark amber
+            borderColor = '#f59e0b';
           } else if (text.toLowerCase().includes('other')) {
-            bgColor = '#c2410c'; // orange/amber
+            bgColor = '#c2410c'; // orange
             borderColor = '#ea580c';
           }
           
