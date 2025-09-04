@@ -39,6 +39,8 @@ interface CompactNodePresentationProps {
   disabled?: boolean;
   // Optional: override handle colors (CSS background values)
   inputHandleGradientCss?: string;
+  // New: override per-input-port gradients by port id
+  inputHandleGradientMap?: Record<string, string>;
   outputHandleGradientCss?: string;
   // Optional: override per-output-port gradients by port id
   outputHandleGradientMap?: Record<string, string>;
@@ -58,6 +60,7 @@ export const CompactNodePresentation: React.FC<CompactNodePresentationProps> = (
   showDeleteButton = true,
   disabled = false,
   inputHandleGradientCss,
+  inputHandleGradientMap,
   outputHandleGradientCss,
   outputHandleGradientMap
 }) => {
@@ -268,6 +271,9 @@ export const CompactNodePresentation: React.FC<CompactNodePresentationProps> = (
       {/* Dynamic Input Handles */}
       {inputPorts.map((port, index) => {
         const topPercent = ((index + 1) / (inputPorts.length + 1)) * 100;
+        const inputGradient = (inputHandleGradientMap && inputHandleGradientMap[port.id])
+          ? inputHandleGradientMap[port.id]
+          : (inputHandleGradientCss || 'linear-gradient(135deg, #3b82f6, #1d4ed8)');
         return (
           <Handle
             key={`input-${port.id}`}
@@ -280,7 +286,7 @@ export const CompactNodePresentation: React.FC<CompactNodePresentationProps> = (
               transform: 'translateY(-50%)',
               width: 12,
               height: 12,
-              background: inputHandleGradientCss || 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+              background: inputGradient,
               border: '2px solid white',
               borderRadius: '50%',
               zIndex: 10000,

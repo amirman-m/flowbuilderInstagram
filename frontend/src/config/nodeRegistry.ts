@@ -238,6 +238,17 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
         hasStatusIndicator: true
       }
     },
+    "send_telegram_photo": {
+      category: NodeCategory.ACTION,
+      subcategory: "Telegram",
+      componentName: "SendTelegramPhotoNode",
+      features: {
+        hasSettings: true,
+        hasExecution: true,
+        hasCustomUI: true,
+        hasStatusIndicator: true
+      }
+    },
     // Add more nodes here in the future
     
   };

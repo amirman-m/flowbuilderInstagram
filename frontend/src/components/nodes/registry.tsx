@@ -12,7 +12,7 @@ import {
 import { NodeInstance, NodeExecutionStatus, NodeType, NodeCategory } from '../../types/nodes';
 import { ChatInputNode, VoiceInputNode, OpenAIChatNode, DeepSeekChatNode, DownloadTelegramVoiceNode, DownloadTelegramPhotoNode, SwitchInputTypeNode, OpenAISpeechNode, WebScrapeNode, LanguageDetectionNode, LanguageTranslatorNode } from './types';
 import { TextFieldNode } from './types/TextFieldNode';
-import { SendTelegramVoiceNode } from './types/SendTelegramVoiceNode';
+import { SendTelegramPhotoNode } from './types/SendTelegramPhotoNode';
 import { TranscriptionNode } from './types/TranscriptionNode';
 import { TelegramInputNode } from './types/TelegramInputNode';
 import { TelegramMessageActionNode } from './types/TelegramMessageActionNode';
@@ -96,7 +96,8 @@ export const nodeComponentRegistry: Record<string, React.FC<NodeComponentProps>>
   'download_telegram_photo': DownloadTelegramPhotoNode,
   'openai_speech': OpenAISpeechNode,
   'send_telegram_message': TelegramMessageActionNode,
-  'send_telegram_voice': SendTelegramVoiceNode,
+  'send_telegram_voice': TelegramMessageActionNode,
+  'send_telegram_photo': SendTelegramPhotoNode,
   'switch-input-type': SwitchInputTypeNode,
   'telegram_group_event_checker': TelegramGroupEventCheckerNode,
   'telegram_left_chat_member_checker': TelegramLeftChatMemberCheckerNode,

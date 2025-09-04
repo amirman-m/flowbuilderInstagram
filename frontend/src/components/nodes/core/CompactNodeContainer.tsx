@@ -22,6 +22,8 @@ export interface CompactNodeContainerProps extends NodeComponentProps {
   onBeforeExecute?: () => Promise<boolean> | boolean;
   showOutputLabels?: boolean;
   inputHandleGradientCss?: string;
+  // New: allow per-input-port gradients by port id
+  inputHandleGradientMap?: Record<string, string>;
   outputHandleGradientCss?: string;
   outputHandleGradientMap?: Record<string, string>;
 }
@@ -37,6 +39,7 @@ export const CompactNodeContainer: React.FC<CompactNodeContainerProps> = ({
   onBeforeExecute,
   showOutputLabels = false,
   inputHandleGradientCss,
+  inputHandleGradientMap,
   outputHandleGradientCss,
   outputHandleGradientMap
 }) => {
@@ -182,6 +185,7 @@ export const CompactNodeContainer: React.FC<CompactNodeContainerProps> = ({
       showDeleteButton={showDeleteButton && presentationData.showDeleteButton}
       disabled={presentationData.disabled}
       inputHandleGradientCss={inputHandleGradientCss}
+      inputHandleGradientMap={inputHandleGradientMap}
       outputHandleGradientCss={outputHandleGradientCss}
       outputHandleGradientMap={outputHandleGradientMap}
     />

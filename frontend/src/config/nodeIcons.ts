@@ -52,6 +52,7 @@ export const NODE_ICONS: Record<string, NodeIconComponent> = {
   // Action nodes
   'send_telegram_message': SendIcon,
   'send_telegram_voice': TelegramIcon,
+  'send_telegram_photo': ImageIcon,
   
   // Default fallback icon
   'default': CodeIcon
