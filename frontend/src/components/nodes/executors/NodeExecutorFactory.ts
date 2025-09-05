@@ -22,6 +22,11 @@ import { ScheduledMessageNodeExecutor } from './ScheduledMessageNodeExecutor';
 import { TextFieldNodeExecutor } from './TextFieldNodeExecutor';
 import { OpenAIImageGenerationNodeExecutor } from './OpenAIImageGenerationNodeExecutor';
 import { OpenAIImageDescriptionNodeExecutor } from './OpenAIImageDescriptionNodeExecutor';
+import { GeminiChatNodeExecutor } from './GeminiChatNodeExecutor';
+import { GeminiImageDescriptionNodeExecutor } from './GeminiImageDescriptionNodeExecutor';
+import { GeminiImageGenerationNodeExecutor } from './GeminiImageGenerationNodeExecutor';
+import { GeminiSpeechNodeExecutor } from './GeminiSpeechNodeExecutor';
+import { GeminiTranscriptionNodeExecutor } from './GeminiTranscriptionNodeExecutor';
 
 /**
  * Factory for creating appropriate NodeExecutor instances
@@ -58,6 +63,11 @@ export class NodeExecutorFactory {
     NodeExecutorFactory.registerExecutor('text_field', TextFieldNodeExecutor);
     NodeExecutorFactory.registerExecutor('openai_image_generation', OpenAIImageGenerationNodeExecutor);
     NodeExecutorFactory.registerExecutor('openai_image_description', OpenAIImageDescriptionNodeExecutor);
+    NodeExecutorFactory.registerExecutor('gemini-chat', GeminiChatNodeExecutor);
+    NodeExecutorFactory.registerExecutor('gemini_image_description', GeminiImageDescriptionNodeExecutor);
+    NodeExecutorFactory.registerExecutor('gemini_image_generation', GeminiImageGenerationNodeExecutor);
+    NodeExecutorFactory.registerExecutor('gemini_speech', GeminiSpeechNodeExecutor);
+    NodeExecutorFactory.registerExecutor('gemini_transcription', GeminiTranscriptionNodeExecutor);
   }
 
   /**

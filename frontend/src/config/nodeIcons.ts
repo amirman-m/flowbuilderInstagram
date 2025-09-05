@@ -21,6 +21,7 @@ import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import DeepSeekIcon from '../components/icons/DeepSeekIcon';
 import OpenAIIcon from '../components/icons/OpenAIIcon';
 import TelegramIcon from '../components/icons/TelegramIcon';
+import GeminiIcon from '../components/icons/GeminiIcon';
 
 // Define types for node icons
 export type NodeIconComponent = React.ComponentType<SvgIconProps>;
@@ -51,6 +52,12 @@ export const NODE_ICONS: Record<string, NodeIconComponent> = {
   // Use the OpenAI brand icon for all OpenAI-related processors for consistency
   'openai_image_generation': OpenAIIcon,
   'openai_image_description': OpenAIIcon,
+  // Google Gemini nodes - use Gemini brand icon for consistency
+  'gemini-chat': GeminiIcon,
+  'gemini_image_description': GeminiIcon,
+  'gemini_image_generation': GeminiIcon,
+  'gemini_speech': GeminiIcon,
+  'gemini_transcription': GeminiIcon,
   // Action nodes
   'send_telegram_message': SendIcon,
   'send_telegram_voice': TelegramIcon,

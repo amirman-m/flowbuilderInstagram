@@ -14,6 +14,11 @@ from .telegram_left_chat_member_checker import get_telegram_left_chat_member_che
 from .text_field import get_text_field_node_type, execute_text_field
 from .openai_image_generation import get_openai_image_generation_node_type, execute_openai_image_generation
 from .openai_image_description import get_openai_image_description_node_type, execute_openai_image_description
+from .gemini_chat import get_gemini_chat_node_type, execute_gemini_chat_trigger
+from .gemini_image_description import get_gemini_image_description_node_type, execute_gemini_image_description_trigger
+from .gemini_image_generation import get_gemini_image_generation_node_type, execute_gemini_image_generation_trigger
+from .gemini_speech import get_gemini_speech_node_type, execute_gemini_speech_trigger
+from .gemini_transcription import get_gemini_transcription_node_type, execute_gemini_transcription_trigger
 
 
 def register_processor_nodes(registry: NodeRegistry):
@@ -77,3 +82,23 @@ def register_processor_nodes(registry: NodeRegistry):
     # Register OpenAI Image Description node
     openai_image_desc_node_type = get_openai_image_description_node_type()
     registry.register_node(openai_image_desc_node_type, execute_openai_image_description)
+
+    # Register Google Gemini Chat node
+    gemini_chat_node_type = get_gemini_chat_node_type()
+    registry.register_node(gemini_chat_node_type, execute_gemini_chat_trigger)
+
+    # Register Google Gemini Image Description node
+    gemini_image_desc_node_type = get_gemini_image_description_node_type()
+    registry.register_node(gemini_image_desc_node_type, execute_gemini_image_description_trigger)
+
+    # Register Google Gemini Image Generation node
+    gemini_image_gen_node_type = get_gemini_image_generation_node_type()
+    registry.register_node(gemini_image_gen_node_type, execute_gemini_image_generation_trigger)
+
+    # Register Google Gemini Speech node
+    gemini_speech_node_type = get_gemini_speech_node_type()
+    registry.register_node(gemini_speech_node_type, execute_gemini_speech_trigger)
+
+    # Register Google Gemini Transcription node
+    gemini_transcription_node_type = get_gemini_transcription_node_type()
+    registry.register_node(gemini_transcription_node_type, execute_gemini_transcription_trigger)

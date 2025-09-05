@@ -12,15 +12,20 @@ import {
 import { NodeInstance, NodeExecutionStatus, NodeType, NodeCategory } from '../../types/nodes';
 import { ChatInputNode, VoiceInputNode, OpenAIChatNode, DeepSeekChatNode, DownloadTelegramVoiceNode, DownloadTelegramPhotoNode, SwitchInputTypeNode, OpenAISpeechNode, WebScrapeNode, LanguageDetectionNode, LanguageTranslatorNode } from './types';
 import { TextFieldNode } from './types/TextFieldNode';
-import { SendTelegramPhotoNode } from './types/SendTelegramPhotoNode';
-import { OpenAIImageGenerationNode } from './types/OpenAIImageGenerationNode';
 import { OpenAIImageDescriptionNode } from './types/OpenAIImageDescriptionNode';
-import { TranscriptionNode } from './types/TranscriptionNode';
+import { OpenAIImageGenerationNode } from './types/OpenAIImageGenerationNode';
+import { GeminiChatNode } from './types/GeminiChatNode';
+import { GeminiImageDescriptionNode } from './types/GeminiImageDescriptionNode';
+import { GeminiImageGenerationNode } from './types/GeminiImageGenerationNode';
+import { GeminiSpeechNode } from './types/GeminiSpeechNode';
+import { GeminiTranscriptionNode } from './types/GeminiTranscriptionNode';
 import { TelegramInputNode } from './types/TelegramInputNode';
 import { TelegramMessageActionNode } from './types/TelegramMessageActionNode';
 import { TelegramGroupEventCheckerNode } from './types/TelegramGroupEventCheckerNode';
 import { TelegramLeftChatMemberCheckerNode } from './types/TelegramLeftChatMemberCheckerNode';
 import { ScheduledMessageNode } from './types/ScheduledMessageNode';
+import { SendTelegramPhotoNode } from './types/SendTelegramPhotoNode';
+import { TranscriptionNode } from './types/TranscriptionNode';
 import { getCategoryColor } from '../../styles/nodeTheme';
 
 // Import other node components
@@ -109,6 +114,11 @@ export const nodeComponentRegistry: Record<string, React.FC<NodeComponentProps>>
   'multilingual-e5-language-detection': LanguageDetectionNode,
   'language-translator-m2m100': LanguageTranslatorNode,
   'text_field': TextFieldNode,
+  'gemini-chat': GeminiChatNode,
+  'gemini_image_description': GeminiImageDescriptionNode,
+  'gemini_image_generation': GeminiImageGenerationNode,
+  'gemini_speech': GeminiSpeechNode,
+  'gemini_transcription': GeminiTranscriptionNode,
   // Add more node types here - Example:
   // 'instagram-trigger': InstagramTriggerNode,
   // 'auto-reply': AutoReplyNode,

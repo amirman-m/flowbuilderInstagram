@@ -271,6 +271,61 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
         hasStatusIndicator: true
       }
     },
+    "gemini-chat": {
+      category: NodeCategory.PROCESSOR,
+      subcategory: "Chat Models",
+      componentName: "GeminiChatNode",
+      features: {
+        hasSettings: true,
+        hasExecution: true,
+        hasCustomUI: true,
+        hasStatusIndicator: true
+      }
+    },
+    "gemini_image_description": {
+      category: NodeCategory.PROCESSOR,
+      subcategory: "Image to Text",
+      componentName: "GeminiImageDescriptionNode",
+      features: {
+        hasSettings: true,
+        hasExecution: true,
+        hasCustomUI: true,
+        hasStatusIndicator: true
+      }
+    },
+    "gemini_image_generation": {
+      category: NodeCategory.PROCESSOR,
+      subcategory: "Text to Image",
+      componentName: "GeminiImageGenerationNode",
+      features: {
+        hasSettings: true,
+        hasExecution: true,
+        hasCustomUI: true,
+        hasStatusIndicator: true
+      }
+    },
+    "gemini_speech": {
+      category: NodeCategory.PROCESSOR,
+      subcategory: "Audio Processing",
+      componentName: "GeminiSpeechNode",
+      features: {
+        hasSettings: true,
+        hasExecution: true,
+        hasCustomUI: true,
+        hasStatusIndicator: true
+      }
+    },
+    "gemini_transcription": {
+      category: NodeCategory.PROCESSOR,
+      subcategory: "Audio Processing",
+      componentName: "GeminiTranscriptionNode",
+      features: {
+        hasSettings: true,
+        hasExecution: true,
+        hasCustomUI: true,
+        hasStatusIndicator: true
+      }
+    },
     // Add more nodes here in the future
     
   };
