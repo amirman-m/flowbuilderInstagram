@@ -139,11 +139,10 @@ async def execute_gemini_completion_mode(
         # Prepare the prompt with system message and user input
         full_prompt = f"{system_prompt}\n\nUser: {input_text}"
         
-        # Configure generation settings
+        # Configure generation settings (ThinkingConfig not available in current SDK version)
         config = types.GenerateContentConfig(
             temperature=temperature,
-            max_output_tokens=max_tokens,
-            thinking_config=types.ThinkingConfig(thinking_budget=0)  # Disable thinking
+            max_output_tokens=max_tokens
         )
         
         # Call the Gemini API
@@ -257,11 +256,10 @@ async def execute_gemini_chat_mode(
         
         full_prompt = "\n".join(conversation_parts)
         
-        # Configure generation settings
+        # Configure generation settings (ThinkingConfig not available in current SDK version)
         config = types.GenerateContentConfig(
             temperature=temperature,
-            max_output_tokens=max_tokens,
-            thinking_config=types.ThinkingConfig(thinking_budget=0)  # Disable thinking
+            max_output_tokens=max_tokens
         )
         
         # Call the Gemini API
@@ -356,15 +354,47 @@ async def execute_gemini_chat_trigger(context: Dict[str, Any]) -> NodeExecutionR
                 status="error",
                 error="No message_data input provided"
             )
-        
-        # Extract chat context
-        chat_context = extract_chat_context(message_data)
-        input_text = chat_context["input_text"]
-        session_id = chat_context["session_id"]
-        input_type = chat_context["input_type"]
-        input_source = chat_context.get("input_source", "unknown")
-        chat_id = chat_context.get("chat_id")
-        bot_id = chat_context.get("bot_id")
+
+        # Extract input text and metadata from message_data
+        input_text = None
+        input_source = "message_data"
+        session_id = None
+        input_type = "text"
+
+        if isinstance(message_data, dict):
+            # PRIORITY 1: ai_response (from upstream nodes)
+            if isinstance(message_data.get("ai_response"), str) and message_data.get("ai_response").strip():
+                input_text = message_data.get("ai_response").strip()
+                input_source = "message_data.ai_response"
+            # PRIORITY 2: input_text (direct input)
+            elif isinstance(message_data.get("input_text"), str) and message_data.get("input_text").strip():
+                input_text = message_data.get("input_text").strip()
+                input_source = "message_data.input_text"
+            # PRIORITY 3: chat_input (backward compatibility)
+            elif isinstance(message_data.get("chat_input"), str) and message_data.get("chat_input").strip():
+                input_text = message_data.get("chat_input").strip()
+                input_source = "message_data.chat_input"
+
+            session_id = message_data.get("session_id")
+            input_type = message_data.get("input_type", "text")
+
+        # Generate session_id if not provided
+        if not session_id:
+            session_id = str(uuid.uuid4())
+
+        if not input_text:
+            return NodeExecutionResult(
+                outputs={},
+                status="error",
+                error="No input text found in message_data"
+            )
+
+        # Determine input type based on content analysis (only if still default)
+        if input_type == "text":
+            input_type = determine_input_type(input_text)
+
+        # Extract chat context (chat_id, bot_id) from all inputs
+        chat_id, bot_id = extract_chat_context(inputs)
         
         if not input_text:
             return NodeExecutionResult(
@@ -381,17 +411,21 @@ async def execute_gemini_chat_trigger(context: Dict[str, Any]) -> NodeExecutionR
         max_tokens = int(settings.get("max_tokens", 1024))
         history_limit = int(settings.get("history_limit", 20))
         
-        # Validate bot if in Telegram context
+        # Validate bot if chat mode is requested
+        bot_is_active = False
         if chat_id and bot_id:
-            if not is_bot_active(bot_id):
-                return NodeExecutionResult(
-                    outputs={},
-                    status="error",
-                    error=f"Bot {bot_id} is not active or configured"
-                )
-        
-        # Execute based on mode
-        if mode == "chat" and should_use_chat_mode(input_source):
+            bot_is_active = is_bot_active(bot_id)
+
+        # Determine execution mode
+        use_chat_mode = should_use_chat_mode(mode, chat_id, bot_id, bot_is_active)
+
+        logger.info(
+            f"Gemini execution: mode_requested={mode}, use_chat_mode={use_chat_mode}, "
+            f"chat_id={chat_id}, bot_id={bot_id}, bot_active={bot_is_active}"
+        )
+
+        # Execute based on determined mode
+        if use_chat_mode:
             return await execute_gemini_chat_mode(
                 input_text=input_text,
                 system_prompt=system_prompt,

@@ -76,23 +76,47 @@ def get_gemini_transcription_node_type() -> NodeType:
     )
 
 def extract_audio_data(audio_input: Any) -> Optional[str]:
-    """Extract base64 audio data from various input formats."""
+    """Extract base64 audio data from various input formats.
+
+    Supports:
+    - Data URI strings: data:audio/<type>;base64,<data>
+    - Plain base64 strings (lengthy)
+    - Dicts containing keys like voice_output, audio_data, base64, voice_input, data_uri
+    - Nested dicts under message_data
+    - Raw bytes
+    """
     try:
+        # String inputs
         if isinstance(audio_input, str):
-            if audio_input.startswith('data:audio/'):
-                if ';base64,' in audio_input:
-                    return audio_input.split(';base64,')[1]
-            elif len(audio_input) > 100:
+            if audio_input.startswith('data:audio/') and ';base64,' in audio_input:
+                return audio_input.split(';base64,', 1)[1]
+            # Heuristic: long strings are likely base64 payloads
+            if len(audio_input) > 100:
                 return audio_input
-        elif isinstance(audio_input, dict):
-            if 'voice_output' in audio_input:
-                return extract_audio_data(audio_input['voice_output'])
-            elif 'audio_data' in audio_input:
-                return extract_audio_data(audio_input['audio_data'])
-            elif 'base64' in audio_input:
-                return extract_audio_data(audio_input['base64'])
-        elif isinstance(audio_input, bytes):
+            return None
+
+        # Bytes input
+        if isinstance(audio_input, bytes):
             return base64.b64encode(audio_input).decode('utf-8')
+
+        # Dict inputs
+        if isinstance(audio_input, dict):
+            # Common direct keys
+            for key in ['voice_output', 'audio_data', 'base64', 'voice_input', 'data_uri', 'audio']:
+                if key in audio_input:
+                    extracted = extract_audio_data(audio_input[key])
+                    if extracted:
+                        return extracted
+
+            # Look under message_data wrapper
+            md = audio_input.get('message_data')
+            if isinstance(md, dict):
+                for key in ['voice_output', 'audio_data', 'base64', 'voice_input', 'data_uri', 'audio']:
+                    if key in md:
+                        extracted = extract_audio_data(md[key])
+                        if extracted:
+                            return extracted
+
         return None
     except Exception as e:
         logger.error(f"Error extracting audio data: {str(e)}")
@@ -113,8 +137,8 @@ async def execute_gemini_transcription_trigger(context: Dict[str, Any]) -> NodeE
                 error="GEMINI_API_KEY environment variable not set"
             )
         
-        # Get audio input
-        audio_input = inputs.get("audio_input")
+        # Get audio input (accept either direct 'audio_input' or full message_data)
+        audio_input = inputs.get("audio_input") or inputs.get("message_data") or inputs
         if not audio_input:
             return NodeExecutionResult(
                 outputs={},
@@ -150,10 +174,35 @@ async def execute_gemini_transcription_trigger(context: Dict[str, Any]) -> NodeE
         # Initialize client
         client = genai.Client(api_key=api_key)
         
-        # Prepare audio content
+        # Determine mime type from metadata if available
+        mime_type = "audio/webm"  # sensible default for browser-recorded opus
+        try:
+            if isinstance(audio_input, dict):
+                md = audio_input.get('metadata') or audio_input.get('message_data', {}).get('metadata')
+                if isinstance(md, dict):
+                    ct = md.get('content_type')
+                    if isinstance(ct, str) and ct:
+                        # Use only mime without codecs parameter
+                        mime_type = ct.split(';')[0]
+                        # Gemini often expects OGG/Opus rather than WebM container
+                        if mime_type == 'audio/webm' and 'opus' in ct.lower():
+                            mime_type = 'audio/ogg'
+        except Exception:
+            pass
+
+        # Prepare audio content (google-genai expects raw bytes for inline_data.data)
+        try:
+            audio_bytes = base64.b64decode(base64_audio)
+        except Exception:
+            return NodeExecutionResult(
+                outputs={},
+                status="error",
+                error="Invalid base64 audio payload"
+            )
+
         audio_content = {
-            "mime_type": "audio/wav",
-            "data": base64_audio
+            "mime_type": mime_type,
+            "data": audio_bytes
         }
         
         # Prepare prompt
@@ -163,10 +212,8 @@ async def execute_gemini_transcription_trigger(context: Dict[str, Any]) -> NodeE
         if prompt:
             transcription_prompt += f" Additional context: {prompt}"
         
-        # Configure generation
-        config = types.GenerateContentConfig(
-            thinking_config=types.ThinkingConfig(thinking_budget=0)
-        )
+        # Configure generation (no ThinkingConfig in current SDK)
+        config = types.GenerateContentConfig()
         
         # Call Gemini API
         response = client.models.generate_content(

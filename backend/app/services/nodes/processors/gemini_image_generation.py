@@ -251,8 +251,7 @@ async def execute_gemini_image_generation_trigger(context: Dict[str, Any]) -> No
         
         # Configure generation settings
         config = types.GenerateContentConfig(
-            temperature=normalized_settings["temperature"],
-            thinking_config=types.ThinkingConfig(thinking_budget=0)  # Disable thinking
+            temperature=normalized_settings["temperature"]
         )
         
         # Prepare image generation prompt with style and quality instructions

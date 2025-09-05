@@ -269,14 +269,28 @@ def _extract_voice_payload(inputs: Dict[str, Any]) -> Tuple[Optional[bytes], Opt
         elif isinstance(value, dict):
             # Prefer explicit keys often used by upstream nodes
             for key in ["voice_output", "voice", "audio", "data_uri", "url", "audio_data", "voice_data"]:
-                if isinstance(value.get(key), str) and value[key].strip():
-                    candidates.append(value[key].strip())
+                v = value.get(key)
+                # direct string
+                if isinstance(v, str) and v.strip():
+                    candidates.append(v.strip())
+                # handle nested object like {"voice_output": {"voice_output": "data:..."}}
+                elif isinstance(v, dict):
+                    for nested_key in ["voice_output", "audio", "data_uri", "audio_data", "voice_data"]:
+                        nv = v.get(nested_key)
+                        if isinstance(nv, str) and nv.strip():
+                            candidates.append(nv.strip())
             # Look inside message_data
             md = value.get("message_data")
             if isinstance(md, dict):
                 for key in ["voice_output", "voice", "audio", "data_uri", "audio_data", "voice_input"]:
-                    if isinstance(md.get(key), str) and md[key].strip():
-                        candidates.append(md[key].strip())
+                    mv = md.get(key)
+                    if isinstance(mv, str) and mv.strip():
+                        candidates.append(mv.strip())
+                    elif isinstance(mv, dict):
+                        for nested_key in ["voice_output", "audio", "data_uri", "audio_data", "voice_data"]:
+                            nv = mv.get(nested_key)
+                            if isinstance(nv, str) and nv.strip():
+                                candidates.append(nv.strip())
 
     for cand in candidates:
         # Data URI path

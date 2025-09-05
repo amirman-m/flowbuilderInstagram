@@ -241,8 +241,7 @@ async def execute_gemini_image_description_trigger(context: Dict[str, Any]) -> N
         # Configure generation settings
         config = types.GenerateContentConfig(
             temperature=temperature,
-            max_output_tokens=max_tokens,
-            thinking_config=types.ThinkingConfig(thinking_budget=0)  # Disable thinking
+            max_output_tokens=max_tokens
         )
         
         # Call the Gemini API with image and text
