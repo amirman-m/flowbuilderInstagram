@@ -260,6 +260,17 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
         hasStatusIndicator: true
       }
     },
+    "openai_image_description": {
+      category: NodeCategory.PROCESSOR,
+      subcategory: "Image to Text",
+      componentName: "OpenAIImageDescriptionNode",
+      features: {
+        hasSettings: true,
+        hasExecution: true,
+        hasCustomUI: true,
+        hasStatusIndicator: true
+      }
+    },
     // Add more nodes here in the future
     
   };

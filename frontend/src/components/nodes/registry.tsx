@@ -14,6 +14,7 @@ import { ChatInputNode, VoiceInputNode, OpenAIChatNode, DeepSeekChatNode, Downlo
 import { TextFieldNode } from './types/TextFieldNode';
 import { SendTelegramPhotoNode } from './types/SendTelegramPhotoNode';
 import { OpenAIImageGenerationNode } from './types/OpenAIImageGenerationNode';
+import { OpenAIImageDescriptionNode } from './types/OpenAIImageDescriptionNode';
 import { TranscriptionNode } from './types/TranscriptionNode';
 import { TelegramInputNode } from './types/TelegramInputNode';
 import { TelegramMessageActionNode } from './types/TelegramMessageActionNode';
@@ -100,6 +101,7 @@ export const nodeComponentRegistry: Record<string, React.FC<NodeComponentProps>>
   'send_telegram_voice': TelegramMessageActionNode,
   'send_telegram_photo': SendTelegramPhotoNode,
   'openai_image_generation': OpenAIImageGenerationNode,
+  'openai_image_description': OpenAIImageDescriptionNode,
   'switch-input-type': SwitchInputTypeNode,
   'telegram_group_event_checker': TelegramGroupEventCheckerNode,
   'telegram_left_chat_member_checker': TelegramLeftChatMemberCheckerNode,

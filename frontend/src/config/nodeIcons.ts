@@ -11,7 +11,6 @@ import ClearIcon from '@mui/icons-material/Clear';
 import InfoIcon from '@mui/icons-material/Info';
 import DownloadIcon from '@mui/icons-material/Download';
 import ImageIcon from '@mui/icons-material/Image';
-import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import PublicIcon from '@mui/icons-material/Public';
 import LanguageIcon from '@mui/icons-material/Language';
@@ -49,7 +48,9 @@ export const NODE_ICONS: Record<string, NodeIconComponent> = {
   'text_field': TextFieldsIcon,
   'telegram_group_event_checker': TelegramIcon,
   'telegram_left_chat_member_checker': ExitToAppIcon,
-  'openai_image_generation': AutoFixHighIcon,
+  // Use the OpenAI brand icon for all OpenAI-related processors for consistency
+  'openai_image_generation': OpenAIIcon,
+  'openai_image_description': OpenAIIcon,
   // Action nodes
   'send_telegram_message': SendIcon,
   'send_telegram_voice': TelegramIcon,

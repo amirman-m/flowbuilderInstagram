@@ -13,6 +13,7 @@ from .telegram_group_event_checker import get_telegram_group_event_checker_node_
 from .telegram_left_chat_member_checker import get_telegram_left_chat_member_checker_node_type, execute_telegram_left_chat_member_checker
 from .text_field import get_text_field_node_type, execute_text_field
 from .openai_image_generation import get_openai_image_generation_node_type, execute_openai_image_generation
+from .openai_image_description import get_openai_image_description_node_type, execute_openai_image_description
 
 
 def register_processor_nodes(registry: NodeRegistry):
@@ -72,4 +73,7 @@ def register_processor_nodes(registry: NodeRegistry):
     # Register OpenAI Image Generation node       
     openai_image_node_type = get_openai_image_generation_node_type()
     registry.register_node(openai_image_node_type, execute_openai_image_generation)
-       
+
+    # Register OpenAI Image Description node
+    openai_image_desc_node_type = get_openai_image_description_node_type()
+    registry.register_node(openai_image_desc_node_type, execute_openai_image_description)

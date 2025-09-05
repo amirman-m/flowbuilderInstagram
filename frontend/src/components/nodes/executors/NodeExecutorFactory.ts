@@ -20,6 +20,8 @@ import { LanguageDetectionNodeExecutor } from './LanguageDetectionNodeExecutor';
 import { LanguageTranslatorNodeExecutor } from './LanguageTranslatorNodeExecutor';
 import { ScheduledMessageNodeExecutor } from './ScheduledMessageNodeExecutor';
 import { TextFieldNodeExecutor } from './TextFieldNodeExecutor';
+import { OpenAIImageGenerationNodeExecutor } from './OpenAIImageGenerationNodeExecutor';
+import { OpenAIImageDescriptionNodeExecutor } from './OpenAIImageDescriptionNodeExecutor';
 
 /**
  * Factory for creating appropriate NodeExecutor instances
@@ -54,6 +56,8 @@ export class NodeExecutorFactory {
     NodeExecutorFactory.registerExecutor('language-translator-m2m100', LanguageTranslatorNodeExecutor);
     NodeExecutorFactory.registerExecutor('scheduled_message', ScheduledMessageNodeExecutor);
     NodeExecutorFactory.registerExecutor('text_field', TextFieldNodeExecutor);
+    NodeExecutorFactory.registerExecutor('openai_image_generation', OpenAIImageGenerationNodeExecutor);
+    NodeExecutorFactory.registerExecutor('openai_image_description', OpenAIImageDescriptionNodeExecutor);
   }
 
   /**
