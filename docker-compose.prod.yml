@@ -137,24 +137,18 @@ services:
 
   # Keycloak (IDP)
   keycloak:
-    image: quay.io/keycloak/keycloak:24.0.3
+    build:
+      context: .
+      dockerfile: Dockerfile.keycloak
     container_name: socialmedia_keycloak
-    command: ["start", "--optimized"]
     environment:
-      KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
       KC_DB_USERNAME: ${POSTGRES_USER}
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
       KC_HOSTNAME: asangram.tech
       KC_HOSTNAME_PATH: /auth
-      KC_HOSTNAME_STRICT: "false"
-      KC_PROXY: edge
-      KC_HTTP_ENABLED: "true"
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USERNAME}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-      # Enforce RSA algorithms
-      KC_SPI_TOKEN_EXCHANGE_TOKEN_HANDLER_DEFAULT_ALGORITHM: RS256
-      KC_SPI_KEYS_DEFAULT_ALGORITHM: RS256
     volumes:
       - keycloak_data:/opt/keycloak/data
     networks:
@@ -164,16 +158,11 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/auth/health/ready"]
       interval: 30s
       timeout: 15s
       retries: 5
       start_period: 30s
-    # Don't expose port to host in production, only through nginx
-    # ports:
-    #   - "8080:8080"
-
-  # Certbot for SSL certificate renewal
   certbot:
     image: certbot/certbot:latest
     container_name: socialmedia_certbot
