@@ -1,25 +1,37 @@
 FROM quay.io/keycloak/keycloak:24.0.3 as builder
 
+# Install curl for healthcheck in builder stage
+USER root
+RUN microdnf update -y && microdnf install -y curl && microdnf clean all
+
 # Configure PostgreSQL at build time (required for Keycloak 24.x)
 ENV KC_DB=postgres
 ENV KC_FEATURES="token-exchange,admin-fine-grained-authz"
-ENV KC_HTTP_RELATIVE_PATH=/auth
-# Enable health endpoints at build-time
 ENV KC_HEALTH_ENABLED=true
+ENV KC_METRICS_ENABLED=true
 
-# Build optimized for PostgreSQL
+# Build optimized for PostgreSQL with health endpoints
 RUN /opt/keycloak/bin/kc.sh build --db=postgres
 
-# Final image
+# Final production image
 FROM quay.io/keycloak/keycloak:24.0.3
 
-# Copy the build artifacts
+# Install curl for healthcheck
+USER root
+RUN microdnf update -y && microdnf install -y curl && microdnf clean all
+
+# Copy the build artifacts from builder
 COPY --from=builder /opt/keycloak/ /opt/keycloak/
 
-# Runtime settings (non build-time)
+# Switch back to keycloak user
+USER 1000
+
+# Runtime environment variables
 ENV KC_HOSTNAME_STRICT=false
 ENV KC_PROXY=edge
 ENV KC_HTTP_ENABLED=true
+ENV KC_HOSTNAME_PATH=/auth
+ENV JAVA_OPTS_APPEND="-Xms512m -Xmx1024m -XX:MetaspaceSize=96M -XX:MaxMetaspaceSize=256m -Djava.net.preferIPv4Stack=true"
 
 # Use optimized startup
 ENTRYPOINT ["/opt/keycloak/bin/kc.sh", "start", "--optimized"]

@@ -122,9 +122,15 @@ services:
     container_name: socialmedia_redis
     volumes:
       - redis_data:/data
-    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     networks:
       - app-network
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+        reservations:
+          memory: 128M
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -156,13 +162,21 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G
+        reservations:
+          memory: 512M
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'kc.sh' > /dev/null || exit 1"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/auth/health/ready"]
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+      timeout: 15s
+      retries: 5
+      start_period: 120s
   certbot:
     image: certbot/certbot:latest
     container_name: socialmedia_certbot
