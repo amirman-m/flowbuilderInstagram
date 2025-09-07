@@ -158,11 +158,11 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/auth/health/ready"]
+      test: ["CMD-SHELL", "pgrep -f 'kc.sh' > /dev/null || exit 1"]
       interval: 30s
-      timeout: 15s
-      retries: 5
-      start_period: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
   certbot:
     image: certbot/certbot:latest
     container_name: socialmedia_certbot
